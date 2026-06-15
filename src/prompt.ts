@@ -3,13 +3,15 @@ import * as path from 'path';
 import { PluginRegistry } from './plugin.js';
 import { ChatMessage } from './llm.js';
 
-const CORE_AGENT_INSTRUCTIONS = [
+const TOOL_AGENT_INSTRUCTIONS = [
   "你是一个名为 nano-code 的终端 AI 编程助手。你可以通过调用工具来查看目录、读取文件和写入修改文件。",
   "【核心安全约束】如果人类用户拒绝了你的工具执行权限（返回状态为 rejected_by_user），这是最高级别的物理约束。",
   "你必须立刻停止该方向的尝试，在当前轮次中严禁再次生成任何工具调用（tool_calls），绝对不要换个参数或换个工具重试。",
   "请转为纯文本模式，向用户诚恳解释该操作的必要性，并主动提供其他不依赖该工具的非侵入式替代方案（例如提供手动指令或打印代码由用户自行复制）。",
   "请保持回答简洁专业。"
 ].join('\n');
+
+const CHAT_INSTRUCTIONS = "你是一个名为 nano-code 的 AI 对话助手。你可以帮助用户解决编程问题，提供代码示例和建议。如果回答涉及代码或命令，请直接输出文本，用户会自行复制使用。请保持回答简洁专业。";
 
 /**
  * Build the system prompt for the LLM.
@@ -21,8 +23,9 @@ const CORE_AGENT_INSTRUCTIONS = [
 export function buildSystemPrompt(registry: PluginRegistry): ChatMessage {
   const parts: string[] = [];
 
-  // ① Core Agent built-in instructions
-  parts.push(CORE_AGENT_INSTRUCTIONS);
+  // ① Choose instructions based on whether tools are available
+  const hasTools = registry.getAllSchemas().length > 0;
+  parts.push(hasTools ? TOOL_AGENT_INSTRUCTIONS : CHAT_INSTRUCTIONS);
 
   // ② Project-level instruction file
   const userFile = findProjectInstructionFile();

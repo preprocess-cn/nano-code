@@ -3,11 +3,18 @@ import { NanoCodeAgent } from './agent.js';
 import { PluginRegistry } from './plugin.js';
 import { loadConfig } from './config.js';
 import { LLMClient } from './llm.js';
-import { fsPlugin } from './plugins/tools/fs.js';
-import { commandPlugin } from './plugins/tools/command.js';
 import { buildMCPPluginsFromConfig } from './plugins/mcp/adapter.js';
 import { createTokenBudgetPlugin } from './plugins/token-budget.js';
 import { cac } from 'cac';
+
+/**
+ * Builtin plugin lazy-loaders.
+ * Only loaded from disk when explicitly listed in the user's config.
+ */
+const BUILTIN_PLUGINS: Record<string, () => Promise<any>> = {
+  fs: () => import('./plugins/tools/fs.js').then(m => m.fsPlugin),
+  command: () => import('./plugins/tools/command.js').then(m => m.commandPlugin),
+};
 
 function handleExit() {
   outro('** 感谢使用 nano-code，祝您编码愉快！');
@@ -56,9 +63,14 @@ async function startCLI(options: { debug?: boolean; think?: boolean; skipPermiss
     }
   }
 
-  // Register built-in plugins
-  await registry.register(fsPlugin);
-  await registry.register(commandPlugin);
+  // Register builtin plugins from config
+  for (const [name, pluginCfg] of Object.entries(config.plugins)) {
+    if (pluginCfg.enabled === false) continue;
+    const loader = BUILTIN_PLUGINS[name];
+    if (loader) {
+      await registry.register(await loader());
+    }
+  }
 
   // Register MCP plugins from config
   for (const mcpPlugin of buildMCPPluginsFromConfig(config)) {
