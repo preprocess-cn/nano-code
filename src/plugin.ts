@@ -217,6 +217,22 @@ export class PluginRegistry {
     return current;
   }
 
+  /**
+   * Return a snapshot of every registered plugin and its tools.
+   */
+  listPlugins(): Array<{ name: string; description?: string; version?: string; tools: ToolDefinition[] }> {
+    const result: ReturnType<PluginRegistry['listPlugins']> = [];
+    for (const [name, plugin] of this.plugins) {
+      result.push({
+        name,
+        description: plugin.description,
+        version: plugin.version,
+        tools: plugin.getTools(),
+      });
+    }
+    return result;
+  }
+
   setPluginConfig(name: string, config: Record<string, any>): void {
     this.configs.set(name, config);
   }

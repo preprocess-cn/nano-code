@@ -18,6 +18,16 @@ export class NanoCodeAgent {
     this.agentRole = agentRole;
   }
 
+  /** Return a copy of the current message history. */
+  getHistory(): ChatMessage[] {
+    return [...this.messageHistory];
+  }
+
+  /** Replace the message history (e.g. restored from a saved session). */
+  loadHistory(messages: ChatMessage[]): void {
+    this.messageHistory = [...messages];
+  }
+
   async runTask(userPrompt: string) {
     this.messageHistory.push({
       role: 'user',

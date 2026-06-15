@@ -26,6 +26,8 @@ npm start
 | `-d, --debug` | 开启调试模式，打印与 LLM 交互的完整数据包 |
 | `-t, --think` | 显示 LLM 的思考过程（思维链） |
 | `--skip-permission` | 跳过工具调用的用户确认提示 |
+| `--list-plugins` | 列出所有已注册的插件及其提供的工具 |
+| `-c, --continue` | 接续最近一次在当前项目的会话继续对话 |
 | `--help` | 显示帮助信息 |
 
 ## 配置
@@ -40,29 +42,45 @@ OPENAI_MODEL_NAME=gpt-4o                     # 可选，默认 gpt-4o
 
 支持任何兼容 OpenAI API 格式的后端：DeepSeek、通义千问、Ollama 本地模型等。
 
+### agent 角色配置
+
+自定义 agent 的身份和启动提示：
+
+```json
+{
+  "agent": {
+    "role": "数据库管理员",
+    "greeting": "我可以帮您查询数据库、分析表结构。"
+  }
+}
+```
+
+不配置时自动推导：有已注册工具 → "终端 AI 编程助手"，无工具 → "AI 对话助手"。
+
 ### 配置文件（`.nano-code.json`）
 
-项目级配置，可覆盖模型参数和插件设置：
+项目级配置，可覆盖模型参数、agent 角色和插件设置：
 
 ```json
 {
   "core": {
     "model": "deepseek-chat",
-    "temperature": 0,
-    "maxTokens": 4096,
-    "defaultTimeout": 120000
+    "temperature": 0
+  },
+  "agent": {
+    "role": "DevOps 助手"
   },
   "plugins": {
+    "fs": {},
+    "command": {},
     "token-budget": {
-      "settings": {
-        "maxTokensPerSession": 100000
-      }
+      "settings": { "maxTokensPerSession": 100000 }
     }
   }
 }
 ```
 
-全局配置位于 `~/.nano-code/config.json`，项目级配置会覆盖全局配置。
+全局配置位于 `~/.nano-code/config.json`，项目级配置会覆盖全局配置。插件默认不加载，只有在配置中显式声明的插件才会被注册。
 
 ## 架构
 
@@ -74,7 +92,7 @@ OPENAI_MODEL_NAME=gpt-4o                     # 可选，默认 gpt-4o
          ↕ register & dispatch
 ┌─────────────────────────────────────────────────┐
 │                  Plugins                         │
-│  fs.ts  │  command.ts  │  MCP  │  token-budget  │
+│  fs  │  command  │  MCP  │  token-budget  │  npm │
 └─────────────────────────────────────────────────┘
 ```
 
@@ -83,17 +101,17 @@ OPENAI_MODEL_NAME=gpt-4o                     # 可选，默认 gpt-4o
 
 ### 内置插件
 
-| 插件 | 文件 | 提供工具 |
-|------|------|---------|
-| **fs** | `src/plugins/tools/fs.ts` | 文件列表、读取、写入、精准修改 |
-| **command** | `src/plugins/tools/command.ts` | Bash 命令执行（含危险命令黑名单） |
+| 插件 | 启用方式 | 提供工具 |
+|------|---------|---------|
+| **fs** | `"fs": {}` | 文件列表、读取、写入、精准修改 |
+| **command** | `"command": {}` | Bash 命令执行（含危险命令黑名单） |
 
 ### 可选插件
 
 | 插件 | 启用方式 |
 |------|---------|
-| **MCP Adapter** | 在 `.nano-code.json` 中配置 `type: "mcp"` 的插件条目，自动加载外部 MCP Server |
-| **Token Budget** | 在 `.nano-code.json` 中配置 `plugins.token-budget.settings` |
+| **MCP** | 配置 `type: "mcp"` 条目，自动加载外部 MCP Server |
+| **Token Budget** | 配置 `plugins.token-budget.settings` |
 
 ## MCP 集成
 
@@ -138,7 +156,7 @@ interface NanoPlugin {
 ## 测试
 
 ```bash
-npm test        # 运行全部测试（64 个）
+npm test        # 运行全部测试
 ```
 
 ## 技术栈

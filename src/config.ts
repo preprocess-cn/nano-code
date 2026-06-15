@@ -246,3 +246,11 @@ export function getPluginConfig(
 export function resetConfigCache(): void {
   cachedConfig = null;
 }
+
+/** @internal exported for testing */
+export function _mergeConfigs(
+  global: Record<string, unknown> | null,
+  project: Record<string, unknown> | null,
+): NanoConfig {
+  return mergeConfigs(global, project);
+}

@@ -5,6 +5,8 @@ import { loadConfig } from './config.js';
 import { LLMClient } from './llm.js';
 import { buildMCPPluginsFromConfig } from './plugins/mcp/adapter.js';
 import { createTokenBudgetPlugin } from './plugins/token-budget.js';
+import { loadSession, saveSession } from './session.js';
+import { printPluginList } from './display.js';
 import { cac } from 'cac';
 
 /**
@@ -21,7 +23,7 @@ function handleExit() {
   process.exit(0);
 }
 
-async function startCLI(options: { debug?: boolean; think?: boolean; skipPermission?: boolean }) {
+async function startCLI(options: { debug?: boolean; think?: boolean; skipPermission?: boolean; listPlugins?: boolean; continue?: boolean }) {
 
   console.log('\n');
   intro('! nano-code 终端 AI 编程助手 启动中...');
@@ -79,6 +81,12 @@ async function startCLI(options: { debug?: boolean; think?: boolean; skipPermiss
     await registry.register(createTokenBudgetPlugin(budgetConfig));
   }
 
+  // ── --list-plugins mode: print and exit ──
+  if (options.listPlugins) {
+    printPluginList(registry);
+    return;
+  }
+
   // ── Determine agent identity and show greeting ──
   const hasTools = registry.getAllSchemas().length > 0;
   const defaultGreeting = hasTools
@@ -92,6 +100,17 @@ async function startCLI(options: { debug?: boolean; think?: boolean; skipPermiss
   console.log('----------------------------------------------------\n');
 
   const agent = new NanoCodeAgent(registry, options.debug, options.think, llmClient, config.agent?.role);
+
+  // ── --continue: restore previous session ──
+  if (options.continue) {
+    const session = loadSession(process.cwd());
+    if (session) {
+      agent.loadHistory(session.messages);
+      console.log(`   ↻ 已恢复上次会话 (${session.messages.length} 条消息，最后更新 ${session.updatedAt})\n`);
+    } else {
+      console.log('   - 未找到之前保存的会话，开始新的对话。\n');
+    }
+  }
 
   // 3. 进入无限交互循环
   while (true) {
@@ -119,6 +138,8 @@ async function startCLI(options: { debug?: boolean; think?: boolean; skipPermiss
       console.error('X 顶层循环捕获到未处理的致命异常:');
       console.error(error);
       console.log('\n');
+    } finally {
+      saveSession(process.cwd(), agent.getHistory());
     }
   }
 }
@@ -131,6 +152,8 @@ const cli = cac('nano-code');
 cli.option('-d, --debug', '开启调试模式，输出大模型交互的原始数据包');
 cli.option('-t, --think', '显示大模型的思考过程（思维链）');
 cli.option('--skip-permission', '跳过工具调用的用户确认提示，系统底层安全拦截仍然生效');
+cli.option('--list-plugins', '列出所有已注册的插件及其提供的工具');
+cli.option('-c, --continue', '接续最近一次在当前项目中的会话继续对话');
 
 cli.help();
 
@@ -141,6 +164,8 @@ if (!parsed.options.help) {
   startCLI({
     debug: parsed.options.debug,
     think: showThink,
-    skipPermission: parsed.options.skipPermission
+    skipPermission: parsed.options.skipPermission,
+    listPlugins: parsed.options.listPlugins ?? false,
+    continue: parsed.options.continue ?? false,
   });
 }

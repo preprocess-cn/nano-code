@@ -37,17 +37,8 @@ const userConfirmation = {
   }
 };
 
-// Re-export for test compatibility
+// Re-export for test compatibility (confirmation mocking)
 export { userConfirmation };
-
-/** @deprecated Use commandPlugin.execute() directly. Kept for test compatibility. */
-export async function executeRunnerTool(name: string, args: any, skipPermission?: boolean): Promise<ToolResponse> {
-  return commandPlugin.execute(name, args, {
-    skipPermission: skipPermission || false,
-    cwd: process.cwd(),
-    defaultTimeout: 30000,
-  });
-}
 
 export const commandPlugin: NanoPlugin = {
   name: 'command',

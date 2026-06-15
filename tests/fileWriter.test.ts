@@ -2,9 +2,11 @@ import { test, describe, mock, afterEach, beforeEach } from 'node:test';
 import assert from 'node:assert';
 import * as fs from 'fs';
 import * as path from 'path';
-import { executeWriterTool, writerConfirmation } from '../src/plugins/tools/fs.js';
+import { fsPlugin, writerConfirmation } from '../src/plugins/tools/fs.js';
 
 const TEST_DIR = '_nano_test_temp';
+const NO_CONFIRM = { skipPermission: true, cwd: process.cwd(), defaultTimeout: 30000 };
+const WITH_CONFIRM = { skipPermission: false, cwd: process.cwd(), defaultTimeout: 30000 };
 
 describe('fileWriter 文件写入功能测试', () => {
   let tmpDir: string;
@@ -21,10 +23,10 @@ describe('fileWriter 文件写入功能测试', () => {
 
   test('skipPermission=true 时越过确认，直接写入文件', async () => {
     const filePath = path.relative(process.cwd(), path.join(tmpDir, 'hello.txt'));
-    const response = await executeWriterTool('write_file_content', {
+    const response = await fsPlugin.execute('write_file_content', {
       path: filePath,
       content: 'skip-permission test'
-    }, true);
+    }, NO_CONFIRM);
 
     assert.strictEqual(response.status, 'success');
     assert.strictEqual(fs.readFileSync(path.join(tmpDir, 'hello.txt'), 'utf8'), 'skip-permission test');
@@ -34,10 +36,10 @@ describe('fileWriter 文件写入功能测试', () => {
     mock.method(writerConfirmation, 'ask', async () => false);
 
     const filePath = path.relative(process.cwd(), path.join(tmpDir, 'secret.txt'));
-    const response = await executeWriterTool('write_file_content', {
+    const response = await fsPlugin.execute('write_file_content', {
       path: filePath,
       content: 'should not appear'
-    }, false);
+    }, WITH_CONFIRM);
 
     assert.strictEqual(response.status, 'rejected_by_user');
     assert.ok(!fs.existsSync(path.join(tmpDir, 'secret.txt')));
@@ -47,29 +49,29 @@ describe('fileWriter 文件写入功能测试', () => {
     mock.method(writerConfirmation, 'ask', async () => true);
 
     const filePath = path.relative(process.cwd(), path.join(tmpDir, 'approved.txt'));
-    const response = await executeWriterTool('write_file_content', {
+    const response = await fsPlugin.execute('write_file_content', {
       path: filePath,
       content: 'user approved'
-    }, false);
+    }, WITH_CONFIRM);
 
     assert.strictEqual(response.status, 'success');
     assert.strictEqual(fs.readFileSync(path.join(tmpDir, 'approved.txt'), 'utf8'), 'user approved');
   });
 
   test('skipPermission=true 仍然拦截目录穿越', async () => {
-    const response = await executeWriterTool('write_file_content', {
+    const response = await fsPlugin.execute('write_file_content', {
       path: '../../etc/passwd',
       content: 'hack'
-    }, true);
+    }, NO_CONFIRM);
 
     assert.strictEqual(response.status, 'error');
     assert.match(response.message || '', /安全拒绝/);
   });
 
   test('缺少 path 参数时返回 error', async () => {
-    const response = await executeWriterTool('write_file_content', {
+    const response = await fsPlugin.execute('write_file_content', {
       content: 'data'
-    }, true);
+    }, NO_CONFIRM);
 
     assert.strictEqual(response.status, 'error');
     assert.match(response.message || '', /missing required/i);

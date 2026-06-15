@@ -106,6 +106,39 @@ describe('PluginRegistry — getAllSchemas', () => {
   });
 });
 
+// ── listPlugins ──
+
+describe('PluginRegistry — listPlugins', () => {
+  it('returns empty array when no plugins', () => {
+    const r = new PluginRegistry();
+    assert.deepEqual(r.listPlugins(), []);
+  });
+
+  it('includes plugin name, description, version and tools', async () => {
+    const r = new PluginRegistry();
+    const p: NanoPlugin = {
+      name: 'my-plugin',
+      description: 'My test plugin',
+      version: '1.0.0',
+      getTools() {
+        return [{
+          type: 'function',
+          function: { name: 'my_tool', description: 'A tool', parameters: { type: 'object', properties: {} } },
+        }];
+      },
+      async execute() { return { status: 'success' as const, data: 'ok' }; },
+    };
+    await r.register(p);
+    const list = r.listPlugins();
+    assert.equal(list.length, 1);
+    assert.equal(list[0].name, 'my-plugin');
+    assert.equal(list[0].description, 'My test plugin');
+    assert.equal(list[0].version, '1.0.0');
+    assert.equal(list[0].tools.length, 1);
+    assert.equal(list[0].tools[0].function.name, 'my_tool');
+  });
+});
+
 // ── execute ──
 
 describe('PluginRegistry — execute', () => {
