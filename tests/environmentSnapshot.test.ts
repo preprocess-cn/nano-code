@@ -1,0 +1,23 @@
+import { test, describe } from 'node:test';
+import assert from 'node:assert';
+import { formatToolResponse } from '../src/contract.js';
+
+describe('Environment Snapshot 环境快照注入测试', () => {
+  test('error 状态的 response 会被自动追加 [System Environment Snapshot]', () => {
+    const result = formatToolResponse({ status: 'error', message: 'test error' });
+    const parsed = JSON.parse(result);
+    assert.match(parsed.message || '', /\[System Environment Snapshot\]/);
+  });
+
+  test('rejected_by_user 状态的 response 会被自动追加 [System Environment Snapshot]', () => {
+    const result = formatToolResponse({ status: 'rejected_by_user', message: 'rejected' });
+    const parsed = JSON.parse(result);
+    assert.match(parsed.message || '', /\[System Environment Snapshot\]/);
+  });
+
+  test('success 状态的 response 不会被追加 [System Environment Snapshot]', () => {
+    const result = formatToolResponse({ status: 'success', data: 'ok' });
+    const parsed = JSON.parse(result);
+    assert.strictEqual(parsed.message, undefined);
+  });
+});

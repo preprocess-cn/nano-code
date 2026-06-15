@@ -1,0 +1,126 @@
+import { intro, text, outro, isCancel } from '@clack/prompts';
+import { NanoCodeAgent } from './agent.js';
+import { PluginRegistry } from './plugin.js';
+import { loadConfig } from './config.js';
+import { LLMClient } from './llm.js';
+import { fsPlugin } from './plugins/tools/fs.js';
+import { commandPlugin } from './plugins/tools/command.js';
+import { buildMCPPluginsFromConfig } from './plugins/mcp/adapter.js';
+import { createTokenBudgetPlugin } from './plugins/token-budget.js';
+import { cac } from 'cac';
+
+function handleExit() {
+  outro('** 感谢使用 nano-code，祝您编码愉快！');
+  process.exit(0);
+}
+
+async function startCLI(options: { debug?: boolean; think?: boolean; skipPermission?: boolean }) {
+
+  console.log('\n');
+  intro('! nano-code 终端 AI 编程助手 启动中...');
+
+  // ── Load configuration ──
+  const config = loadConfig();
+
+  if(options.debug) {
+    console.log(`#  当前已开启 [DEBUG 调试模式]，模型: ${config.core.model}`);
+  }
+  if (options.think && !options.debug) {
+    console.log(' <-> 当前已开启 [思维链显示]，将输出 AI 思考过程。');
+  }
+  if (options.skipPermission) {
+    console.log(' [!] 当前已开启 [免确认模式]，系统底层安全拦截仍然生效。');
+  }
+  console.log('----------------------------------------------------');
+  console.log(' * 提示：我可以帮您查看项目结构、读取代码并直接修改。');
+  console.log(' [!] 退出：输入 "exit"、"quit" 或直接按下 Ctrl+C 即可。');
+  console.log('----------------------------------------------------\n');
+
+  // ── LLM Client ──
+  const llmClient = new LLMClient({
+    model: config.core.model,
+    temperature: config.core.temperature,
+  });
+
+  // ── Plugin registry ──
+  const registry = new PluginRegistry();
+  registry.setDefaultContext({
+    skipPermission: options.skipPermission ?? false,
+    defaultTimeout: config.core.defaultTimeout,
+  });
+
+  // Load plugin configs from user config into registry
+  for (const [name, pluginCfg] of Object.entries(config.plugins)) {
+    if (pluginCfg.settings) {
+      registry.setPluginConfig(name, pluginCfg.settings);
+    }
+  }
+
+  // Register built-in plugins
+  await registry.register(fsPlugin);
+  await registry.register(commandPlugin);
+
+  // Register MCP plugins from config
+  for (const mcpPlugin of buildMCPPluginsFromConfig(config)) {
+    await registry.register(mcpPlugin);
+  }
+
+  // Register token-budget plugin if configured
+  if (config.plugins['token-budget']) {
+    const budgetConfig = config.plugins['token-budget'].settings || {};
+    await registry.register(createTokenBudgetPlugin(budgetConfig));
+  }
+
+  const agent = new NanoCodeAgent(registry, options.debug, options.think, llmClient);
+
+  // 3. 进入无限交互循环
+  while (true) {
+    const userPrompt = await text({
+      message: '>>  请输入开发任务或指令：',
+      placeholder: '例如："帮我看看这个项目的文件结构" 或 "创建一个 utils.ts 并在里面写一个冒泡排序"',
+      validate: (value) => {
+        if (!value.trim()) return '指令不能为空，请输入点什么吧！';
+      },
+    });
+
+    if (isCancel(userPrompt)) {
+      handleExit();
+    }
+
+    const command = (userPrompt as string).trim();
+
+    if (command.toLowerCase() === 'exit' || command.toLowerCase() === 'quit') {
+      handleExit();
+    }
+
+    try {
+      await agent.runTask(command);
+    } catch (error) {
+      console.error('X 顶层循环捕获到未处理的致命异常:');
+      console.error(error);
+      console.log('\n');
+    }
+  }
+}
+
+// ==========================================
+// 使用 cac 构建参数解析
+// ==========================================
+const cli = cac('nano-code');
+
+cli.option('-d, --debug', '开启调试模式，输出大模型交互的原始数据包');
+cli.option('-t, --think', '显示大模型的思考过程（思维链）');
+cli.option('--skip-permission', '跳过工具调用的用户确认提示，系统底层安全拦截仍然生效');
+
+cli.help();
+
+const parsed = cli.parse();
+
+if (!parsed.options.help) {
+  const showThink = !!(parsed.options.think || parsed.options.debug);
+  startCLI({
+    debug: parsed.options.debug,
+    think: showThink,
+    skipPermission: parsed.options.skipPermission
+  });
+}

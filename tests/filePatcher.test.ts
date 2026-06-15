@@ -1,0 +1,209 @@
+import { test, describe, mock, afterEach, beforeEach } from 'node:test';
+import assert from 'node:assert';
+import * as fs from 'fs';
+import * as path from 'path';
+import os from 'os';
+import { executePatchTool, patchConfirmation } from '../src/plugins/tools/fs.js';
+
+function createTempDir(): string {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nano-code-test-'));
+  return dir;
+}
+
+function removeTempDir(dir: string) {
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+
+describe('filePatcher 修补文件功能测试', () => {
+  let tmpDir: string;
+  let testFilePath: string;
+
+  beforeEach(() => {
+    tmpDir = createTempDir();
+    testFilePath = path.join(tmpDir, 'test.txt');
+    fs.writeFileSync(testFilePath, 'line one\nline two\nline three\n', 'utf8');
+    // Mock confirm to auto-approve
+    mock.method(patchConfirmation, 'ask', async () => true);
+  });
+
+  afterEach(() => {
+    mock.restoreAll();
+    removeTempDir(tmpDir);
+  });
+
+  test('基础成功场景：精确替换文件中的代码块', async () => {
+    const response = await executePatchTool({
+      path: testFilePath,
+      search: 'line two',
+      replace: 'line modified'
+    });
+
+    assert.strictEqual(response.status, 'success');
+    assert.match(response.data || '', /File patched successfully/);
+
+    const content = fs.readFileSync(testFilePath, 'utf8');
+    assert.strictEqual(content, 'line one\nline modified\nline three\n');
+  });
+
+  test('替换多行代码块', async () => {
+    fs.writeFileSync(testFilePath, 'function foo() {\n  return 1;\n}\n', 'utf8');
+
+    const response = await executePatchTool({
+      path: testFilePath,
+      search: '  return 1;',
+      replace: '  return 42;'
+    });
+
+    assert.strictEqual(response.status, 'success');
+    const content = fs.readFileSync(testFilePath, 'utf8');
+    assert.strictEqual(content, 'function foo() {\n  return 42;\n}\n');
+  });
+
+  test('search 字符串不存在于文件中时返回 error', async () => {
+    const response = await executePatchTool({
+      path: testFilePath,
+      search: 'does not exist in file',
+      replace: 'irrelevant'
+    });
+
+    assert.strictEqual(response.status, 'error');
+    assert.match(response.message || '', /search.*not found/i);
+  });
+
+  test('文件不存在时返回 error', async () => {
+    const response = await executePatchTool({
+      path: path.join(tmpDir, 'nonexistent.txt'),
+      search: 'anything',
+      replace: 'nothing'
+    });
+
+    assert.strictEqual(response.status, 'error');
+    assert.match(response.message || '', /does not exist/i);
+  });
+
+  test('缺少 path 参数时返回 error', async () => {
+    const response = await executePatchTool({
+      search: 'foo',
+      replace: 'bar'
+    });
+
+    assert.strictEqual(response.status, 'error');
+    assert.match(response.message || '', /missing required parameters/i);
+  });
+
+  test('缺少 search 参数时返回 error', async () => {
+    const response = await executePatchTool({
+      path: testFilePath,
+      replace: 'bar'
+    });
+
+    assert.strictEqual(response.status, 'error');
+    assert.match(response.message || '', /missing required parameters/i);
+  });
+
+  test('缺少 replace 参数时返回 error', async () => {
+    const response = await executePatchTool({
+      path: testFilePath,
+      search: 'foo'
+    });
+
+    assert.strictEqual(response.status, 'error');
+    assert.match(response.message || '', /missing required parameters/i);
+  });
+
+  test('search 为空字符串时返回 error（防止误匹配所有文件）', async () => {
+    const response = await executePatchTool({
+      path: testFilePath,
+      search: '',
+      replace: 'prepended'
+    });
+
+    assert.strictEqual(response.status, 'error');
+    assert.match(response.message || '', /must not be empty/i);
+  });
+
+  test('search 在文件中出现多次时，仅替换第一个匹配', async () => {
+    fs.writeFileSync(testFilePath, 'aaa bbb aaa bbb\n', 'utf8');
+
+    const response = await executePatchTool({
+      path: testFilePath,
+      search: 'aaa',
+      replace: 'xxx'
+    });
+
+    assert.strictEqual(response.status, 'success');
+    const content = fs.readFileSync(testFilePath, 'utf8');
+    assert.strictEqual(content, 'xxx bbb aaa bbb\n');
+  });
+
+  test('缩进/大小写敏感匹配：不会替换大小写不同的内容', async () => {
+    fs.writeFileSync(testFilePath, 'Hello World\n', 'utf8');
+
+    const response = await executePatchTool({
+      path: testFilePath,
+      search: 'hello world',
+      replace: 'replaced'
+    });
+
+    assert.strictEqual(response.status, 'error');
+    assert.match(response.message || '', /not found/i);
+  });
+
+  test('用户拒绝修改时返回 rejected_by_user', async () => {
+    mock.method(patchConfirmation, 'ask', async () => false);
+
+    const response = await executePatchTool({
+      path: testFilePath,
+      search: 'line two',
+      replace: 'line modified'
+    });
+
+    assert.strictEqual(response.status, 'rejected_by_user');
+    // 文件内容不应被修改
+    const content = fs.readFileSync(testFilePath, 'utf8');
+    assert.strictEqual(content, 'line one\nline two\nline three\n');
+  });
+
+  test('skipPermission=true 越过确认，直接修补文件', async () => {
+    mock.restoreAll(); // 移除 beforeEach 中的 mock，验证不打 confirm 也能通过
+
+    const response = await executePatchTool({
+      path: testFilePath,
+      search: 'line two',
+      replace: 'line skipped'
+    }, true);
+
+    assert.strictEqual(response.status, 'success');
+    const content = fs.readFileSync(testFilePath, 'utf8');
+    assert.strictEqual(content, 'line one\nline skipped\nline three\n');
+  });
+
+  test('skipPermission=false 且用户拒绝时返回 rejected_by_user', async () => {
+    mock.method(patchConfirmation, 'ask', async () => false);
+
+    const response = await executePatchTool({
+      path: testFilePath,
+      search: 'line two',
+      replace: 'should not happen'
+    }, false);
+
+    assert.strictEqual(response.status, 'rejected_by_user');
+    const content = fs.readFileSync(testFilePath, 'utf8');
+    assert.strictEqual(content, 'line one\nline two\nline three\n');
+  });
+
+  test('path 为绝对路径时也能正确处理', async () => {
+    const absPath = path.resolve(tmpDir, 'sub/deep/test.txt');
+    fs.mkdirSync(path.dirname(absPath), { recursive: true });
+    fs.writeFileSync(absPath, 'original content\n', 'utf8');
+
+    const response = await executePatchTool({
+      path: absPath,
+      search: 'original content',
+      replace: 'patched content'
+    });
+
+    assert.strictEqual(response.status, 'success');
+    assert.strictEqual(fs.readFileSync(absPath, 'utf8'), 'patched content\n');
+  });
+});

@@ -1,0 +1,31 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+*.tsbuildinfo
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/settings.json
+.vscode/launch.json
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project local
+.claude/
+.codegraph/
+*.local.*
+
+# Config (keep .nano-code.json — that's the project-level config to share)
+# Global config is at ~/.nano-code/config.json (user home, not in repo)
