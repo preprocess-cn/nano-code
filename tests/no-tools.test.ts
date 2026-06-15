@@ -35,6 +35,14 @@ describe('No tools configured — pure chat mode', () => {
     assert.ok(result2.message.includes('Unknown tool'));
   });
 
+  it('uses custom agentRole in chat mode when provided', () => {
+    const registry = new PluginRegistry();
+    const msg = buildSystemPrompt(registry, '数据库管理员');
+    assert.ok(msg.content!.includes('数据库管理员'));
+    // Should still be chat mode (no tools registered)
+    assert.ok(!msg.content!.includes('【核心安全约束】'));
+  });
+
   it('system prompt switches to tool instructions when plugins are registered', async () => {
     const registry = new PluginRegistry();
     await registry.register({
@@ -59,6 +67,29 @@ describe('No tools configured — pure chat mode', () => {
     assert.ok(msg.content!.includes('AI 编程助手'));
     assert.ok(msg.content!.includes('【核心安全约束】'));
     assert.ok(msg.content!.includes('rejected_by_user'));
+  });
+
+  it('uses custom agentRole in tool mode when provided', async () => {
+    const registry = new PluginRegistry();
+    await registry.register({
+      name: 'mock2',
+      getTools() {
+        return [{
+          type: 'function' as const,
+          function: {
+            name: 'mock_tool2',
+            description: 'another test tool',
+            parameters: { type: 'object', properties: {} },
+          },
+        }];
+      },
+      async execute(): Promise<ToolResponse> {
+        return { status: 'success', data: 'ok' };
+      },
+    });
+    const msg = buildSystemPrompt(registry, '部署运维助手');
+    assert.ok(msg.content!.includes('部署运维助手'));
+    assert.ok(msg.content!.includes('【核心安全约束】'));
   });
 
 });

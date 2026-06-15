@@ -8,12 +8,14 @@ export class NanoCodeAgent {
   private registry: PluginRegistry;
   private IS_DEBUG = false;
   private SHOW_THINK = false;
+  private agentRole?: string;
 
-  constructor(registry: PluginRegistry, isDebug = false, showThink = false, llmClient?: LLMClient) {
+  constructor(registry: PluginRegistry, isDebug = false, showThink = false, llmClient?: LLMClient, agentRole?: string) {
     this.llmClient = llmClient || new LLMClient();
     this.registry = registry;
     this.IS_DEBUG = isDebug;
     this.SHOW_THINK = showThink;
+    this.agentRole = agentRole;
   }
 
   async runTask(userPrompt: string) {
@@ -35,7 +37,7 @@ export class NanoCodeAgent {
       let isInsideThink = false;
       let streamBuffer = '';
 
-      const systemMessage = buildSystemPrompt(this.registry);
+      const systemMessage = buildSystemPrompt(this.registry, this.agentRole);
       let messagesWithSystem: ChatMessage[] = [systemMessage, ...this.messageHistory];
 
       // Hook: allow plugins to modify messages before sending

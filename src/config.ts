@@ -4,6 +4,11 @@ import * as os from 'os';
 
 // ── Typed config interface ──
 
+export interface AgentConfig {
+  role?: string;     // agent 角色描述，用于系统提示（如"终端 AI 编程助手"）
+  greeting?: string; // 启动时向用户显示的能力提示
+}
+
 export interface PluginConfigEntry {
   type?: 'builtin' | 'mcp' | 'npm';
   enabled?: boolean;
@@ -24,6 +29,7 @@ export interface NanoConfig {
     maxTokens: number;
     defaultTimeout: number;
   };
+  agent?: AgentConfig;
   plugins: {
     [pluginName: string]: PluginConfigEntry;
   };
@@ -102,6 +108,20 @@ function mergeCoreValues(
   };
 }
 
+function mergeAgentConfig(
+  base: AgentConfig | undefined,
+  override: unknown,
+): AgentConfig | undefined {
+  if (!isNonEmptyObject(override)) return base;
+  const o = override as Record<string, unknown>;
+  const result: AgentConfig = {};
+  if (typeof o.role === 'string') result.role = o.role;
+  else if (base?.role) result.role = base.role;
+  if (typeof o.greeting === 'string') result.greeting = o.greeting;
+  else if (base?.greeting) result.greeting = base.greeting;
+  return Object.keys(result).length > 0 ? result : undefined;
+}
+
 function mergePluginEntries(
   base: NanoConfig['plugins'],
   override: unknown,
@@ -157,7 +177,7 @@ function mergeConfigs(
 
     // Warn about unknown top-level keys
     for (const key of Object.keys(data)) {
-      if (key !== 'core' && key !== 'plugins') {
+      if (key !== 'core' && key !== 'plugins' && key !== 'agent') {
         console.warn(`[config] Warning: Unknown config key "${key}" in ${label} config, ignoring.`);
       }
     }
@@ -165,6 +185,11 @@ function mergeConfigs(
     // Merge core
     if ('core' in data) {
       result.core = mergeCoreValues(result.core, data.core);
+    }
+
+    // Merge agent (project overrides global, field by field)
+    if ('agent' in data) {
+      result.agent = mergeAgentConfig(result.agent, data.agent);
     }
 
     // Merge plugins

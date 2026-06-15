@@ -38,10 +38,6 @@ async function startCLI(options: { debug?: boolean; think?: boolean; skipPermiss
   if (options.skipPermission) {
     console.log(' [!] 当前已开启 [免确认模式]，系统底层安全拦截仍然生效。');
   }
-  console.log('----------------------------------------------------');
-  console.log(' * 提示：我可以帮您查看项目结构、读取代码并直接修改。');
-  console.log(' [!] 退出：输入 "exit"、"quit" 或直接按下 Ctrl+C 即可。');
-  console.log('----------------------------------------------------\n');
 
   // ── LLM Client ──
   const llmClient = new LLMClient({
@@ -83,7 +79,19 @@ async function startCLI(options: { debug?: boolean; think?: boolean; skipPermiss
     await registry.register(createTokenBudgetPlugin(budgetConfig));
   }
 
-  const agent = new NanoCodeAgent(registry, options.debug, options.think, llmClient);
+  // ── Determine agent identity and show greeting ──
+  const hasTools = registry.getAllSchemas().length > 0;
+  const defaultGreeting = hasTools
+    ? '我可以帮您查看项目结构、读取代码并直接修改。'
+    : '我可以帮您解答编程问题，提供代码示例和建议。';
+  const greeting = config.agent?.greeting || defaultGreeting;
+
+  console.log('----------------------------------------------------');
+  console.log(` * 提示：${greeting}`);
+  console.log(' [!] 退出：输入 "exit"、"quit" 或直接按下 Ctrl+C 即可。');
+  console.log('----------------------------------------------------\n');
+
+  const agent = new NanoCodeAgent(registry, options.debug, options.think, llmClient, config.agent?.role);
 
   // 3. 进入无限交互循环
   while (true) {
