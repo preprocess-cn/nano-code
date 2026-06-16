@@ -59,7 +59,8 @@ export const commandPlugin: NanoPlugin = {
               }
             },
             required: ['command']
-          }
+          },
+          sideEffect: true,
         }
       }
     ];
@@ -86,7 +87,7 @@ export const commandPlugin: NanoPlugin = {
             };
           }
 
-          if (!ctx.skipPermission) {
+          if (!ctx.skipPermission && ctx.sideEffect) {
             console.log(`\n[!]  AI 正在申请执行终端命令：`);
             console.log(`-> \x1b[33m${args.command}\x1b[0m`);
 

@@ -47,6 +47,7 @@ export interface NanoPlugin {
 export class PluginRegistry {
   private plugins: Map<string, NanoPlugin> = new Map();
   private toolIndex: Map<string, string> = new Map();
+  private toolSideEffects: Map<string, boolean> = new Map();
   private configs: Map<string, Record<string, any>> = new Map();
   private defaultCtx: Partial<ToolContext> = {};
 
@@ -66,6 +67,7 @@ export class PluginRegistry {
         console.warn(`[plugin] Warning: Tool "${tool.function.name}" already registered by plugin "${this.toolIndex.get(tool.function.name)}", overwritten by "${plugin.name}".`);
       }
       this.toolIndex.set(tool.function.name, plugin.name);
+      this.toolSideEffects.set(tool.function.name, tool.function.sideEffect ?? true);
     }
 
     try {
@@ -92,6 +94,7 @@ export class PluginRegistry {
     for (const [toolName, pluginName] of this.toolIndex.entries()) {
       if (pluginName === name) {
         this.toolIndex.delete(toolName);
+        this.toolSideEffects.delete(toolName);
       }
     }
     this.plugins.delete(name);
@@ -127,6 +130,7 @@ export class PluginRegistry {
       skipPermission: ctx?.skipPermission ?? this.defaultCtx.skipPermission ?? false,
       cwd: ctx?.cwd ?? this.defaultCtx.cwd ?? process.cwd(),
       defaultTimeout: ctx?.defaultTimeout ?? this.defaultCtx.defaultTimeout ?? 30000,
+      sideEffect: this.toolSideEffects.get(name) ?? true,
     };
 
     try {

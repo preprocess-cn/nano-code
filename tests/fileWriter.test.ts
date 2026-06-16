@@ -5,8 +5,9 @@ import * as path from 'path';
 import { fsPlugin, writerConfirmation } from '../src/plugins/tools/fs.js';
 
 const TEST_DIR = '_nano_test_temp';
-const NO_CONFIRM = { skipPermission: true, cwd: process.cwd(), defaultTimeout: 30000 };
-const WITH_CONFIRM = { skipPermission: false, cwd: process.cwd(), defaultTimeout: 30000 };
+const NO_CONFIRM = { skipPermission: true, cwd: process.cwd(), defaultTimeout: 30000, sideEffect: true };
+const WITH_CONFIRM = { skipPermission: false, cwd: process.cwd(), defaultTimeout: 30000, sideEffect: true };
+const NO_SIDE_EFFECT = { skipPermission: false, cwd: process.cwd(), defaultTimeout: 30000, sideEffect: false };
 
 describe('fileWriter 文件写入功能测试', () => {
   let tmpDir: string;
@@ -75,5 +76,18 @@ describe('fileWriter 文件写入功能测试', () => {
 
     assert.strictEqual(response.status, 'error');
     assert.match(response.message || '', /missing required/i);
+  });
+
+  test('sideEffect=false 跳过确认直接写入', async () => {
+    // sideEffect=false 时 writerConfirmation.ask 不应被调用
+    mock.method(writerConfirmation, 'ask', async () => { throw new Error('should not be called'); });
+    const filePath = path.relative(process.cwd(), path.join(tmpDir, 'no-se.txt'));
+    const response = await fsPlugin.execute('write_file_content', {
+      path: filePath,
+      content: 'auto-write'
+    }, NO_SIDE_EFFECT);
+
+    assert.strictEqual(response.status, 'success');
+    assert.strictEqual(fs.readFileSync(path.join(tmpDir, 'no-se.txt'), 'utf8'), 'auto-write');
   });
 });

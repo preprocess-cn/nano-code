@@ -67,6 +67,7 @@ export const fsPlugin: NanoPlugin = {
           name: 'list_project_files',
           description: '列出当前工作目录下的所有文件和文件夹结构（已自动排除 node_modules 和编译产物）。当需要了解项目整体架构、寻找特定代码文件时使用。',
           parameters: { type: 'object', properties: {} },
+          sideEffect: false,
         }
       },
       {
@@ -80,7 +81,8 @@ export const fsPlugin: NanoPlugin = {
               path: { type: 'string', description: '相对于当前项目根目录的文件路径（例如：src/index.ts）' }
             },
             required: ['path']
-          }
+          },
+          sideEffect: false,
         }
       },
       {
@@ -95,7 +97,8 @@ export const fsPlugin: NanoPlugin = {
               content: { type: 'string', description: '准备写入该文件的完整代码或文本内容' }
             },
             required: ['path', 'content']
-          }
+          },
+          sideEffect: true,
         }
       },
       {
@@ -111,7 +114,8 @@ export const fsPlugin: NanoPlugin = {
               replace: { type: 'string', description: 'The new string or lines of code block to inject.' }
             },
             required: ['path', 'search', 'replace']
-          }
+          },
+          sideEffect: true,
         }
       },
     ];
@@ -151,7 +155,7 @@ export const fsPlugin: NanoPlugin = {
           let fileExists = false;
           try { await fs.access(finalPath); fileExists = true; } catch { fileExists = false; }
 
-          if (!ctx.skipPermission) {
+          if (!ctx.skipPermission && ctx.sideEffect) {
             const actionText = fileExists ? '[!] 覆盖修改' : '[NEW] 创建新文件';
             const isConfirmed = await writerConfirmation.ask(`AI 申请 ${actionText} [ ${args.path} ]，是否批准此操作？`);
             if (!isConfirmed) {
@@ -181,7 +185,7 @@ export const fsPlugin: NanoPlugin = {
             return toolError(`Error: File does not exist at path: ${relativePath}`);
           }
 
-          if (!ctx.skipPermission) {
+          if (!ctx.skipPermission && ctx.sideEffect) {
             const isConfirmed = await patchConfirmation.ask(relativePath, search, replace);
             if (!isConfirmed) {
               return { status: 'rejected_by_user', message: 'File modification rejected by user.' };

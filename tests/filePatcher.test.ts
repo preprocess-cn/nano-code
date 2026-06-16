@@ -5,8 +5,8 @@ import * as path from 'path';
 import os from 'os';
 import { fsPlugin, patchConfirmation } from '../src/plugins/tools/fs.js';
 
-const CTX_CONFIRM = { skipPermission: false, cwd: process.cwd(), defaultTimeout: 30000 };
-const CTX_SKIP = { skipPermission: true, cwd: process.cwd(), defaultTimeout: 30000 };
+const CTX_CONFIRM = { skipPermission: false, cwd: process.cwd(), defaultTimeout: 30000, sideEffect: true };
+const CTX_SKIP = { skipPermission: true, cwd: process.cwd(), defaultTimeout: 30000, sideEffect: true };
 
 function createTempDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'nano-code-test-'));

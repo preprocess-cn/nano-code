@@ -23,6 +23,8 @@ export interface ToolDefinition {
     name: string;
     description: string;
     parameters: Record<string, any>;
+    /** Whether this tool changes external state. false = read-only, auto-execute without user confirmation. */
+    sideEffect?: boolean;
   };
 }
 
@@ -30,6 +32,8 @@ export interface ToolContext {
   skipPermission: boolean;
   cwd: string;
   defaultTimeout: number;
+  /** Whether the current tool has side effects. false = no confirmation prompt needed. */
+  sideEffect: boolean;
 }
 
 export function formatToolResponse(response: ToolResponse): string {

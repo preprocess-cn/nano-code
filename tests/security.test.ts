@@ -2,8 +2,9 @@ import { test, describe, mock, afterEach } from 'node:test';
 import assert from 'node:assert';
 import { commandPlugin, userConfirmation } from '../src/plugins/tools/command.js';
 
-const NO_CONFIRM = { skipPermission: true, cwd: process.cwd(), defaultTimeout: 30000 };
-const WITH_CONFIRM = { skipPermission: false, cwd: process.cwd(), defaultTimeout: 30000 };
+const NO_CONFIRM = { skipPermission: true, cwd: process.cwd(), defaultTimeout: 30000, sideEffect: true };
+const WITH_CONFIRM = { skipPermission: false, cwd: process.cwd(), defaultTimeout: 30000, sideEffect: true };
+const NO_SIDE_EFFECT = { skipPermission: false, cwd: process.cwd(), defaultTimeout: 30000, sideEffect: false };
 
 describe('Security 安全熔断与交互契约测试', () => {
   afterEach(() => {
@@ -47,5 +48,12 @@ describe('Security 安全熔断与交互契约测试', () => {
     const response = await commandPlugin.execute('run_bash_command', { command: 'rm -rf /' }, NO_CONFIRM);
     assert.strictEqual(response.status, 'error');
     assert.match(response.message || '', /CRITICAL SECURITY VIOLATION/);
+  });
+
+  test('sideEffect=false 时，即使 skipPermission=false 也不弹确认直接执行', async () => {
+    // 如果 sideEffect=false，userConfirmation.ask 不会被调用
+    mock.method(userConfirmation, 'ask', async () => { throw new Error('should not be called'); });
+    const response = await commandPlugin.execute('run_bash_command', { command: 'echo "no-side-effect"' }, NO_SIDE_EFFECT);
+    assert.strictEqual(response.status, 'success');
   });
 });

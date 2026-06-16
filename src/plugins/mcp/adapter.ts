@@ -1,7 +1,9 @@
 import { spawn, ChildProcess } from 'child_process';
 import * as readline from 'readline';
-import { NanoPlugin, ToolCall } from '../../plugin.js';
+import { NanoPlugin } from '../../plugin.js';
 import { ToolDefinition, ToolResponse, ToolContext } from '../../contract.js';
+import { NanoConfig } from '../../config.js';
+import { getPackageVersion } from '../../version.js';
 
 // ── JSON-RPC types ──
 
@@ -19,15 +21,60 @@ interface JSONRPCResponse {
   error?: { code: number; message: string; data?: any };
 }
 
-interface JSONRPCNotification {
-  jsonrpc: '2.0';
-  method: string;
-  params?: any;
+// ── Retry helper ──
+
+const MAX_START_RETRIES = 2;
+const START_RETRY_DELAYS = [500, 1500];
+
+function isTransientStartError(err: Error): boolean {
+  const msg = err.message.toLowerCase();
+  if (msg.includes('refused') || msg.includes('econnreset')) return true;
+  if (msg.includes('timeout') || msg.includes('init timeout')) return true;
+  if (msg.includes('process exited')) return true;
+  if (/http (5\d\d)/.test(msg)) return true;
+  return false;
 }
 
-// ── MCP Client ──
+async function withRetry<T>(fn: () => Promise<T>, label: string): Promise<T> {
+  let lastErr!: Error;
+  for (let attempt = 0; attempt <= MAX_START_RETRIES; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err instanceof Error ? err : new Error(String(err));
+      if (attempt < MAX_START_RETRIES && isTransientStartError(lastErr)) {
+        console.warn(`[mcp] ${label} 失败（第 ${attempt + 1}/${MAX_START_RETRIES + 1} 次），${START_RETRY_DELAYS[attempt]}ms 后重试: ${lastErr.message}`);
+        await new Promise(r => setTimeout(r, START_RETRY_DELAYS[attempt]));
+        continue;
+      }
+      throw lastErr;
+    }
+  }
+  throw lastErr;
+}
 
-export class MCPClient {
+// ── Cleanup helper for abort controller ──
+
+function delaySignal(ms: number): { signal: AbortSignal; clear: () => void } {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), ms);
+  return { signal: ctrl.signal, clear: () => clearTimeout(timer) };
+}
+
+// ── Transport interface ──
+
+export interface MCPTransport {
+  readonly name: string;
+  readonly description: string;
+  start(): Promise<void>;
+  listTools(): Promise<ToolDefinition[]>;
+  callTool(name: string, args: any): Promise<any>;
+  stop(): Promise<void>;
+}
+
+// ── Stdio transport ──
+
+export class MCPStdioTransport implements MCPTransport {
   private process: ChildProcess | null = null;
   private rl: readline.Interface | null = null;
   private nextId = 1;
@@ -50,6 +97,12 @@ export class MCPClient {
   }
 
   async start(): Promise<void> {
+    return withRetry(async () => {
+      await this.startInner();
+    }, `启动 MCP stdio 服务器 "${this.command}"`);
+  }
+
+  private async startInner(): Promise<void> {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error(`MCP init timeout after ${this.initTimeout}ms`)), this.initTimeout);
 
@@ -66,13 +119,16 @@ export class MCPClient {
         try {
           const msg = JSON.parse(line);
           this.handleMessage(msg);
-        } catch (e) {
+        } catch {
           // Non-JSON output from server (e.g., startup logs) — ignore
         }
       });
 
       this.process.stderr?.on('data', (data: Buffer) => {
-        // MCP servers may log to stderr; ignore by default
+        const text = data.toString().trimEnd();
+        if (text) {
+          console.error(`[mcp:stderr] ${text}`);
+        }
       });
 
       this.process.on('error', (err) => {
@@ -80,23 +136,27 @@ export class MCPClient {
         reject(err);
       });
 
-      this.process.on('close', (code) => {
+      this.process.on('close', (code, signal) => {
+        if (code !== null && code !== 0) {
+          console.warn(`[mcp] 进程 "${this.command}" 已退出，退出码: ${code} (信号: ${signal || 'none'})`);
+        }
         this.clearPending(new Error(`MCP process exited with code ${code}`));
       });
 
-      // Send initialize request
       this.request('initialize', {
         protocolVersion: '2024-11-05',
         capabilities: {},
-        clientInfo: { name: 'nano-code', version: '0.1.0' },
+        clientInfo: { name: 'nano-code', version: getPackageVersion() },
       }).then((result) => {
         clearTimeout(timer);
-        // Send initialized notification
         this.notify('notifications/initialized', {});
         this._name = result.serverInfo?.name || this._name;
         this._description = result.serverInfo?.description || this._description;
         resolve();
-      }).catch(reject);
+      }).catch((err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
     });
   }
 
@@ -148,12 +208,11 @@ export class MCPClient {
   }
 
   private notify(method: string, params?: any): void {
-    const msg: JSONRPCNotification = { jsonrpc: '2.0', method, params };
+    const msg = { jsonrpc: '2.0' as const, method, params };
     this.process?.stdin?.write(JSON.stringify(msg) + '\n');
   }
 
   private handleMessage(msg: any): void {
-    // Response to a pending request
     if (msg.id != null && this.pending.has(msg.id)) {
       const entry = this.pending.get(msg.id)!;
       clearTimeout(entry.timer);
@@ -163,9 +222,7 @@ export class MCPClient {
       } else {
         entry.resolve(msg.result);
       }
-      return;
     }
-    // Notifications from server (no matching pending request) — ignore
   }
 
   private clearPending(err: Error): void {
@@ -177,31 +234,204 @@ export class MCPClient {
   }
 }
 
-// ── Factory: create NanoPlugin from MCPClient ──
+// ── HTTP transport ──
 
-export function createMCPPlugin(client: MCPClient): NanoPlugin {
+export class MCPHTTPTransport implements MCPTransport {
+  private nextId = 1;
+  private sessionId: string | null = null;
+  private _name: string;
+  private _description: string;
+  private initTimeout: number;
+  private requestTimeout: number;
+
+  get name(): string { return this._name; }
+  get description(): string { return this._description; }
+
+  constructor(
+    private url: string,
+    initTimeout: number = 10000,
+    requestTimeout: number = 60000,
+  ) {
+    this._name = `mcp:http`;
+    this._description = `MCP HTTP server: ${url}`;
+    this.initTimeout = initTimeout;
+    this.requestTimeout = requestTimeout;
+  }
+
+  async start(): Promise<void> {
+    return withRetry(async () => {
+      await this.startInner();
+    }, `连接 MCP HTTP 服务器 "${this.url}"`);
+  }
+
+  private async startInner(): Promise<void> {
+    const { signal, clear } = delaySignal(this.initTimeout);
+    try {
+      const result = await this.request('initialize', {
+        protocolVersion: '2024-11-05',
+        capabilities: {},
+        clientInfo: { name: 'nano-code', version: getPackageVersion() },
+      }, signal);
+
+      if (result && typeof result === 'object' && '_sessionId' in result) {
+        this.sessionId = result._sessionId;
+      }
+
+      this._name = result.serverInfo?.name || this._name;
+      this._description = result.serverInfo?.description || this._description;
+
+      this.notify('notifications/initialized', {}).catch(() => {});
+    } finally {
+      clear();
+    }
+  }
+
+  async listTools(): Promise<ToolDefinition[]> {
+    const result = await this.request('tools/list', {});
+    if (!result?.tools) return [];
+    return result.tools.map((t: any) => ({
+      type: 'function' as const,
+      function: {
+        name: t.name,
+        description: t.description || '',
+        parameters: t.inputSchema || t.parameters || { type: 'object', properties: {} },
+      },
+    }));
+  }
+
+  async callTool(name: string, args: any): Promise<any> {
+    const result = await this.request('tools/call', { name, arguments: args });
+    if (result?.isError) {
+      const content = result.content?.[0]?.text || 'Unknown error';
+      throw new Error(content);
+    }
+    return result?.content?.[0]?.text || JSON.stringify(result);
+  }
+
+  async stop(): Promise<void> {
+    // No persistent connection to close
+  }
+
+  private async request(method: string, params?: any, signal?: AbortSignal): Promise<any> {
+    const id = this.nextId++;
+    const body: JSONRPCRequest = { jsonrpc: '2.0', id, method, params };
+
+    const defaultSignal = delaySignal(this.requestTimeout);
+    const activeSignal = signal || defaultSignal.signal;
+
+    try {
+      const response = await fetch(this.url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json, text/event-stream',
+          ...(this.sessionId ? { 'mcp-session-id': this.sessionId } : {}),
+        },
+        body: JSON.stringify(body),
+        signal: activeSignal,
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const contentType = response.headers.get('content-type') || '';
+
+      if (contentType.includes('text/event-stream')) {
+        const text = await response.text();
+        return this.handleSSEResponse(text, id);
+      }
+
+      const json = await response.json() as JSONRPCResponse;
+      if (json.error) {
+        throw new Error(`MCP error: ${json.error.message}`);
+      }
+      return json.result;
+    } finally {
+      if (!signal) defaultSignal.clear();
+    }
+  }
+
+  private async notify(method: string, params?: any): Promise<void> {
+    const body = { jsonrpc: '2.0' as const, method, params };
+    try {
+      await fetch(this.url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(this.sessionId ? { 'mcp-session-id': this.sessionId } : {}),
+        },
+        body: JSON.stringify(body),
+      });
+    } catch {
+      // Notifications are fire-and-forget
+    }
+  }
+
+  private handleSSEResponse(text: string, requestId: number): any {
+    const events = parseSSE(text);
+    for (const evt of events) {
+      try {
+        const data = JSON.parse(evt.data);
+        if (data.id === requestId) {
+          if (data.error) throw new Error(`MCP error: ${data.error.message}`);
+          return data.result;
+        }
+      } catch (err) {
+        if (err instanceof Error && err.message.startsWith('MCP error:')) throw err;
+      }
+    }
+    throw new Error('No matching response in SSE stream');
+  }
+}
+
+function parseSSE(text: string): Array<{ event?: string; data: string }> {
+  const events: Array<{ event?: string; data: string }> = [];
+  const blocks = text.split('\n\n');
+  for (const block of blocks) {
+    const lines = block.split('\n');
+    let event: string | undefined;
+    let data = '';
+    for (const line of lines) {
+      if (line.startsWith('event: ')) {
+        event = line.slice(7);
+      } else if (line.startsWith('data: ')) {
+        data += (data ? '\n' : '') + line.slice(6);
+      }
+    }
+    if (data) events.push({ event, data });
+  }
+  return events;
+}
+
+// ── Factory: create NanoPlugin from MCPTransport ──
+
+export function createMCPPlugin(transport: MCPTransport, sideEffect = true): NanoPlugin {
   let tools: ToolDefinition[] = [];
 
   return {
-    name: client.name,
-    description: client.description,
+    name: transport.name,
+    description: transport.description,
 
     getTools(): ToolDefinition[] {
-      return tools;
+      return tools.map(t => ({
+        ...t,
+        function: { ...t.function, sideEffect },
+      }));
     },
 
     async onInit(): Promise<void> {
-      await client.start();
-      tools = await client.listTools();
+      await transport.start();
+      tools = await transport.listTools();
     },
 
     async onDestroy(): Promise<void> {
-      await client.stop();
+      await transport.stop();
     },
 
     async execute(name: string, args: any, ctx: ToolContext): Promise<ToolResponse> {
       try {
-        const result = await client.callTool(name, args);
+        const result = await transport.callTool(name, args);
         return { status: 'success', data: typeof result === 'string' ? result : JSON.stringify(result, null, 2) };
       } catch (err: any) {
         return { status: 'error', message: err.message };
@@ -212,25 +442,36 @@ export function createMCPPlugin(client: MCPClient): NanoPlugin {
 
 // ── Load MCP plugins from config ──
 
-import { NanoConfig } from '../../config.js';
-
 export function buildMCPPluginsFromConfig(config: NanoConfig): NanoPlugin[] {
   const plugins: NanoPlugin[] = [];
 
   for (const [name, entry] of Object.entries(config.plugins)) {
     if (entry.type !== 'mcp' || entry.enabled === false) continue;
-    if (!entry.command) {
-      console.warn(`[mcp] MCP plugin "${name}" has no "command" configured, skipping.`);
-      continue;
+
+    const transport = entry.transport || 'stdio';
+
+    let mcpTransport: MCPTransport;
+
+    if (transport === 'http') {
+      if (!entry.url) {
+        console.warn(`[mcp] HTTP MCP 插件 "${name}" 未配置 "url"，跳过。`);
+        continue;
+      }
+      mcpTransport = new MCPHTTPTransport(entry.url, entry.initTimeout ?? 10000);
+    } else {
+      if (!entry.command) {
+        console.warn(`[mcp] MCP 插件 "${name}" 未配置 "command"，跳过。`);
+        continue;
+      }
+      mcpTransport = new MCPStdioTransport(
+        entry.command,
+        entry.args || [],
+        entry.env || {},
+        entry.initTimeout ?? 10000,
+      );
     }
 
-    const client = new MCPClient(
-      entry.command,
-      entry.args || [],
-      entry.env || {},
-      entry.initTimeout ?? 10000,
-    );
-    plugins.push(createMCPPlugin(client));
+    plugins.push(createMCPPlugin(mcpTransport, entry.sideEffect ?? true));
   }
 
   return plugins;

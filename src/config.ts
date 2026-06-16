@@ -12,6 +12,7 @@ export interface AgentConfig {
 export interface PluginConfigEntry {
   type?: 'builtin' | 'mcp' | 'npm';
   enabled?: boolean;
+  sideEffect?: boolean;   // false = 无后效性（只读），无需用户确认；默认 true
   settings?: Record<string, any>;
   // MCP-specific
   transport?: 'stdio' | 'http';
@@ -75,7 +76,15 @@ function tryLoadConfigFile(filePath: string): Record<string, unknown> | null {
       console.warn(`[config] Warning: ${filePath} must contain a JSON object, skipping.`);
       return null;
     }
-    return parsed as Record<string, unknown>;
+    const obj = parsed as Record<string, unknown>;
+
+    // Schema validation catches typos and type errors early
+    const warnings = validateConfigObject(obj);
+    for (const w of warnings) {
+      console.warn(`[config] Warning: ${filePath} — ${w.path}: ${w.message}`);
+    }
+
+    return obj;
   } catch (err) {
     if (err instanceof SyntaxError) {
       console.warn(`[config] Warning: Invalid JSON in ${filePath}, skipping.`);
@@ -84,6 +93,143 @@ function tryLoadConfigFile(filePath: string): Record<string, unknown> | null {
     }
     return null;
   }
+}
+
+// ── Schema validation ──
+
+/** A single validation warning about a config field. */
+export interface ConfigValidationWarning {
+  path: string;
+  message: string;
+}
+
+const KNOWN_CORE_KEYS = new Set(['model', 'temperature', 'maxTokens', 'defaultTimeout']);
+const KNOWN_PLUGIN_ENTRY_KEYS = new Set([
+  'type', 'enabled', 'sideEffect', 'settings',
+  'transport', 'command', 'args', 'url', 'env', 'initTimeout',
+]);
+const VALID_PLUGIN_TYPES = new Set(['builtin', 'mcp', 'npm']);
+const VALID_TRANSPORT_TYPES = new Set(['stdio', 'http']);
+
+function validateType(val: unknown, type: 'string' | 'number' | 'boolean'): boolean {
+  return typeof val === type;
+}
+
+/**
+ * Deep-schema-validate a raw config object (the parsed JSON from a config file).
+ * Returns a list of warnings for unknown keys, type mismatches, and out-of-range values.
+ */
+export function validateConfigObject(raw: Record<string, unknown>): ConfigValidationWarning[] {
+  const warnings: ConfigValidationWarning[] = [];
+  const TOP_KEYS = new Set(['core', 'plugins', 'agent']);
+
+  for (const key of Object.keys(raw)) {
+    if (!TOP_KEYS.has(key)) {
+      warnings.push({ path: key, message: `未知的配置项 "${key}"` });
+    }
+  }
+
+  // core.*
+  if (isNonEmptyObject(raw.core)) {
+    for (const key of Object.keys(raw.core)) {
+      if (!KNOWN_CORE_KEYS.has(key)) {
+        warnings.push({ path: `core.${key}`, message: `未知的 core 配置项 "${key}"` });
+      }
+    }
+    if ('model' in raw.core && !validateType(raw.core.model, 'string')) {
+      warnings.push({ path: 'core.model', message: 'model 必须为字符串' });
+    }
+    if ('temperature' in raw.core) {
+      if (!validateType(raw.core.temperature, 'number')) {
+        warnings.push({ path: 'core.temperature', message: 'temperature 必须为数字' });
+      } else if (raw.core.temperature < 0 || raw.core.temperature > 2) {
+        warnings.push({ path: 'core.temperature', message: '温度值应在 0-2 之间' });
+      }
+    }
+    if ('maxTokens' in raw.core && (typeof raw.core.maxTokens !== 'number' || raw.core.maxTokens <= 0)) {
+      warnings.push({ path: 'core.maxTokens', message: 'maxTokens 必须为正数' });
+    }
+    if ('defaultTimeout' in raw.core && (typeof raw.core.defaultTimeout !== 'number' || raw.core.defaultTimeout <= 0)) {
+      warnings.push({ path: 'core.defaultTimeout', message: 'defaultTimeout 必须为正数' });
+    }
+  }
+
+  // agent.*
+  if (isNonEmptyObject(raw.agent)) {
+    for (const key of Object.keys(raw.agent)) {
+      if (key !== 'role' && key !== 'greeting') {
+        warnings.push({ path: `agent.${key}`, message: `未知的 agent 配置项 "${key}"` });
+      }
+    }
+    if ('role' in raw.agent && !validateType(raw.agent.role, 'string')) {
+      warnings.push({ path: 'agent.role', message: 'role 必须为字符串' });
+    }
+    if ('greeting' in raw.agent && !validateType(raw.agent.greeting, 'string')) {
+      warnings.push({ path: 'agent.greeting', message: 'greeting 必须为字符串' });
+    }
+  }
+
+  // plugins.*
+  if (isNonEmptyObject(raw.plugins)) {
+    for (const [name, pluginConfig] of Object.entries(raw.plugins)) {
+      if (!isNonEmptyObject(pluginConfig)) {
+        warnings.push({ path: `plugins.${name}`, message: '插件配置必须为对象' });
+        continue;
+      }
+
+      const entry = pluginConfig as Record<string, unknown>;
+
+      for (const key of Object.keys(entry)) {
+        if (!KNOWN_PLUGIN_ENTRY_KEYS.has(key)) {
+          warnings.push({ path: `plugins.${name}.${key}`, message: `未知的插件配置项 "${key}"` });
+        }
+      }
+
+      // type validity
+      if (entry.type !== undefined && !VALID_PLUGIN_TYPES.has(entry.type as string)) {
+        warnings.push({
+          path: `plugins.${name}.type`,
+          message: `未知的插件类型 "${entry.type}"，应为 builtin、mcp 或 npm`,
+        });
+      }
+
+      // enabled must be boolean
+      if (entry.enabled !== undefined && !validateType(entry.enabled, 'boolean')) {
+        warnings.push({ path: `plugins.${name}.enabled`, message: 'enabled 必须为布尔值' });
+      }
+
+      // sideEffect must be boolean
+      if (entry.sideEffect !== undefined && !validateType(entry.sideEffect, 'boolean')) {
+        warnings.push({ path: `plugins.${name}.sideEffect`, message: 'sideEffect 必须为布尔值' });
+      }
+
+      // transport validity
+      if (entry.transport !== undefined && !VALID_TRANSPORT_TYPES.has(entry.transport as string)) {
+        warnings.push({
+          path: `plugins.${name}.transport`,
+          message: `未知的传输类型 "${entry.transport}"，应为 stdio 或 http`,
+        });
+      }
+
+      // initTimeout must be positive
+      if (entry.initTimeout !== undefined && (typeof entry.initTimeout !== 'number' || entry.initTimeout <= 0)) {
+        warnings.push({ path: `plugins.${name}.initTimeout`, message: 'initTimeout 必须为正数' });
+      }
+
+      // MCP required-field hints
+      const pluginType = entry.type as string | undefined;
+      if (pluginType === 'mcp' || pluginType === undefined) {
+        if (entry.transport === 'stdio' && !entry.command) {
+          warnings.push({ path: `plugins.${name}.command`, message: 'stdio 类型的 MCP 插件需要指定 command' });
+        }
+        if (entry.transport === 'http' && !entry.url) {
+          warnings.push({ path: `plugins.${name}.url`, message: 'http 类型的 MCP 插件需要指定 url' });
+        }
+      }
+    }
+  }
+
+  return warnings;
 }
 
 // ── Merge helpers ──
