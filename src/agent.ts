@@ -119,11 +119,18 @@ export class NanoCodeAgent {
 
       for (const rawToolCall of response.toolCalls) {
         const toolName = rawToolCall.function.name;
-        let toolArgs: any = {};
+        let toolArgs: any;
         try {
           toolArgs = JSON.parse(rawToolCall.function.arguments);
         } catch (e) {
-          toolArgs = rawToolCall.function.arguments;
+          const msg = `工具调用 "${toolName}" 的参数不是合法的 JSON 格式：${rawToolCall.function.arguments}。请修正参数格式后重试。`;
+          this.messageHistory.push({
+            role: 'tool',
+            tool_call_id: rawToolCall.id,
+            name: toolName,
+            content: JSON.stringify({ status: 'error', message: msg }),
+          });
+          continue;
         }
 
         // Hook: allow plugins to intercept/modify/deny the tool call

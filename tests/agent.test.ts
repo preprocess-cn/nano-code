@@ -50,3 +50,100 @@ describe('NanoCodeAgent — getHistory / loadHistory', () => {
   });
 
 });
+
+describe('NanoCodeAgent — malformed tool call JSON', () => {
+
+  it('returns error to LLM when tool arguments are invalid JSON', async () => {
+    let callCount = 0;
+    const mock = {
+      sendSystemMessage: async (_messages: any, _tools: any, _onChunk?: any) => {
+        callCount++;
+        if (callCount === 1) {
+          return {
+            text: null,
+            toolCalls: [{
+              id: 'call_1',
+              type: 'function',
+              function: { name: 'test_tool', arguments: '{invalid json}' },
+            }],
+            stopReason: 'tool_use',
+          };
+        }
+        return { text: 'done', stopReason: 'stop' };
+      },
+    };
+
+    const registry = new PluginRegistry();
+    const agent = new NanoCodeAgent(registry, false, false, mock as any);
+    await agent.runTask('do something');
+
+    const history = agent.getHistory();
+    // user msg + assistant(tool_calls) + tool(error) + assistant(done)
+    assert.equal(history.length, 4);
+
+    const toolError = history.find(m => m.role === 'tool');
+    assert.ok(toolError, 'should have a tool error response');
+    assert.ok(toolError!.content?.includes('不是合法的 JSON'), `content should mention invalid JSON`);
+  });
+
+  it('handles empty tool arguments string', async () => {
+    let callCount = 0;
+    const mock = {
+      sendSystemMessage: async (_messages: any, _tools: any, _onChunk?: any) => {
+        callCount++;
+        if (callCount === 1) {
+          return {
+            text: null,
+            toolCalls: [{
+              id: 'call_2',
+              type: 'function',
+              function: { name: 'test_tool', arguments: '' },
+            }],
+            stopReason: 'tool_use',
+          };
+        }
+        return { text: 'done', stopReason: 'stop' };
+      },
+    };
+
+    const registry = new PluginRegistry();
+    const agent = new NanoCodeAgent(registry, false, false, mock as any);
+    await agent.runTask('do something');
+
+    const history = agent.getHistory();
+    assert.ok(history.length >= 2, 'should not crash on empty args');
+    const toolError = history.find(m => m.role === 'tool');
+    assert.ok(toolError, 'empty arguments should produce error response');
+  });
+
+  it('handles valid JSON arguments normally', async () => {
+    let callCount = 0;
+    const mock = {
+      sendSystemMessage: async (_messages: any, _tools: any, _onChunk?: any) => {
+        callCount++;
+        if (callCount === 1) {
+          return {
+            text: null,
+            toolCalls: [{
+              id: 'call_3',
+              type: 'function',
+              function: { name: 'test_tool', arguments: '{"key": "value"}' },
+            }],
+            stopReason: 'tool_use',
+          };
+        }
+        return { text: 'done', stopReason: 'stop' };
+      },
+    };
+
+    const registry = new PluginRegistry();
+    const agent = new NanoCodeAgent(registry, false, false, mock as any);
+    await agent.runTask('do something');
+
+    const history = agent.getHistory();
+    // Should still complete without crash
+    const toolCalls = history.filter(m => m.role === 'tool');
+    assert.ok(toolCalls.length > 0, 'should have tool responses');
+  });
+
+});

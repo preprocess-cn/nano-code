@@ -8,6 +8,7 @@ import { createTokenBudgetPlugin } from './plugins/token-budget.js';
 import { loadSession, saveSession } from './session.js';
 import { printPluginList } from './display.js';
 import { cac } from 'cac';
+import { getPackageVersion } from './version.js';
 
 /**
  * Builtin plugin lazy-loaders.
@@ -156,10 +157,11 @@ cli.option('--list-plugins', '列出所有已注册的插件及其提供的工�
 cli.option('-c, --continue', '接续最近一次在当前项目中的会话继续对话');
 
 cli.help();
+cli.version(getPackageVersion());
 
 const parsed = cli.parse();
 
-if (!parsed.options.help) {
+if (!parsed.options.help && !parsed.options.version) {
   const showThink = !!(parsed.options.think || parsed.options.debug);
   startCLI({
     debug: parsed.options.debug,
