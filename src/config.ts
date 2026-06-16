@@ -234,6 +234,24 @@ export function validateConfigObject(raw: Record<string, unknown>): ConfigValida
 
 // ── Merge helpers ──
 
+type FieldType = 'string' | 'number' | 'boolean';
+
+/** Pick known-typed fields from an override object, falling back to `base`. */
+function mergeTypedFields<T extends Record<string, any>>(
+  base: T,
+  override: unknown,
+  schema: Record<keyof T, FieldType>,
+): T {
+  if (!isNonEmptyObject(override)) return { ...base };
+  const raw = override as Record<string, unknown>;
+  const result = { ...base };
+  for (const key of Object.keys(schema) as (keyof T)[]) {
+    const val = raw[key as string];
+    if (typeof val === schema[key]) result[key] = val;
+  }
+  return result;
+}
+
 function isNonEmptyObject(val: unknown): val is Record<string, unknown> {
   return typeof val === 'object' && val !== null && !Array.isArray(val);
 }
@@ -242,16 +260,12 @@ function mergeCoreValues(
   base: NanoConfig['core'],
   override: unknown,
 ): NanoConfig['core'] {
-  if (!isNonEmptyObject(override)) {
-    return { ...base };
-  }
-  return {
-    model: typeof override.model === 'string' ? override.model : base.model,
-    temperature: typeof override.temperature === 'number' ? override.temperature : base.temperature,
-    maxTokens: typeof override.maxTokens === 'number' ? override.maxTokens : base.maxTokens,
-    defaultTimeout:
-      typeof override.defaultTimeout === 'number' ? override.defaultTimeout : base.defaultTimeout,
-  };
+  return mergeTypedFields(base, override, {
+    model: 'string',
+    temperature: 'number',
+    maxTokens: 'number',
+    defaultTimeout: 'number',
+  });
 }
 
 function mergeAgentConfig(
@@ -260,12 +274,9 @@ function mergeAgentConfig(
 ): AgentConfig | undefined {
   if (!isNonEmptyObject(override)) return base;
   const o = override as Record<string, unknown>;
-  const result: AgentConfig = {};
-  if (typeof o.role === 'string') result.role = o.role;
-  else if (base?.role) result.role = base.role;
-  if (typeof o.greeting === 'string') result.greeting = o.greeting;
-  else if (base?.greeting) result.greeting = base.greeting;
-  return Object.keys(result).length > 0 ? result : undefined;
+  const role = typeof o.role === 'string' ? o.role : base?.role;
+  const greeting = typeof o.greeting === 'string' ? o.greeting : base?.greeting;
+  return (role !== undefined || greeting !== undefined) ? { role, greeting } : undefined;
 }
 
 function mergePluginEntries(
