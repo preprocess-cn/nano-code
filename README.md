@@ -111,7 +111,7 @@ OPENAI_MODEL_NAME=gpt-4o                     # 可选，默认 gpt-4o
 | 插件 | 启用方式 |
 |------|---------|
 | **MCP** | 配置 `type: "mcp"` 条目，自动加载外部 MCP Server |
-| **Token Budget** | 配置 `plugins.token-budget.settings` |
+| **Token Budget** | 配置 `plugins.token-budget.settings` | 使用 API 精确 token 统计 (`stream_options.include_usage`) |
 
 ## MCP 集成
 

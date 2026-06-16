@@ -88,6 +88,7 @@ export class LLMClient {
           model: this.model,
           messages: messages as any,
           stream: true,
+          stream_options: { include_usage: true },
           temperature: this.temperature,
           // 只有当有工具传入时，才把 tools 参数加上
           tools: tools && tools.length > 0 ? tools : undefined,
@@ -95,8 +96,14 @@ export class LLMClient {
 
         let fullText = '';
         let finalToolCalls: any[] = [];
+        let finalUsage: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } | undefined;
 
         for await (const chunk of stream) {
+          // Capture usage from the final chunk (present when stream_options.include_usage is true)
+          if (chunk.usage) {
+            finalUsage = chunk.usage;
+          }
+
           const delta = chunk.choices[0]?.delta;
           if (!delta) continue;
 
@@ -143,7 +150,12 @@ export class LLMClient {
         return {
           text: fullText,
           toolCalls: validToolCalls.length > 0 ? validToolCalls : undefined,
-          stopReason: validToolCalls.length > 0 ? 'tool_use' : 'stop'
+          stopReason: validToolCalls.length > 0 ? 'tool_use' : 'stop',
+          usage: finalUsage ? {
+            promptTokens: finalUsage.prompt_tokens ?? 0,
+            completionTokens: finalUsage.completion_tokens ?? 0,
+            totalTokens: finalUsage.total_tokens ?? 0,
+          } : undefined,
         };
 
       } catch (error) {

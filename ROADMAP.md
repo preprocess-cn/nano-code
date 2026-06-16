@@ -24,7 +24,7 @@
 | # | 功能 | 预估 | 说明 |
 |---|------|------|------|
 | 4 | **会话上下文修剪** | ~2d | token-budget 之上做智能摘要/裁剪，防止长对话撞窗口上限 |
-| 5 | **LLM 失败重试** | ~4h | agent 层对 API 异常做保护，不直接崩溃循环 |
+| 5 | **LLM 失败重试** | ✅ | 3 次指数退避（1s, 2s, 4s） |
 | 6 | **多轮摘要记忆** | ~3d | 超出窗口时自动压缩历史，参考 Claude 的 context management |
 
 ## P3 — 生态准备
@@ -42,7 +42,7 @@
 - 插件注册中心（PluginRegistry）：注册、注销、工具路由、钩子链
 - 内置插件：fs（文件读写 + patch）、command（bash 执行 + 安全黑名单）
 - MCP 集成：通过 stdio JSON-RPC 加载任意 MCP Server
-- Token-budget 插件：会话/请求级别 token 用量跟踪与限制
+- Token-budget 插件：会话/请求级别 token 用量跟踪与限制，使用 API 精确 token 统计
 - 无工具时自动降级为纯对话模式
 - agent 角色和启动提示可配置化
 - `--list-plugins` 插件清单

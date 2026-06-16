@@ -7,6 +7,11 @@ export interface LLMResponse {
   text: string | null;
   toolCalls?: ToolCall[];
   stopReason?: string;
+  usage?: {
+    promptTokens: number;
+    completionTokens: number;
+    totalTokens: number;
+  };
 }
 
 export interface ToolCall {

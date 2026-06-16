@@ -1,10 +1,9 @@
-import { NanoPlugin, PluginRegistry, ToolCall } from '../plugin.js';
+import { NanoPlugin, PluginRegistry, ToolCall, LLMResponse } from '../plugin.js';
 import { ToolResponse, ToolContext, ToolDefinition } from '../contract.js';
 import { ChatMessage } from '../llm.js';
 
-// ── Token estimation ──
-// Rough heuristic: ~4 chars per token for English, ~2 for mixed CJK+code.
-// For simplicity we split the difference at 3.
+// ── Token estimation (fallback when API doesn't return usage) ──
+
 function estimateTokens(text: string): number {
   return Math.ceil(text.length / 3);
 }
@@ -13,8 +12,7 @@ function countMessagesTokens(messages: ChatMessage[]): number {
   let total = 0;
   for (const m of messages) {
     total += estimateTokens(m.content || '');
-    // Estimate overhead per message (~4 tokens for role markers)
-    total += 4;
+    total += 4; // overhead per message for role markers
   }
   return total;
 }
@@ -103,7 +101,7 @@ export function createTokenBudgetPlugin(config?: TokenBudgetConfig): NanoPlugin 
       // Warning at threshold
       if (!warned && totalTokens > cfg.warnAtTokens) {
         warned = true;
-        console.warn(`\n[token-budget] 已使用 ~${totalTokens} tokens，接近预算 (${cfg.maxTokensPerSession})`);
+        console.warn(`\n[token-budget] 已使用 ${totalTokens} tokens，接近预算 (${cfg.maxTokensPerSession})`);
       }
 
       // Compression hint at threshold
@@ -121,11 +119,19 @@ export function createTokenBudgetPlugin(config?: TokenBudgetConfig): NanoPlugin 
       return messages;
     },
 
-    onAfterRequest(response: any): void {
-      const responseText = response.text || '';
-      const estOutput = estimateTokens(responseText);
-      outputTokens += estOutput;
-      totalTokens = inputTokens + outputTokens;
+    onAfterRequest(response: LLMResponse): void {
+      if (response.usage) {
+        // Use exact token counts from API response
+        inputTokens += response.usage.promptTokens;
+        outputTokens += response.usage.completionTokens;
+        totalTokens += response.usage.totalTokens;
+      } else {
+        // Fallback estimation when API doesn't return usage
+        const responseText = response.text || '';
+        const estOutput = estimateTokens(responseText);
+        outputTokens += estOutput;
+        totalTokens = inputTokens + outputTokens;
+      }
     },
 
     onBeforeToolCall(toolCall: ToolCall): ToolCall | null {
