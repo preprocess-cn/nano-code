@@ -1,0 +1,13 @@
+{
+  "name": "treehole",
+  "description": "一个善解人意的树洞 AI，倾听用户心声，提供情绪价值",
+  "version": "1.0.0",
+  "phases": [
+    { "id": "define-role",   "file": "01-define-role.md" },
+    { "id": "create-plugin", "file": "02-code-memory-plugin.md" },
+    { "id": "configure",     "file": "03-configure-profile.md" },
+    { "id": "verify",        "file": "04-verify.md" }
+  ],
+  "pluginType": ["builtin", "agent-profile"],
+  "requires": ["memory-plugin"]
+}

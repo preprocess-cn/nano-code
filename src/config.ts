@@ -48,10 +48,6 @@ const DEFAULT_CONFIG: NanoConfig = {
   plugins: {},
 };
 
-// ── Cache ──
-
-let cachedConfig: NanoConfig | null = null;
-
 // ── Config file paths ──
 
 function getGlobalConfigPath(): string {
@@ -60,6 +56,44 @@ function getGlobalConfigPath(): string {
 
 function getProjectConfigPath(): string {
   return path.join(process.cwd(), '.nano-code.json');
+}
+
+function getGlobalProfilePath(name: string): string {
+  return path.join(os.homedir(), '.nano-code', 'profiles', `${name}.json`);
+}
+
+function getProjectProfilePath(name: string): string {
+  return path.join(process.cwd(), '.nano-code', 'profiles', `${name}.json`);
+}
+
+/**
+ * Load an agent profile configuration file.
+ *
+ * - If `name` is a file path (contains `/` or starts with `.`/`~`),
+ *   loads it directly.
+ * - Otherwise searches project dir first (`.nano-code/profiles/<name>.json`),
+ *   then global (`~/.nano-code/profiles/<name>.json`).
+ *
+ * Returns `null` if not found.
+ */
+export function loadProfileConfig(name: string): Record<string, unknown> | null {
+  if (!name) return null;
+
+  // Direct file path: contains a path separator or starts with . / ~
+  if (name.includes('/') || name.includes('\\') || name.startsWith('.') || name.startsWith('~')) {
+    const resolved = name.startsWith('~')
+      ? path.join(os.homedir(), name.slice(1))
+      : path.resolve(process.cwd(), name);
+    return tryLoadConfigFile(resolved);
+  }
+
+  // Plain name: search predefined directories
+  const projectPath = getProjectProfilePath(name);
+  const projectProfile = tryLoadConfigFile(projectPath);
+  if (projectProfile) return projectProfile;
+
+  const globalPath = getGlobalProfilePath(name);
+  return tryLoadConfigFile(globalPath);
 }
 
 // ── Single file loading ──
@@ -365,24 +399,36 @@ function mergeConfigs(
  *
  * - Global:  `~/.nano-code/config.json`
  * - Project: `$CWD/.nano-code.json`  (overrides global)
- *
- * The result is cached after the first call so repeated loads are
- * free.  Call `resetConfigCache()` to force a fresh read from disk.
  */
 export function loadConfig(): NanoConfig {
-  if (cachedConfig !== null) {
-    return cachedConfig;
-  }
-
   const globalPath = getGlobalConfigPath();
   const projectPath = getProjectConfigPath();
 
-  cachedConfig = mergeConfigs(
+  return mergeConfigs(
     tryLoadConfigFile(globalPath),
     tryLoadConfigFile(projectPath),
   );
+}
 
-  return cachedConfig;
+/**
+ * Apply an agent profile on top of a base configuration.
+ * The profile's values override all base values.
+ *
+ * Profile lookup: `.nano-code/profiles/<name>.json` (project) first,
+ * then `~/.nano-code/profiles/<name>.json` (global).
+ *
+ * Returns the merged config, or the base unchanged if the profile
+ * was not found (a warning is printed).
+ */
+export function applyProfile(base: NanoConfig, profileName: string): NanoConfig {
+  const profileConfig = loadProfileConfig(profileName);
+  if (!profileConfig) {
+    console.warn(`[config] agent profile "${profileName}" not found (checked project and global).`);
+    return base;
+  }
+
+  const baseRaw = JSON.parse(JSON.stringify(base)) as Record<string, unknown>;
+  return mergeConfigs(baseRaw, profileConfig);
 }
 
 /**
@@ -394,14 +440,6 @@ export function getPluginConfig(
   pluginName: string,
 ): Record<string, any> {
   return config.plugins[pluginName]?.settings ?? {};
-}
-
-/**
- * Reset the in-memory config cache so the next call to `loadConfig()`
- * re-reads both config files from disk.
- */
-export function resetConfigCache(): void {
-  cachedConfig = null;
 }
 
 /** @internal exported for testing */

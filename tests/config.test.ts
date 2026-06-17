@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import * as assert from 'node:assert/strict';
-import { _mergeConfigs, getPluginConfig, resetConfigCache, validateConfigObject } from '../src/config.js';
+import { _mergeConfigs, getPluginConfig, validateConfigObject } from '../src/config.js';
 
 describe('Config — merge', () => {
 
@@ -125,17 +125,6 @@ describe('Config — getPluginConfig', () => {
       { plugins: { myPlugin: { enabled: true } } },
     );
     assert.deepEqual(getPluginConfig(cfg, 'myPlugin'), {});
-  });
-
-});
-
-describe('Config — cache', () => {
-
-  it('resetConfigCache clears the internal cache', () => {
-    // Test that calling resetConfigCache doesn't throw
-    resetConfigCache();
-    // Call twice to verify no crash
-    resetConfigCache();
   });
 
 });

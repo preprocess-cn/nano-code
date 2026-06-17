@@ -9,15 +9,21 @@ const TOOL_SAFETY = [
   '请转为纯文本模式，向用户诚恳解释该操作的必要性，并主动提供其他不依赖该工具的非侵入式替代方案（例如提供手动指令或打印代码由用户自行复制）。',
 ].join('\n');
 
-function buildRoleLine(hasTools: boolean, role: string): string {
-  if (hasTools) {
-    return [
-      `你是一个名为 nano-code 的 ${role}。你可以通过调用工具来查看目录、读取文件和写入修改文件。`,
-      TOOL_SAFETY,
-      '请保持回答简洁专业。',
-    ].join('\n');
+function buildRoleLine(registry: PluginRegistry, role: string): string {
+  const tools = registry.getAllSchemas();
+  if (tools.length === 0) {
+    return `你是一个名为 nano-code 的 ${role}。你可以帮助用户解决编程问题，提供代码示例和建议。如果回答涉及代码或命令，请直接输出文本，用户会自行复制使用。请保持回答简洁专业。`;
   }
-  return `你是一个名为 nano-code 的 ${role}。你可以帮助用户解决编程问题，提供代码示例和建议。如果回答涉及代码或命令，请直接输出文本，用户会自行复制使用。请保持回答简洁专业。`;
+
+  // Generate dynamic tool description based on actual tools
+  const toolNames = tools.map(t => t.function.name);
+  const toolDesc = toolNames.join('、');
+
+  return [
+    `你是一个名为 nano-code 的 ${role}。你可以调用以下工具来完成工作：${toolDesc}。`,
+    TOOL_SAFETY,
+    '请保持回答简洁专业。',
+  ].join('\n');
 }
 
 /**
@@ -34,9 +40,8 @@ export function buildSystemPrompt(registry: PluginRegistry, agentRole?: string):
   const parts: string[] = [];
 
   // ① Choose instructions based on whether tools are available
-  const hasTools = registry.getAllSchemas().length > 0;
-  const role = agentRole || (hasTools ? '终端 AI 编程助手' : 'AI 对话助手');
-  parts.push(buildRoleLine(hasTools, role));
+  const role = agentRole || (registry.getAllSchemas().length > 0 ? '终端 AI 编程助手' : 'AI 对话助手');
+  parts.push(buildRoleLine(registry, role));
 
   // ② Project-level instruction file
   const userFile = findProjectInstructionFile();

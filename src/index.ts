@@ -1,10 +1,11 @@
 import { intro, text, outro, isCancel } from '@clack/prompts';
 import { NanoCodeAgent } from './agent.js';
 import { PluginRegistry } from './plugin.js';
-import { loadConfig } from './config.js';
+import { loadConfig, applyProfile } from './config.js';
 import { LLMClient } from './llm.js';
 import { buildMCPPluginsFromConfig } from './plugins/mcp/adapter.js';
 import { createTokenBudgetPlugin } from './plugins/token-budget.js';
+import { createMemoryPlugin } from './plugins/tools/memory.js';
 import { loadSession, saveSession } from './session.js';
 import { printPluginList } from './display.js';
 import { cac } from 'cac';
@@ -24,13 +25,15 @@ function handleExit() {
   process.exit(0);
 }
 
-async function startCLI(options: { debug?: boolean; think?: boolean; skipPermission?: boolean; listPlugins?: boolean; continue?: boolean }) {
+async function startCLI(options: { debug?: boolean; think?: boolean; skipPermission?: boolean; listPlugins?: boolean; continue?: boolean; profile?: string }) {
 
   console.log('\n');
   intro('! nano-code 终端 AI 编程助手 启动中...');
 
-  // ── Load configuration ──
-  const config = loadConfig();
+  // ── Load configuration + optional agent profile ──
+  const config = options.profile
+    ? applyProfile(loadConfig(), options.profile)
+    : loadConfig();
 
   if(options.debug) {
     console.log(`#  当前已开启 [DEBUG 调试模式]，模型: ${config.core.model}`);
@@ -82,6 +85,12 @@ async function startCLI(options: { debug?: boolean; think?: boolean; skipPermiss
     await registry.register(createTokenBudgetPlugin(budgetConfig));
   }
 
+  // Register memory plugin if configured
+  if (config.plugins['memory']) {
+    const memoryConfig = config.plugins['memory'].settings || {};
+    await registry.register(createMemoryPlugin(memoryConfig));
+  }
+
   // ── --list-plugins mode: print and exit ──
   if (options.listPlugins) {
     printPluginList(registry);
@@ -96,6 +105,9 @@ async function startCLI(options: { debug?: boolean; think?: boolean; skipPermiss
   const greeting = config.agent?.greeting || defaultGreeting;
 
   console.log('----------------------------------------------------');
+  if (options.profile) {
+    console.log(` * 角色配置：${options.profile}`);
+  }
   console.log(` * 提示：${greeting}`);
   console.log(' [!] 退出：输入 "exit"、"quit" 或直接按下 Ctrl+C 即可。');
   console.log('----------------------------------------------------\n');
@@ -155,6 +167,7 @@ cli.option('-t, --think', '显示大模型的思考过程（思维链）');
 cli.option('--skip-permission', '跳过工具调用的用户确认提示，系统底层安全拦截仍然生效');
 cli.option('--list-plugins', '列出所有已注册的插件及其提供的工具');
 cli.option('-c, --continue', '接续最近一次在当前项目中的会话继续对话');
+cli.option('-p, --profile <name>', '指定 agent 角色配置文件（profile），可以是名称（如 treehole）或文件路径（如 ./my-profile.json）');
 
 cli.help();
 cli.version(getPackageVersion());
@@ -169,5 +182,6 @@ if (!parsed.options.help && !parsed.options.version) {
     skipPermission: parsed.options.skipPermission,
     listPlugins: parsed.options.listPlugins ?? false,
     continue: parsed.options.continue ?? false,
+    profile: parsed.options.profile as string | undefined,
   });
 }

@@ -28,6 +28,7 @@ npm start
 | `--skip-permission` | 跳过工具调用的用户确认提示 |
 | `--list-plugins` | 列出所有已注册的插件及其提供的工具 |
 | `-c, --continue` | 接续最近一次在当前项目的会话继续对话 |
+| `-p, --profile <name>` | 指定 agent 角色配置文件（如 `treehole`），直接进入特定角色模式 |
 | `--help` | 显示帮助信息 |
 
 ## 配置
@@ -82,6 +83,35 @@ OPENAI_MODEL_NAME=gpt-4o                     # 可选，默认 gpt-4o
 
 全局配置位于 `~/.nano-code/config.json`，项目级配置会覆盖全局配置。插件默认不加载，只有在配置中显式声明的插件才会被注册。
 
+### Agent Profile 角色配置
+
+通过 `--profile` 参数直接启动 nano-code 进入特定角色模式：
+
+```bash
+nano-code --profile treehole
+```
+
+Profile 文件查找顺序：项目目录 `.nano-code/profiles/<name>.json` → 全局 `~/.nano-code/profiles/<name>.json`，优先级最高的配置层可覆盖 agent 角色、插件启停和插件设置。
+
+示例（`~/.nano-code/profiles/treehole.json`）：
+```json
+{
+  "agent": {
+    "role": "一个善解人意的树洞，温柔地倾听用户的心声",
+    "greeting": "你好，我是树洞。你可以放心地说任何事情。"
+  },
+  "plugins": {
+    "memory": {
+      "enabled": true,
+      "settings": { "namespace": "treehole" }
+    },
+    "command": { "enabled": false }
+  }
+}
+```
+
+Profile 可以禁用不需要的默认插件（如树洞禁用 fs/command），使 nano-code 从"编程助手"变为任意角色。
+
 ## 架构
 
 ```
@@ -92,7 +122,7 @@ OPENAI_MODEL_NAME=gpt-4o                     # 可选，默认 gpt-4o
          ↕ register & dispatch
 ┌─────────────────────────────────────────────────┐
 │                  Plugins                         │
-│  fs  │  command  │  MCP  │  token-budget  │  npm │
+│  fs  │  command  │  memory  │  MCP  │  token-budget  │  npm │
 └─────────────────────────────────────────────────┘
 ```
 
@@ -105,13 +135,14 @@ OPENAI_MODEL_NAME=gpt-4o                     # 可选，默认 gpt-4o
 |------|---------|---------|
 | **fs** | `"fs": {}` | 文件列表、读取、写入、精准修改 |
 | **command** | `"command": {}` | Bash 命令执行（含危险命令黑名单） |
+| **memory** | `"memory": {}` | 记忆存储与检索，支持多会话持久化和标签查询 |
 
 ### 可选插件
 
 | 插件 | 启用方式 |
 |------|---------|
 | **MCP** | 配置 `type: "mcp"` 条目，自动加载外部 MCP Server |
-| **Token Budget** | 配置 `plugins.token-budget.settings` | 使用 API 精确 token 统计 (`stream_options.include_usage`) |
+| **Token Budget** | 配置 `plugins.token-budget.settings` | 使用 API 精确 token 统计 |
 
 ## MCP 集成
 
