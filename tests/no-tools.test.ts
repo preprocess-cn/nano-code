@@ -2,7 +2,13 @@ import { describe, it } from 'node:test';
 import * as assert from 'node:assert/strict';
 import { PluginRegistry } from '../src/plugin.js';
 import { buildSystemPrompt } from '../src/prompt.js';
+import { SystemPromptConfig } from '../src/config.js';
 import { ToolResponse } from '../src/contract.js';
+
+const MOCK_PROMPT = {
+  noTools: '你是一个名为 nano-code 的 {role}。请保持回答简洁专业。',
+  withTools: '你是一个名为 nano-code 的 {role}。你可以调用以下工具来完成工作：{tool_list}。\n\n【核心安全约束】如果用户拒绝（rejected_by_user），立即停止。',
+};
 
 describe('No tools configured — pure chat mode', () => {
 
@@ -13,11 +19,11 @@ describe('No tools configured — pure chat mode', () => {
 
   it('builds chat-oriented system prompt when no tools exist', () => {
     const registry = new PluginRegistry();
-    const msg = buildSystemPrompt(registry);
+    const msg = buildSystemPrompt(registry, MOCK_PROMPT);
 
     assert.equal(msg.role, 'system');
     assert.ok(msg.content);
-    // Chat mode: "AI 对话助手" appears, tool-specific instructions do not
+    // Chat mode: "AI 对话助手" appears, no safety constraints
     assert.ok(msg.content!.includes('AI 对话助手'));
     assert.ok(!msg.content!.includes('【核心安全约束】'));
     assert.ok(!msg.content!.includes('rejected_by_user'));
@@ -37,9 +43,8 @@ describe('No tools configured — pure chat mode', () => {
 
   it('uses custom agentRole in chat mode when provided', () => {
     const registry = new PluginRegistry();
-    const msg = buildSystemPrompt(registry, '数据库管理员');
+    const msg = buildSystemPrompt(registry, MOCK_PROMPT, '数据库管理员');
     assert.ok(msg.content!.includes('数据库管理员'));
-    // Should still be chat mode (no tools registered)
     assert.ok(!msg.content!.includes('【核心安全约束】'));
   });
 
@@ -62,7 +67,7 @@ describe('No tools configured — pure chat mode', () => {
       },
     });
 
-    const msg = buildSystemPrompt(registry);
+    const msg = buildSystemPrompt(registry, MOCK_PROMPT);
     // Tool mode: "AI 编程助手" and safety constraints appear
     assert.ok(msg.content!.includes('AI 编程助手'));
     assert.ok(msg.content!.includes('【核心安全约束】'));
@@ -87,7 +92,7 @@ describe('No tools configured — pure chat mode', () => {
         return { status: 'success', data: 'ok' };
       },
     });
-    const msg = buildSystemPrompt(registry, '部署运维助手');
+    const msg = buildSystemPrompt(registry, MOCK_PROMPT, '部署运维助手');
     assert.ok(msg.content!.includes('部署运维助手'));
     assert.ok(msg.content!.includes('【核心安全约束】'));
   });

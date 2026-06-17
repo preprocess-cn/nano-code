@@ -1,13 +1,15 @@
 import { intro, text, outro, isCancel } from '@clack/prompts';
 import { NanoCodeAgent } from './agent.js';
 import { PluginRegistry } from './plugin.js';
-import { loadConfig, applyProfile } from './config.js';
+import { loadConfig, applyProfile, getSystemWhitelist } from './config.js';
 import { LLMClient } from './llm.js';
 import { buildMCPPluginsFromConfig } from './plugins/mcp/adapter.js';
+import { npmLoaderPlugin } from './plugins/npm-loader.js';
 import { createTokenBudgetPlugin } from './plugins/token-budget.js';
 import { createMemoryPlugin } from './plugins/tools/memory.js';
 import { loadSession, saveSession } from './session.js';
 import { printPluginList } from './display.js';
+import { handlePluginCommand } from './plugin-cli.js';
 import { cac } from 'cac';
 import { getPackageVersion } from './version.js';
 
@@ -49,6 +51,8 @@ async function startCLI(options: { debug?: boolean; think?: boolean; skipPermiss
   const llmClient = new LLMClient({
     model: config.core.model,
     temperature: config.core.temperature,
+    apiKey: config.core.apiKey,
+    baseURL: config.core.baseURL,
   });
 
   // ── Plugin registry ──
@@ -58,37 +62,57 @@ async function startCLI(options: { debug?: boolean; think?: boolean; skipPermiss
     defaultTimeout: config.core.defaultTimeout,
   });
 
-  // Load plugin configs from user config into registry
+  // ── 插件注册：统一遍历 config.plugins ──
+  const npmEntries: Record<string, { spec?: string; enabled?: boolean }> = {};
+  const systemWhitelist = getSystemWhitelist(config);
+
   for (const [name, pluginCfg] of Object.entries(config.plugins)) {
+    if (pluginCfg.enabled === false) continue;
+
+    // 1) 将 settings 存入 registry（供插件 onInit 读取）
     if (pluginCfg.settings) {
       registry.setPluginConfig(name, pluginCfg.settings);
     }
-  }
 
-  // Register builtin plugins from config
-  for (const [name, pluginCfg] of Object.entries(config.plugins)) {
-    if (pluginCfg.enabled === false) continue;
-    const loader = BUILTIN_PLUGINS[name];
-    if (loader) {
-      await registry.register(await loader());
+    // 2) 根据类型分发注册
+    if (pluginCfg.type === 'npm') {
+      npmEntries[name] = { spec: pluginCfg.spec, enabled: pluginCfg.enabled };
+    } else if (pluginCfg.type === 'mcp') {
+      // MCP 插件由 buildMCPPluginsFromConfig 统一处理，此处跳过
+      continue;
+    } else {
+      // builtin 插件（含无 type 的简写形式）
+      const loader = BUILTIN_PLUGINS[name];
+      if (loader) {
+        await registry.register(await loader());
+      } else if (name === 'token-budget') {
+        await registry.register(createTokenBudgetPlugin(pluginCfg.settings || {}));
+      } else if (name === 'memory') {
+        await registry.register(createMemoryPlugin(pluginCfg.settings || {}));
+      }
     }
   }
 
-  // Register MCP plugins from config
+  // 注册 MCP 插件（统一批量处理）
   for (const mcpPlugin of buildMCPPluginsFromConfig(config)) {
     await registry.register(mcpPlugin);
   }
 
-  // Register token-budget plugin if configured
-  if (config.plugins['token-budget']) {
-    const budgetConfig = config.plugins['token-budget'].settings || {};
-    await registry.register(createTokenBudgetPlugin(budgetConfig));
-  }
+  // 注册 npm-loader（收集的 npm 条目作为配置传入）
+  registry.setPluginConfig('npm-loader', npmEntries);
+  await registry.register(npmLoaderPlugin);
 
-  // Register memory plugin if configured
-  if (config.plugins['memory']) {
-    const memoryConfig = config.plugins['memory'].settings || {};
-    await registry.register(createMemoryPlugin(memoryConfig));
+  // 自动加载系统插件中未在配置中出现的条目（白名单默认启用）
+  for (const name of systemWhitelist) {
+    if (config.plugins[name]) continue;
+    if (name === 'token-budget') {
+      await registry.register(createTokenBudgetPlugin({}));
+    } else if (name === 'memory') {
+      await registry.register(createMemoryPlugin({}));
+    } else {
+      const loader = BUILTIN_PLUGINS[name];
+      if (loader) await registry.register(await loader());
+    }
   }
 
   // ── --list-plugins mode: print and exit ──
@@ -112,7 +136,7 @@ async function startCLI(options: { debug?: boolean; think?: boolean; skipPermiss
   console.log(' [!] 退出：输入 "exit"、"quit" 或直接按下 Ctrl+C 即可。');
   console.log('----------------------------------------------------\n');
 
-  const agent = new NanoCodeAgent(registry, options.debug, options.think, llmClient, config.agent?.role);
+  const agent = new NanoCodeAgent(registry, options.debug, options.think, llmClient, config.agent?.role, config.systemPrompt);
 
   // ── --continue: restore previous session ──
   if (options.continue) {
@@ -173,6 +197,11 @@ cli.help();
 cli.version(getPackageVersion());
 
 const parsed = cli.parse();
+
+if (parsed.args[0] === 'plugin') {
+  await handlePluginCommand(parsed.args.slice(1), parsed.options);
+  process.exit(0);
+}
 
 if (!parsed.options.help && !parsed.options.version) {
   const showThink = !!(parsed.options.think || parsed.options.debug);

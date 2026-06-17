@@ -299,6 +299,20 @@ describe('Config — schema validation', () => {
     assert.equal(warnings.filter(w => w.path === 'plugins.mcp1.url').length, 0);
   });
 
+  it('warns when npm plugin has no spec', () => {
+    const warnings = validateConfigObject({
+      plugins: { myNpm: { type: 'npm' } },
+    });
+    assert.ok(warnings.some(w => w.path === 'plugins.myNpm.spec'));
+  });
+
+  it('does not warn on npm plugin with spec', () => {
+    const warnings = validateConfigObject({
+      plugins: { myNpm: { type: 'npm', spec: '@scope/my-plugin' } },
+    });
+    assert.equal(warnings.filter(w => w.path.startsWith('plugins.myNpm')).length, 0);
+  });
+
   it('warns when plugin config is not an object', () => {
     const warnings = validateConfigObject({
       plugins: { badPlugin: 'string-value' },

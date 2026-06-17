@@ -129,9 +129,9 @@ export const commandPlugin: NanoPlugin = {
               child.kill();
               resolve({
                 status: 'error',
-                message: 'Command execution timed out after 30 seconds.'
+                message: `Command execution timed out after ${ctx.defaultTimeout}ms.`
               });
-            }, 30000);
+            }, ctx.defaultTimeout);
 
             child.on('close', (code) => {
               clearTimeout(timeoutTimer);

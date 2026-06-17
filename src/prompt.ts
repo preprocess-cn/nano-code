@@ -2,69 +2,51 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { PluginRegistry } from './plugin.js';
 import { ChatMessage } from './llm.js';
-
-const TOOL_SAFETY = [
-  '【核心安全约束】如果人类用户拒绝了你的工具执行权限（返回状态为 rejected_by_user），这是最高级别的物理约束。',
-  '你必须立刻停止该方向的尝试，在当前轮次中严禁再次生成任何工具调用（tool_calls），绝对不要换个参数或换个工具重试。',
-  '请转为纯文本模式，向用户诚恳解释该操作的必要性，并主动提供其他不依赖该工具的非侵入式替代方案（例如提供手动指令或打印代码由用户自行复制）。',
-].join('\n');
-
-function buildRoleLine(registry: PluginRegistry, role: string): string {
-  const tools = registry.getAllSchemas();
-  if (tools.length === 0) {
-    return `你是一个名为 nano-code 的 ${role}。你可以帮助用户解决编程问题，提供代码示例和建议。如果回答涉及代码或命令，请直接输出文本，用户会自行复制使用。请保持回答简洁专业。`;
-  }
-
-  // Generate dynamic tool description based on actual tools
-  const toolNames = tools.map(t => t.function.name);
-  const toolDesc = toolNames.join('、');
-
-  return [
-    `你是一个名为 nano-code 的 ${role}。你可以调用以下工具来完成工作：${toolDesc}。`,
-    TOOL_SAFETY,
-    '请保持回答简洁专业。',
-  ].join('\n');
-}
+import { SystemPromptConfig } from './config.js';
 
 /**
- * Build the system prompt for the LLM.
+ * 组装系统提示词。
  *
- * ① Core Agent built-in instructions
- * ② Project-level instruction file (auto-discovered: AGENT.md > CLAUDE.md > AGENT.txt > CLAUDE.txt)
- * ③ Plugin contributions (via onSystemPrompt hook)
+ * ① 角色模板（带变量替换 {role} {tool_list}）
+ * ② 项目级指令文件
+ * ③ 插件钩子（onSystemPrompt）
  *
- * @param registry  - plugin registry (used to detect available tools)
- * @param agentRole - optional override for the agent's role name in the prompt
+ * 所有提示词原文来自 config.yaml 的 system_prompt 段，此处只做拼接。
  */
-export function buildSystemPrompt(registry: PluginRegistry, agentRole?: string): ChatMessage {
+export function buildSystemPrompt(
+  registry: PluginRegistry,
+  promptConfig?: SystemPromptConfig,
+  agentRole?: string,
+): ChatMessage {
   const parts: string[] = [];
+  const tools = registry.getAllSchemas();
+  const role = agentRole || (tools.length > 0 ? '终端 AI 编程助手' : 'AI 对话助手');
 
-  // ① Choose instructions based on whether tools are available
-  const role = agentRole || (registry.getAllSchemas().length > 0 ? '终端 AI 编程助手' : 'AI 对话助手');
-  parts.push(buildRoleLine(registry, role));
-
-  // ② Project-level instruction file
-  const userFile = findProjectInstructionFile();
-  if (userFile) parts.push(userFile);
-
-  // ③ Plugin contributions
-  const finalPrompt = registry.execSystemPrompt(parts.join('\n\n'));
-
-  return {
-    role: 'system',
-    content: finalPrompt,
-  };
-}
-
-function findProjectInstructionFile(): string | null {
-  const cwd = process.cwd();
-  for (const name of ['AGENT.md', 'CLAUDE.md', 'AGENT.txt', 'CLAUDE.txt']) {
-    try {
-      const content = fs.readFileSync(path.join(cwd, name), 'utf-8');
-      if (content.trim()) return content;
-    } catch {
-      /* file doesn't exist, try next */
+  // ① 角色模板 + 变量替换
+  if (tools.length > 0) {
+    const tmpl = promptConfig?.withTools;
+    if (tmpl) {
+      const toolList = tools.map(t => t.function.name).join('、');
+      parts.push(tmpl.replace(/\{role\}/g, role).replace(/\{tool_list\}/g, toolList));
+    }
+  } else {
+    const tmpl = promptConfig?.noTools;
+    if (tmpl) {
+      parts.push(tmpl.replace(/\{role\}/g, role));
     }
   }
-  return null;
+
+  // ② 项目级指令文件
+  const files = promptConfig?.projectFiles ?? ['AGENT.md', 'CLAUDE.md', 'AGENT.txt', 'CLAUDE.txt'];
+  for (const name of files) {
+    try {
+      const content = fs.readFileSync(path.join(process.cwd(), name), 'utf-8');
+      if (content.trim()) { parts.push(content.trim()); break; }
+    } catch { /* 文件不存在，尝试下一个 */ }
+  }
+
+  // ③ 插件贡献
+  const finalPrompt = registry.execSystemPrompt(parts.join('\n\n'));
+
+  return { role: 'system', content: finalPrompt };
 }

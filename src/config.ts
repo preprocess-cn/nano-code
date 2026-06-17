@@ -1,12 +1,22 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import * as yaml from 'js-yaml';
 
 // ── Typed config interface ──
 
 export interface AgentConfig {
   role?: string;     // agent 角色描述，用于系统提示（如"终端 AI 编程助手"）
   greeting?: string; // 启动时向用户显示的能力提示
+}
+
+export interface SystemPromptConfig {
+  /** 有工具时的提示词模板，可用变量 {role} {tool_list} */
+  withTools?: string;
+  /** 无工具时的提示词模板，可用变量 {role} */
+  noTools?: string;
+  /** 项目级指令文件搜索优先级 */
+  projectFiles?: string[];
 }
 
 export interface PluginConfigEntry {
@@ -21,6 +31,8 @@ export interface PluginConfigEntry {
   url?: string;
   env?: Record<string, string>;
   initTimeout?: number;   // MCP server init timeout in ms (default: 10000)
+  // npm-specific
+  spec?: string;           // npm 包名或 import 路径
 }
 
 export interface NanoConfig {
@@ -29,11 +41,17 @@ export interface NanoConfig {
     temperature: number;
     maxTokens: number;
     defaultTimeout: number;
+    apiKey?: string;
+    baseURL?: string;
   };
   agent?: AgentConfig;
   plugins: {
     [pluginName: string]: PluginConfigEntry;
   };
+  /** 系统白名单中的插件名列表，CLI enable/disable 不可操作。 */
+  systemPlugins?: string[];
+  /** 系统提示词配置（来自 YAML），prompt.ts 读取此字段拼接。 */
+  systemPrompt?: SystemPromptConfig;
 }
 
 // ── Defaults ──
@@ -48,10 +66,50 @@ const DEFAULT_CONFIG: NanoConfig = {
   plugins: {},
 };
 
+// ── Default YAML template ──
+
+const DEFAULT_YAML = `# nano-code 全局配置
+# 首次启动时自动创建，编辑后重启生效。
+
+# 系统插件白名单 — CLI enable/disable 不可操作，仅通过配置文件开启/关闭
+system_plugins:
+  - fs
+  - command
+  - memory
+  - token-budget
+
+# 环境变量兜底（shell 和 .env 优先级更高）
+env:
+  OPENAI_API_KEY: ""
+  OPENAI_BASE_URL: ""
+
+# 系统提示词模板 — 可用变量 {role} {tool_list}
+# 编辑后重启生效
+system_prompt:
+  with_tools: |
+    你是一个名为 nano-code 的 {role}。你可以调用以下工具来完成工作：{tool_list}。
+
+    【核心安全约束】如果人类用户拒绝了你的工具执行权限（返回状态为 rejected_by_user），这是最高级别的物理约束。
+    你必须立刻停止该方向的尝试，在当前轮次中严禁再次生成任何工具调用（tool_calls），绝对不要换个参数或换个工具重试。
+    请转为纯文本模式，向用户诚恳解释该操作的必要性，并主动提供其他不依赖该工具的非侵入式替代方案（例如提供手动指令或打印代码由用户自行复制）。
+
+    请保持回答简洁专业。
+
+  no_tools: |
+    你是一个名为 nano-code 的 {role}。你可以帮助用户解决编程问题，提供代码示例和建议。如果回答涉及代码或命令，请直接输出文本，用户会自行复制使用。请保持回答简洁专业。
+
+  # 项目级指令文件搜索优先级
+  project_files:
+    - AGENT.md
+    - CLAUDE.md
+    - AGENT.txt
+    - CLAUDE.txt
+`;
+
 // ── Config file paths ──
 
-function getGlobalConfigPath(): string {
-  return path.join(os.homedir(), '.nano-code', 'config.json');
+function getGlobalYAMLConfigPath(): string {
+  return path.join(os.homedir(), '.nano-code', 'config.yaml');
 }
 
 function getProjectConfigPath(): string {
@@ -129,6 +187,55 @@ function tryLoadConfigFile(filePath: string): Record<string, unknown> | null {
   }
 }
 
+/**
+ * 确保 ~/.nano-code/config.yaml 存在，不存在则创建默认模板。
+ */
+export function ensureDefaultYAML(): void {
+  const yamlPath = getGlobalYAMLConfigPath();
+  if (fs.existsSync(yamlPath)) return;
+  const dir = path.dirname(yamlPath);
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(yamlPath, DEFAULT_YAML, 'utf-8');
+}
+
+/**
+ * 加载 YAML 全局配置文件。不存在或解析失败时返回 null。
+ */
+function loadYAMLConfig(): Record<string, unknown> | null {
+  const yamlPath = getGlobalYAMLConfigPath();
+  try {
+    const raw = fs.readFileSync(yamlPath, 'utf-8');
+    const parsed = yaml.load(raw);
+    if (typeof parsed !== 'object' || parsed === null) {
+      console.warn(`[config] Warning: ${yamlPath} 必须包含一个对象，跳过。`);
+      return null;
+    }
+    return parsed as Record<string, unknown>;
+  } catch (err) {
+    if (err instanceof yaml.YAMLException) {
+      console.warn(`[config] Warning: ${yamlPath} YAML 解析失败，跳过。`);
+    } else {
+      console.warn(`[config] Warning: 无法读取 ${yamlPath}: ${err}`);
+    }
+    return null;
+  }
+}
+
+/**
+ * 从 YAML 配置中读取 env 并写入 process.env（优先级最低，
+ * 不覆盖已存在的环境变量和 .env 设置）。
+ */
+function applyYAMLEnv(yamlData: Record<string, unknown> | null): void {
+  if (!yamlData) return;
+  const env = yamlData.env;
+  if (!env || typeof env !== 'object') return;
+  for (const [key, value] of Object.entries(env)) {
+    if (!process.env[key] && typeof value === 'string' && value) {
+      process.env[key] = value;
+    }
+  }
+}
+
 // ── Schema validation ──
 
 /** A single validation warning about a config field. */
@@ -137,10 +244,11 @@ export interface ConfigValidationWarning {
   message: string;
 }
 
-const KNOWN_CORE_KEYS = new Set(['model', 'temperature', 'maxTokens', 'defaultTimeout']);
+const KNOWN_CORE_KEYS = new Set(['model', 'temperature', 'maxTokens', 'defaultTimeout', 'apiKey', 'baseURL']);
 const KNOWN_PLUGIN_ENTRY_KEYS = new Set([
   'type', 'enabled', 'sideEffect', 'settings',
   'transport', 'command', 'args', 'url', 'env', 'initTimeout',
+  'spec',
 ]);
 const VALID_PLUGIN_TYPES = new Set(['builtin', 'mcp', 'npm']);
 const VALID_TRANSPORT_TYPES = new Set(['stdio', 'http']);
@@ -261,6 +369,11 @@ export function validateConfigObject(raw: Record<string, unknown>): ConfigValida
           warnings.push({ path: `plugins.${name}.url`, message: 'http 类型的 MCP 插件需要指定 url' });
         }
       }
+
+      // npm required-field hints
+      if (pluginType === 'npm' && !entry.spec) {
+        warnings.push({ path: `plugins.${name}.spec`, message: 'npm 类型的插件需要指定 spec（npm 包名或 import 路径）' });
+      }
     }
   }
 
@@ -300,6 +413,8 @@ function mergeCoreValues(
     temperature: 'number',
     maxTokens: 'number',
     defaultTimeout: 'number',
+    apiKey: 'string',
+    baseURL: 'string',
   });
 }
 
@@ -396,19 +511,49 @@ function mergeConfigs(
 // ── Exported API ──
 
 /**
- * Load and merge config from global and project-level config files.
+ * Load and merge config:
  *
- * - Global:  `~/.nano-code/config.json`
- * - Project: `$CWD/.nano-code.json`  (overrides global)
+ *   1. `~/.nano-code/config.yaml` — 全局 YAML（system_plugins + env + 服务商+插件配置）
+ *   2. `$CWD/.nano-code.json`     — 项目配置（覆盖全局）
  */
 export function loadConfig(): NanoConfig {
-  const globalPath = getGlobalConfigPath();
-  const projectPath = getProjectConfigPath();
+  ensureDefaultYAML();
 
-  return mergeConfigs(
-    tryLoadConfigFile(globalPath),
-    tryLoadConfigFile(projectPath),
-  );
+  const yamlData = loadYAMLConfig();
+  applyYAMLEnv(yamlData);
+
+  // 从 YAML 提取 system_plugins 和 system_prompt
+  let systemPlugins: string[] | undefined;
+  let systemPrompt: SystemPromptConfig | undefined;
+  if (yamlData) {
+    if (Array.isArray(yamlData.system_plugins)) {
+      systemPlugins = yamlData.system_plugins.map(String);
+    }
+    if (isNonEmptyObject(yamlData.system_prompt)) {
+      const sp = yamlData.system_prompt as Record<string, unknown>;
+      systemPrompt = {
+        withTools: typeof sp.with_tools === 'string' ? sp.with_tools : undefined,
+        noTools: typeof sp.no_tools === 'string' ? sp.no_tools : undefined,
+        projectFiles: Array.isArray(sp.project_files) ? sp.project_files.map(String) : undefined,
+      };
+    }
+  }
+
+  // 只取合并系统认识的三个字段，新加 YAML 字段无需修改此处
+  const yamlMerge = yamlData ? pickMergeKeys(yamlData) : null;
+  const result = mergeConfigs(yamlMerge, tryLoadConfigFile(getProjectConfigPath()));
+  result.systemPlugins = systemPlugins;
+  result.systemPrompt = systemPrompt;
+  return result;
+}
+
+function pickMergeKeys(data: Record<string, unknown>): Record<string, unknown> {
+  const ALLOWED = new Set(['core', 'agent', 'plugins']);
+  const result: Record<string, unknown> = {};
+  for (const key of ALLOWED) {
+    if (key in data) result[key] = data[key];
+  }
+  return result;
 }
 
 /**
@@ -441,6 +586,13 @@ export function getPluginConfig(
   pluginName: string,
 ): Record<string, any> {
   return config.plugins[pluginName]?.settings ?? {};
+}
+
+/**
+ * 返回系统插件白名单（Set）。插件在此集合中则 CLI enable/disable 拒绝操作。
+ */
+export function getSystemWhitelist(config: NanoConfig): Set<string> {
+  return new Set(config.systemPlugins || []);
 }
 
 /** @internal exported for testing */

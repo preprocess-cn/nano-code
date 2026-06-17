@@ -30,12 +30,12 @@
 - [x] 配置项：maxTokensPerSession, maxTokensPerRequest, compressionThreshold, warnAtTokens
 
 ### 3. 零插件模式验证（中优先级）
-- [ ] 确保无工具时 Agent 正常退化为聊天模式
-- [ ] 友好的提示信息（"当前未启用任何工具插件"）
+- [x] 确保无工具时 Agent 正常退化为聊天模式
+- [x] 友好的提示信息（"当前未启用任何工具插件"）
 
 ### 4. 记忆系统插件（中优先级）
-- [ ] 创建 `src/plugins/memory.ts`
-- [ ] `onAfterToolCall`：从对话中提取关键信息存储到本地 SQLite/JSON
+- [x] 创建 `src/plugins/memory.ts`（提供 save_memory / recall_memory 工具，支持标签分类和关键词检索）
+- [ ] `onAfterRequest`：从对话中自动提取关键信息保存（当前为 no-op 预留）
 - [ ] `onBeforeRequest`：检索相关记忆注入到 system prompt
 
 ### 5. 上下文展示插件（中优先级）
