@@ -174,9 +174,10 @@ export function validateConfigObject(raw: Record<string, unknown>): ConfigValida
       warnings.push({ path: 'core.model', message: 'model 必须为字符串' });
     }
     if ('temperature' in raw.core) {
-      if (!validateType(raw.core.temperature, 'number')) {
+      const t = raw.core.temperature;
+      if (typeof t !== 'number') {
         warnings.push({ path: 'core.temperature', message: 'temperature 必须为数字' });
-      } else if (raw.core.temperature < 0 || raw.core.temperature > 2) {
+      } else if (t < 0 || t > 2) {
         warnings.push({ path: 'core.temperature', message: '温度值应在 0-2 之间' });
       }
     }
@@ -281,7 +282,7 @@ function mergeTypedFields<T extends Record<string, any>>(
   const result = { ...base };
   for (const key of Object.keys(schema) as (keyof T)[]) {
     const val = raw[key as string];
-    if (typeof val === schema[key]) result[key] = val;
+    if (typeof val === schema[key]) result[key] = val as T[keyof T];
   }
   return result;
 }

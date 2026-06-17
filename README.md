@@ -14,7 +14,12 @@ npm install
 # 直接运行（无需编译）
 npx tsx src/index.ts
 
-# 或编译后运行
+# 编译并全局安装 release 版本（安装后可直接使用 nano-code 命令）
+npm run build
+npm install -g .
+nano-code
+
+# 或仅编译后运行（不全局安装）
 npm run build
 npm start
 ```

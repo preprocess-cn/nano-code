@@ -8,7 +8,7 @@
     "nano-code": "./dist/index.js"
   },
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node -e \"fs.writeFileSync('dist/index.js','#!/usr/bin/env node\\n'+fs.readFileSync('dist/index.js','utf8'))\"",
     "start": "node dist/index.js",
     "dev": "tsc --watch & node --watch dist/index.js",
     "debug": "node dist/index.js --debug",
