@@ -50,9 +50,18 @@ export class PluginRegistry {
   private toolSideEffects: Map<string, boolean> = new Map();
   private configs: Map<string, Record<string, any>> = new Map();
   private defaultCtx: Partial<ToolContext> = {};
+  private agentName: string = 'main';
 
   setDefaultContext(ctx: Partial<ToolContext>): void {
     this.defaultCtx = ctx;
+  }
+
+  setAgentName(name: string): void {
+    this.agentName = name;
+  }
+
+  getAgentName(): string {
+    return this.agentName;
   }
 
   async register(plugin: NanoPlugin): Promise<void> {
@@ -251,8 +260,44 @@ export class PluginRegistry {
   }
 
   // ─── Reserved: plugin marketplace API stubs ───
-  // search(query: string): Promise<PluginManifest[]>;
-  // install(name: string): Promise<void>;
-  // uninstall(name: string): Promise<void>;
-  // listInstalled(): PluginManifest[];
+}
+
+// ── Builtin plugin loaders ──
+
+const BUILTIN_LOADERS: Record<string, () => Promise<NanoPlugin>> = {
+  fs: () => import('./plugins/tools/fs.js').then(m => m.fsPlugin),
+  command: () => import('./plugins/tools/command.js').then(m => m.commandPlugin),
+};
+
+/**
+ * 按内置名注册一个插件。处理 fs / command / memory / token-budget。
+ * @returns true 表示已注册，false 表示名称未识别（调用方应忽略或警告）。
+ */
+export async function registerBuiltinPlugin(
+  registry: PluginRegistry,
+  name: string,
+  settings?: Record<string, any>,
+): Promise<boolean> {
+  if (settings) registry.setPluginConfig(name, settings);
+
+  const loader = BUILTIN_LOADERS[name];
+  if (loader) {
+    await registry.register(await loader());
+    return true;
+  }
+
+  switch (name) {
+    case 'memory': {
+      const { createMemoryPlugin } = await import('./plugins/tools/memory.js');
+      await registry.register(createMemoryPlugin(settings || {}));
+      return true;
+    }
+    case 'token-budget': {
+      const { createTokenBudgetPlugin } = await import('./plugins/token-budget.js');
+      await registry.register(createTokenBudgetPlugin(settings || {}));
+      return true;
+    }
+    default:
+      return false;
+  }
 }

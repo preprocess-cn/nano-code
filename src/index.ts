@@ -1,50 +1,68 @@
-import { intro, text, outro, isCancel } from '@clack/prompts';
 import { NanoCodeAgent } from './agent.js';
-import { PluginRegistry } from './plugin.js';
+import { PluginRegistry, registerBuiltinPlugin } from './plugin.js';
 import { loadConfig, applyProfile, getSystemWhitelist } from './config.js';
 import { LLMClient } from './llm.js';
 import { buildMCPPluginsFromConfig } from './plugins/mcp/adapter.js';
 import { npmLoaderPlugin } from './plugins/npm-loader.js';
-import { createTokenBudgetPlugin } from './plugins/token-budget.js';
-import { createMemoryPlugin } from './plugins/tools/memory.js';
 import { loadSession, saveSession } from './session.js';
 import { printPluginList } from './display.js';
 import { handlePluginCommand } from './plugin-cli.js';
+import { loadAgentDefinitions } from './agent-loader.js';
+import { createAgentToolPlugin } from './agent-tool.js';
+import { DisplayManager } from './display.js';
+import { replDisplay } from './plugins/display/repl.js';
+import { resolveDisplayPlugin } from './plugins/display/loader.js';
 import { cac } from 'cac';
 import { getPackageVersion } from './version.js';
 
-/**
- * Builtin plugin lazy-loaders.
- * Only loaded from disk when explicitly listed in the user's config.
- */
-const BUILTIN_PLUGINS: Record<string, () => Promise<any>> = {
-  fs: () => import('./plugins/tools/fs.js').then(m => m.fsPlugin),
-  command: () => import('./plugins/tools/command.js').then(m => m.commandPlugin),
-};
-
-function handleExit() {
-  outro('** 感谢使用 nano-code，祝您编码愉快！');
+function handleExit(display?: DisplayManager) {
+  display?.stop('** 感谢使用 nano-code，祝您编码愉快！');
   process.exit(0);
 }
 
 async function startCLI(options: { debug?: boolean; think?: boolean; skipPermission?: boolean; listPlugins?: boolean; continue?: boolean; profile?: string }) {
-
-  console.log('\n');
-  intro('! nano-code 终端 AI 编程助手 启动中...');
 
   // ── Load configuration + optional agent profile ──
   const config = options.profile
     ? applyProfile(loadConfig(), options.profile)
     : loadConfig();
 
+  // ── Validate presentation config ──
+  const presCfg = config.presentation;
+  if (presCfg?.enabled === false && !presCfg.plugin) {
+    console.error('[FATAL] 展示层已被禁用且未指定替代插件。展示层必须存在。');
+    console.error('        请在配置中设置 presentation.plugin 或移除 presentation.enabled=false。');
+    process.exit(1);
+  }
+
+  // ── Load presentation plugin ──
+  const display = new DisplayManager();
+  if (config.presentation?.plugin) {
+    try {
+      const plugin = await resolveDisplayPlugin(config.presentation.plugin);
+      if (plugin) {
+        display.addPlugin(plugin);
+      } else {
+        // resolveDisplayPlugin 对 "repl" 返回 null，使用默认
+        display.addPlugin(replDisplay);
+      }
+    } catch (err: any) {
+      console.error(err.message);
+      process.exit(1);
+    }
+  } else {
+    // 未配置 → 默认 repl
+    display.addPlugin(replDisplay);
+  }
+
   if(options.debug) {
-    console.log(`#  当前已开启 [DEBUG 调试模式]，模型: ${config.core.model}`);
+    display.onStatus({ message: `#  当前已开启 [DEBUG 调试模式]，模型: ${config.core.model}`, agentName: 'main' });
   }
   if (options.think && !options.debug) {
-    console.log(' <-> 当前已开启 [思维链显示]，将输出 AI 思考过程。');
+    display.onStatus({ message: ' <-> 当前已开启 [思维链显示]，将输出 AI 思考过程。', agentName: 'main' });
   }
   if (options.skipPermission) {
-    console.log(' [!] 当前已开启 [免确认模式]，系统底层安全拦截仍然生效。');
+    display.onStatus({ message: ' [!] 当前已开启 [免确认模式]，系统底层安全拦截仍然生效。', agentName: 'main' });
   }
 
   // ── LLM Client ──
@@ -57,6 +75,7 @@ async function startCLI(options: { debug?: boolean; think?: boolean; skipPermiss
 
   // ── Plugin registry ──
   const registry = new PluginRegistry();
+  registry.setAgentName('main');
   registry.setDefaultContext({
     skipPermission: options.skipPermission ?? false,
     defaultTimeout: config.core.defaultTimeout,
@@ -81,15 +100,7 @@ async function startCLI(options: { debug?: boolean; think?: boolean; skipPermiss
       // MCP 插件由 buildMCPPluginsFromConfig 统一处理，此处跳过
       continue;
     } else {
-      // builtin 插件（含无 type 的简写形式）
-      const loader = BUILTIN_PLUGINS[name];
-      if (loader) {
-        await registry.register(await loader());
-      } else if (name === 'token-budget') {
-        await registry.register(createTokenBudgetPlugin(pluginCfg.settings || {}));
-      } else if (name === 'memory') {
-        await registry.register(createMemoryPlugin(pluginCfg.settings || {}));
-      }
+      await registerBuiltinPlugin(registry, name, pluginCfg.settings);
     }
   }
 
@@ -105,14 +116,15 @@ async function startCLI(options: { debug?: boolean; think?: boolean; skipPermiss
   // 自动加载系统插件中未在配置中出现的条目（白名单默认启用）
   for (const name of systemWhitelist) {
     if (config.plugins[name]) continue;
-    if (name === 'token-budget') {
-      await registry.register(createTokenBudgetPlugin({}));
-    } else if (name === 'memory') {
-      await registry.register(createMemoryPlugin({}));
-    } else {
-      const loader = BUILTIN_PLUGINS[name];
-      if (loader) await registry.register(await loader());
-    }
+    await registerBuiltinPlugin(registry, name);
+  }
+
+  // ── 自动发现并注册 agent 工具 ──
+  const agentDefs = loadAgentDefinitions();
+  for (const def of agentDefs) {
+    if (def.enabled === false) continue;
+    const plugin = createAgentToolPlugin(def, llmClient);
+    await registry.register(plugin);
   }
 
   // ── --list-plugins mode: print and exit ──
@@ -128,53 +140,40 @@ async function startCLI(options: { debug?: boolean; think?: boolean; skipPermiss
     : '我可以帮您解答编程问题，提供代码示例和建议。';
   const greeting = config.agent?.greeting || defaultGreeting;
 
-  console.log('----------------------------------------------------');
-  if (options.profile) {
-    console.log(` * 角色配置：${options.profile}`);
-  }
-  console.log(` * 提示：${greeting}`);
-  console.log(' [!] 退出：输入 "exit"、"quit" 或直接按下 Ctrl+C 即可。');
-  console.log('----------------------------------------------------\n');
+  display.start({
+    greeting,
+    agentName: 'main',
+    profileName: options.profile,
+    hasTools,
+  });
 
-  const agent = new NanoCodeAgent(registry, options.debug, options.think, llmClient, config.agent?.role, config.systemPrompt);
+  const agent = new NanoCodeAgent(registry, options.debug, options.think, llmClient, config.agent?.role, config.systemPrompt, 'main', display);
 
   // ── --continue: restore previous session ──
   if (options.continue) {
     const session = loadSession(process.cwd());
     if (session) {
       agent.loadHistory(session.messages);
-      console.log(`   ↻ 已恢复上次会话 (${session.messages.length} 条消息，最后更新 ${session.updatedAt})\n`);
+      display.onStatus({ message: `   ↻ 已恢复上次会话 (${session.messages.length} 条消息，最后更新 ${session.updatedAt})\n`, agentName: 'main' });
     } else {
-      console.log('   - 未找到之前保存的会话，开始新的对话。\n');
+      display.onStatus({ message: '   - 未找到之前保存的会话，开始新的对话。\n', agentName: 'main' });
     }
   }
 
   // 3. 进入无限交互循环
   while (true) {
-    const userPrompt = await text({
-      message: '>>  请输入开发任务或指令：',
-      placeholder: '例如："帮我看看这个项目的文件结构" 或 "创建一个 utils.ts 并在里面写一个冒泡排序"',
-      validate: (value) => {
-        if (!value.trim()) return '指令不能为空，请输入点什么吧！';
-      },
-    });
-
-    if (isCancel(userPrompt)) {
-      handleExit();
-    }
-
-    const command = (userPrompt as string).trim();
-
-    if (command.toLowerCase() === 'exit' || command.toLowerCase() === 'quit') {
-      handleExit();
+    const userPrompt = await display.prompt();
+    if (userPrompt === null) {
+      handleExit(display);
     }
 
     try {
-      await agent.runTask(command);
+      await agent.runTask(userPrompt);
     } catch (error) {
-      console.error('X 顶层循环捕获到未处理的致命异常:');
-      console.error(error);
-      console.log('\n');
+      display.onError({ message: `X 顶层循环捕获到未处理的致命异常: ${error}`, agentName: 'main', stack: error instanceof Error ? error.stack : undefined });
+      if (error instanceof Error && error.stack) {
+        display.onDebug({ data: error.stack, agentName: 'main' });
+      }
     } finally {
       saveSession(process.cwd(), agent.getHistory());
     }

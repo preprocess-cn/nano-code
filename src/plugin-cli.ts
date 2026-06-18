@@ -1,8 +1,10 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import * as yaml from 'js-yaml';
 import { execSync } from 'child_process';
 import { loadConfig, getSystemWhitelist } from './config.js';
+import { loadAgentDefinitions } from './agent-loader.js';
 
 const GLOBAL_DIR = path.join(os.homedir(), '.nano-code');
 const PROJECT_CONFIG = path.join(process.cwd(), '.nano-code.json');
@@ -146,7 +148,7 @@ async function listPlugins(): Promise<void> {
   const config = loadConfig();
   const whitelist = getSystemWhitelist(config);
 
-  // 收集所有插件名：已配置的 + 系统白名单中未配置的
+  // 收集所有插件名：已配置的 + 系统白名单中未配置的 + agent 定义
   const names = new Set(Object.keys(config.plugins));
   for (const w of whitelist) names.add(w);
 
@@ -158,9 +160,20 @@ async function listPlugins(): Promise<void> {
     rows.push({ name, status: enabled ? 'active' : 'inactive', tag });
   }
 
+  // 添加 agent 插件
+  for (const def of loadAgentDefinitions()) {
+    rows.push({
+      name: `agent:${def.name}`,
+      status: def.enabled !== false ? 'active' : 'inactive',
+      tag: 'agent',
+    });
+  }
+
   rows.sort((a, b) => {
-    if (a.tag === 'system' && b.tag !== 'system') return -1;
-    if (a.tag !== 'system' && b.tag === 'system') return 1;
+    const prio: Record<string, number> = { system: 0, agent: 1, user: 2, builtin: 2, npm: 2, mcp: 2 };
+    const pa = prio[a.tag] ?? 3;
+    const pb = prio[b.tag] ?? 3;
+    if (pa !== pb) return pa - pb;
     return a.name.localeCompare(b.name);
   });
 
@@ -176,6 +189,24 @@ async function listPlugins(): Promise<void> {
 
 async function setEnabled(name: string, enabled: boolean): Promise<void> {
   if (!name) { console.error('请指定插件名。'); return; }
+
+  // Handle agent plugins (agent:<name>)
+  if (name.startsWith('agent:')) {
+    const agentName = name.slice(6);
+    const agentPath = path.join(os.homedir(), '.nano-code', 'agents', `${agentName}.yaml`);
+    if (!fs.existsSync(agentPath)) {
+      // 也尝试 .yml 后缀
+      const altPath = path.join(os.homedir(), '.nano-code', 'agents', `${agentName}.yml`);
+      if (!fs.existsSync(altPath)) {
+        console.error(`Agent "${agentName}" 未找到。`);
+        return;
+      }
+      updateAgentEnabled(altPath, enabled, agentName);
+    } else {
+      updateAgentEnabled(agentPath, enabled, agentName);
+    }
+    return;
+  }
 
   const config = loadConfig();
   const whitelist = getSystemWhitelist(config);
@@ -196,4 +227,20 @@ async function setEnabled(name: string, enabled: boolean): Promise<void> {
 
   fs.writeFileSync(PROJECT_CONFIG, JSON.stringify(projectCfg, null, 2), 'utf-8');
   console.log(`插件 "${name}" 已${enabled ? '启用' : '禁用'}。`);
+}
+
+function updateAgentEnabled(filePath: string, enabled: boolean, agentName: string): void {
+  try {
+    const raw = fs.readFileSync(filePath, 'utf-8');
+    const data = yaml.load(raw) as Record<string, any>;
+    if (!data || typeof data !== 'object') {
+      console.error(`无法解析 agent 定义文件 "${agentName}"。`);
+      return;
+    }
+    data.enabled = enabled;
+    fs.writeFileSync(filePath, yaml.dump(data, { indent: 2 }), 'utf-8');
+    console.log(`Agent "${agentName}" 已${enabled ? '启用' : '禁用'}。`);
+  } catch (err) {
+    console.error(`操作 agent "${agentName}" 失败:`, err);
+  }
 }

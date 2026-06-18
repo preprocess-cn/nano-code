@@ -3,6 +3,7 @@ import { PluginRegistry, ToolCall } from './plugin.js';
 import { SystemPromptConfig } from './config.js';
 import { buildSystemPrompt } from './prompt.js';
 import { ThinkStream } from './think-stream.js';
+import { DisplayManager } from './display.js';
 
 export class NanoCodeAgent {
   private llmClient: LLMClient;
@@ -12,53 +13,63 @@ export class NanoCodeAgent {
   private showThink = false;
   private agentRole?: string;
   private promptConfig?: SystemPromptConfig;
+  private name: string;
+  private display?: DisplayManager;
 
-  constructor(registry: PluginRegistry, isDebug = false, showThink = false, llmClient?: LLMClient, agentRole?: string, promptConfig?: SystemPromptConfig) {
+  constructor(registry: PluginRegistry, isDebug = false, showThink = false, llmClient?: LLMClient, agentRole?: string, promptConfig?: SystemPromptConfig, name = 'main', display?: DisplayManager) {
     this.llmClient = llmClient || new LLMClient();
     this.registry = registry;
     this.isDebug = isDebug;
     this.showThink = showThink;
     this.agentRole = agentRole;
     this.promptConfig = promptConfig;
+    this.name = name;
+    this.display = display;
   }
 
-  /** Return a copy of the current message history. */
+  getName(): string {
+    return this.name;
+  }
+
   getHistory(): ChatMessage[] {
     return [...this.messageHistory];
   }
 
-  /** Replace the message history (e.g. restored from a saved session). */
   loadHistory(messages: ChatMessage[]): void {
     this.messageHistory = [...messages];
   }
 
-  async runTask(userPrompt: string) {
+  async runTask(userPrompt: string): Promise<string | undefined> {
     this.messageHistory.push({
       role: 'user',
-      content: userPrompt
+      content: userPrompt,
     });
 
     while (true) {
       if (this.isDebug) {
-        console.log('\n==================================================');
-        console.log('>> [DEBUG] 发送给大模型的完整 Messages 历史:');
-        console.dir(this.messageHistory, { depth: null, colors: true });
-        console.log('==================================================\n');
+        this.display?.onStatus({ message: '\n==================================================', agentName: this.name });
+        this.display?.onStatus({ message: '>> [DEBUG] 发送给大模型的完整 Messages 历史:', agentName: this.name });
+        this.display?.onDebug({ data: JSON.stringify(this.messageHistory, null, 2), agentName: this.name });
+        this.display?.onStatus({ message: '==================================================\n', agentName: this.name });
       }
 
-      console.log('? nano-code 正在思考并请求大模型...');
+      this.display?.onStatus({ message: '? 正在思考并请求大模型...', agentName: this.name });
 
       const thinkStream = new ThinkStream();
-
       const systemMessage = buildSystemPrompt(this.registry, this.promptConfig, this.agentRole);
       let messagesWithSystem: ChatMessage[] = [systemMessage, ...this.messageHistory];
-
-      // Hook: allow plugins to modify messages before sending
       messagesWithSystem = this.registry.execBeforeRequest(messagesWithSystem);
 
-      const onChunk = this.showThink
-        ? (chunk: string) => { if (chunk) process.stdout.write(chunk); }
-        : (chunk: string) => { if (chunk) { const v = thinkStream.next(chunk); if (v) process.stdout.write(v); } };
+      const isSubAgent = this.name !== 'main';
+      let streamBuffer = '';
+
+      const onChunk = (chunk: string) => {
+        if (!chunk) return;
+        const text = this.showThink ? chunk : thinkStream.next(chunk) || '';
+        if (!text) return;
+        if (isSubAgent) streamBuffer += text;
+        else this.display?.onStreamChunk({ text, agentName: this.name });
+      };
 
       const response = await this.llmClient.sendSystemMessage(
         messagesWithSystem,
@@ -66,14 +77,17 @@ export class NanoCodeAgent {
         onChunk,
       );
 
-      // Hook: notify plugins of the LLM response
       this.registry.execAfterRequest(response);
 
       if (this.isDebug) {
-        console.log('\n\n==================================================');
-        console.log('[IN] [DEBUG] 大模型返回的原始 Response 响应:');
-        console.dir(response, { depth: null, colors: true });
-        console.log('==================================================\n');
+        this.display?.onStatus({ message: '\n\n==================================================', agentName: this.name });
+        this.display?.onStatus({ message: '[IN] [DEBUG] 大模型返回的原始 Response 响应:', agentName: this.name });
+        this.display?.onDebug({ data: JSON.stringify(response, null, 2), agentName: this.name });
+        this.display?.onStatus({ message: '==================================================\n', agentName: this.name });
+      }
+
+      if (isSubAgent && streamBuffer) {
+        this.display?.onStreamChunk({ text: '\n' + streamBuffer + '\n', agentName: this.name });
       }
 
       const assistantMessage: ChatMessage = {
@@ -87,7 +101,7 @@ export class NanoCodeAgent {
       this.messageHistory.push(assistantMessage);
 
       if (response.stopReason !== 'tool_use' || !response.toolCalls) {
-        console.log('\n');
+        this.display?.onStatus({ message: '\n', agentName: this.name });
         break;
       }
 
@@ -95,15 +109,20 @@ export class NanoCodeAgent {
         if (await this.executeToolCall(rawToolCall) === 'rejected') break;
       }
     }
+
+    const lastMsg = this.messageHistory[this.messageHistory.length - 1];
+    if (lastMsg?.role === 'assistant') {
+      return lastMsg.content || undefined;
+    }
+    return undefined;
   }
 
-  /** 执行单个工具调用：参数解析 → 插件拦截 → 执行 → 结果显示 → 入历史。 */
   private async executeToolCall(rawToolCall: any): Promise<'rejected' | 'ok'> {
     const toolName = rawToolCall.function.name;
     let toolArgs: any;
     try {
       toolArgs = JSON.parse(rawToolCall.function.arguments);
-    } catch (e) {
+    } catch {
       const msg = `工具调用 "${toolName}" 的参数不是合法的 JSON 格式：${rawToolCall.function.arguments}。请修正参数格式后重试。`;
       this.messageHistory.push({
         role: 'tool',
@@ -114,14 +133,14 @@ export class NanoCodeAgent {
       return 'ok';
     }
 
-    // Hook: allow plugins to intercept/modify/deny the tool call
     const toolCall: ToolCall = {
       id: rawToolCall.id,
       function: { name: toolName, arguments: rawToolCall.function.arguments },
     };
+
     const allowedCall = this.registry.execBeforeToolCall(toolCall);
     if (allowedCall === null) {
-      console.log(`\n[!] [拦截] 插件拒绝了工具调用: [ ${toolName} ]`);
+      this.display?.onStatus({ message: `[!] [拦截] 插件拒绝了工具调用: [ ${toolName} ]`, agentName: this.name });
       this.messageHistory.push({
         role: 'tool',
         tool_call_id: toolCall.id,
@@ -131,9 +150,9 @@ export class NanoCodeAgent {
       return 'ok';
     }
 
-    console.log(`\n#  AI 申请调用本地工具: [ ${toolName} ]`);
+    this.display?.onToolCall({ toolName, args: toolArgs, agentName: this.name });
     if (this.isDebug) {
-      console.log(`// [DEBUG] 工具入参:`, toolArgs);
+      this.display?.onDebug({ data: `// [DEBUG] 工具入参: ${JSON.stringify(toolArgs)}`, agentName: this.name });
     }
 
     let resultText = '';
@@ -142,12 +161,10 @@ export class NanoCodeAgent {
     } catch (err: any) {
       resultText = `工具物理执行失败: ${err.message}`;
       if (this.isDebug) {
-        console.error(`X [DEBUG] 工具执行崩溃，完整错误调用栈:`);
-        console.error(err.stack);
+        this.display?.onDebug({ data: `X [DEBUG] 工具执行崩溃: ${err.stack}`, agentName: this.name });
       }
     }
 
-    // Hook: allow plugins to observe/modify tool result
     let toolResult: any;
     try {
       toolResult = JSON.parse(resultText);
@@ -156,15 +173,10 @@ export class NanoCodeAgent {
     }
     this.registry.execAfterToolCall(toolResult);
 
-    if (toolResult.status === 'rejected_by_user') {
-      console.log(`\n[!] [拦截] 您拒绝了此操作。已强行终止后续的连带工具调用，并唤醒大模型向您解释...`);
-    } else if (toolResult.status === 'error') {
-      console.log(`\nX [错误] 工具执行失败: ${toolResult.message}`);
-    } else if (toolResult.status === 'success') {
-      console.log(`\n[OK] [成功] 工具执行完毕。`);
-    }
+    this.display?.onToolResult({ status: toolResult.status, message: toolResult.message, agentName: this.name });
+
     if (this.isDebug) {
-      console.log(`[IN] [DEBUG] 工具返回结果喂给 AI:`, resultText);
+      this.display?.onDebug({ data: `[IN] [DEBUG] 工具返回结果喂给 AI: ${resultText}`, agentName: this.name });
     }
 
     this.messageHistory.push({

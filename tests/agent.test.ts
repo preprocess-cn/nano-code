@@ -10,6 +10,35 @@ function mockLLM() {
   } as any;
 }
 
+describe('NanoCodeAgent — identity (getName)', () => {
+
+  it('default name is main', () => {
+    const agent = new NanoCodeAgent(new PluginRegistry(), false, false, mockLLM());
+    assert.equal(agent.getName(), 'main');
+  });
+
+  it('custom name is returned by getName', () => {
+    const agent = new NanoCodeAgent(new PluginRegistry(), false, false, mockLLM(), undefined, undefined, 'dba');
+    assert.equal(agent.getName(), 'dba');
+  });
+
+  it('runTask returns the last assistant content', async () => {
+    const agent = new NanoCodeAgent(new PluginRegistry(), false, false, mockLLM());
+    const result = await agent.runTask('hello');
+    assert.equal(result, 'mock response');
+  });
+
+  it('runTask returns undefined when no assistant message exists', async () => {
+    const mock = {
+      sendSystemMessage: async () => ({ text: null, stopReason: 'stop' }),
+    };
+    const agent = new NanoCodeAgent(new PluginRegistry(), false, false, mock as any);
+    const result = await agent.runTask('hello');
+    assert.equal(result, undefined);
+  });
+
+});
+
 describe('NanoCodeAgent — getHistory / loadHistory', () => {
 
   it('getHistory returns empty array for a fresh agent', () => {

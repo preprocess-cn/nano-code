@@ -52,6 +52,11 @@ export interface NanoConfig {
   systemPlugins?: string[];
   /** 系统提示词配置（来自 YAML），prompt.ts 读取此字段拼接。 */
   systemPrompt?: SystemPromptConfig;
+  /** 展示层配置。plugin 指定展示插件名（默认 "repl"），enabled=false 时必须有其它展示层代替。 */
+  presentation?: {
+    plugin?: string;
+    enabled?: boolean;
+  };
 }
 
 // ── Defaults ──
@@ -263,7 +268,8 @@ function validateType(val: unknown, type: 'string' | 'number' | 'boolean'): bool
  */
 export function validateConfigObject(raw: Record<string, unknown>): ConfigValidationWarning[] {
   const warnings: ConfigValidationWarning[] = [];
-  const TOP_KEYS = new Set(['core', 'plugins', 'agent']);
+  const TOP_KEYS = new Set(['core', 'plugins', 'agent', 'presentation']);
+  const PRESENTATION_KEYS = new Set(['plugin', 'enabled']);
 
   for (const key of Object.keys(raw)) {
     if (!TOP_KEYS.has(key)) {
@@ -377,6 +383,22 @@ export function validateConfigObject(raw: Record<string, unknown>): ConfigValida
     }
   }
 
+  // presentation.*
+  if (isNonEmptyObject(raw.presentation)) {
+    const pres = raw.presentation as Record<string, unknown>;
+    for (const key of Object.keys(pres)) {
+      if (!PRESENTATION_KEYS.has(key)) {
+        warnings.push({ path: `presentation.${key}`, message: `未知的展示层配置项 "${key}"` });
+      }
+    }
+    if ('plugin' in pres && !validateType(pres.plugin, 'string')) {
+      warnings.push({ path: 'presentation.plugin', message: 'plugin 必须为字符串' });
+    }
+    if ('enabled' in pres && !validateType(pres.enabled, 'boolean')) {
+      warnings.push({ path: 'presentation.enabled', message: 'enabled 必须为布尔值' });
+    }
+  }
+
   return warnings;
 }
 
@@ -484,7 +506,7 @@ function mergeConfigs(
 
     // Warn about unknown top-level keys
     for (const key of Object.keys(data)) {
-      if (key !== 'core' && key !== 'plugins' && key !== 'agent') {
+      if (key !== 'core' && key !== 'plugins' && key !== 'agent' && key !== 'presentation') {
         console.warn(`[config] Warning: Unknown config key "${key}" in ${label} config, ignoring.`);
       }
     }
@@ -502,6 +524,21 @@ function mergeConfigs(
     // Merge plugins
     if ('plugins' in data) {
       result.plugins = mergePluginEntries(result.plugins, data.plugins);
+    }
+
+    // Merge presentation (shallow — project overrides global)
+    if ('presentation' in data) {
+      const override = isNonEmptyObject(data.presentation)
+        ? data.presentation as Record<string, unknown>
+        : null;
+      if (override) {
+        result.presentation = {
+          ...result.presentation,
+          ...override,
+        } as typeof result.presentation;
+      } else {
+        result.presentation = undefined;
+      }
     }
   }
 
@@ -548,7 +585,7 @@ export function loadConfig(): NanoConfig {
 }
 
 function pickMergeKeys(data: Record<string, unknown>): Record<string, unknown> {
-  const ALLOWED = new Set(['core', 'agent', 'plugins']);
+  const ALLOWED = new Set(['core', 'agent', 'plugins', 'presentation']);
   const result: Record<string, unknown> = {};
   for (const key of ALLOWED) {
     if (key in data) result[key] = data[key];
