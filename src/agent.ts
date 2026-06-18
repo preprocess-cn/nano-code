@@ -3,7 +3,7 @@ import { PluginRegistry, ToolCall } from './plugin.js';
 import { SystemPromptConfig } from './config.js';
 import { buildSystemPrompt } from './prompt.js';
 import { ThinkStream } from './think-stream.js';
-import { DisplayManager } from './display.js';
+import { DisplayManager, isMainAgent } from './display.js';
 
 export class NanoCodeAgent {
   private llmClient: LLMClient;
@@ -60,7 +60,7 @@ export class NanoCodeAgent {
       let messagesWithSystem: ChatMessage[] = [systemMessage, ...this.messageHistory];
       messagesWithSystem = this.registry.execBeforeRequest(messagesWithSystem);
 
-      const isSubAgent = this.name !== 'main';
+      const isSubAgent = !isMainAgent(this.name);
       let streamBuffer = '';
 
       const onChunk = (chunk: string) => {

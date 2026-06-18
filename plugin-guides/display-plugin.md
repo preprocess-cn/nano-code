@@ -120,7 +120,7 @@ Display Plugin 通过 `~/.nano-code/presentations/` 目录或路径引用加载�
 
 ```yaml
 # nano-code 配置
-presentation:
+display:
   plugin: my-plugin    # 从 ~/.nano-code/presentations/my-plugin.js 加载
   # 或
   plugin: /path/to/custom.js  # 绝对路径

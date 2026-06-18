@@ -32,7 +32,7 @@
 | 10 | **角色模式 & 斜杠命令** | ~3d | `profiles/` 目录可用于 `--profile` 切换角色。斜杠命令 `/treehole` 等运行时切换未实现 |
 | 11 | **Agent Plugin 架构** | ✅ | 子 agent 持有独立 `NanoCodeAgent` 实例 + 独立插件集合，通过 agent 名称身份识别 |
 | 12 | **Profile Plugin 架构** | ✅ | 角色型 profile 注册机制（文件扫描），`--profile` 加载，profile 维护独立工具配置 |
-| 13 | **展示层插件系统** | ✅ | `DisplayPlugin` 接口 + `DisplayManager` 多插件管理器，结构化事件，`presentation.plugin` 配置 |
+| 13 | **展示层插件系统** | ✅ | `DisplayPlugin` 接口 + `DisplayManager` 多插件管理器，结构化事件，`display.plugin` 配置 |
 
 ## P3 — 生态准备
 
@@ -126,5 +126,5 @@ MCP 和 agent 工具都是"主 agent 委托能力给外部"，区别在：
 - **Agent 定义加载器**：自动扫描 `~/.nano-code/agents/*.yaml`，校验必填字段
 - **子 agent 工具系统**：agent 定义为 tool 注册，调用时创建独立 `NanoCodeAgent` 实例独立执行
 - **输出分层**：子 agent 输出带 `[name]` 前缀，主 agent 无前缀
-- **展示层插件系统**：`DisplayPlugin` 接口 + `DisplayManager` 多插件管理器，结构化事件传递，`presentation.plugin` 配置加载
+- **展示层插件系统**：`DisplayPlugin` 接口 + `DisplayManager` 多插件管理器，结构化事件传递，`display.plugin` 配置加载
 - **展示层插件引导**：`plugin-guides/display-plugin.md`，面向 AI 编程工具的开发文档

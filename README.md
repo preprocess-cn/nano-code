@@ -50,11 +50,11 @@ nano-code plugin disable <name>                # 禁用插件或 agent
 
 ### 展示层配置
 
-展示层（输入/输出 UI）可通过 `presentation` 配置：
+展示层（输入/输出 UI）可通过 `display` 配置：
 
 ```yaml
 # ~/.nano-code/config.yaml
-presentation:
+display:
   plugin: repl  # 默认 REPL 交互。可指定路径或 ~/.nano-code/presentations/<name>.js
 ```
 
@@ -92,32 +92,30 @@ OPENAI_MODEL_NAME=gpt-4o                     # 可选，默认 gpt-4o
 
 不配置时自动推导：有已注册工具 → "终端 AI 编程助手"，无工具 → "AI 对话助手"。
 
-### 配置文件（`.nano-code.json`）
+### 配置文件（`.nano-code.yaml`）
 
-项目级配置，可覆盖模型参数、agent 角色和插件设置：
+项目级 YAML 配置，可覆盖模型参数、agent 角色和插件设置：
 
-```json
-{
-  "core": {
-    "model": "deepseek-chat",
-    "temperature": 0,
-    "apiKey": "sk-xxx",
-    "baseURL": "https://api.deepseek.com/v1"
-  },
-  "agent": {
-    "role": "DevOps 助手"
-  },
-  "plugins": {
-    "fs": {},
-    "command": {},
-    "token-budget": {
-      "settings": { "maxTokensPerSession": 100000 }
-    }
-  }
-}
+```yaml
+core:
+  model: deepseek-chat
+  apiKey: sk-xxx
+  baseURL: https://api.deepseek.com/v1
+  maxTokens: 128000     # 默认上下文窗口大小
+  defaultTimeout: 120000
+
+agent:
+  role: DevOps 助手
+
+plugins:
+  fs: {}
+  command: {}
+  token-budget:
+    settings:
+      maxTokensPerSession: 100000
 ```
 
-配置文件优先级高于 `.env` 文件。`apiKey` 和 `baseURL` 也可以在配置文件中指定，不配置时从 `.env` 或环境变量读取。
+配置文件优先级高于 `.env` 文件。`apiKey` 和 `baseURL` 也可以在配置文件中指定，不配置时从 `.env` 或环境变量读取。`model`、`temperature` 等参数为可选项，不配置时使用默认值。
 
 ### 全局 YAML 配置（`~/.nano-code/config.yaml`）
 
@@ -144,7 +142,7 @@ system_prompt:
     你是一个名为 nano-code 的 {role}。...
 ```
 
-项目级 `.nano-code.json` 会覆盖全局 YAML 配置。插件默认不加载，只有在配置中显式声明才会被注册（系统白名单内的插件除外）。
+项目级 `.nano-code.yaml` 会覆盖全局 YAML 配置。插件默认不加载，只有在配置中显式声明才会被注册（系统白名单内的插件除外）。
 
 ### Agent Profile 角色配置
 
@@ -251,7 +249,7 @@ plugins:
 | **command** | `"command": {}` | Bash 命令执行（含危险命令黑名单） |
 | **memory** | `"memory": {}` | 记忆存储与检索，支持多会话持久化和标签查询 |
 | **agent** | 自动发现 `~/.nano-code/agents/*.yaml` | `agent-<name>` 子 agent 调用工具 |
-| **display** | 通过 `presentation.plugin` 配置 | 展示层插件（独立于 PluginRegistry） |
+| **display** | 通过 `display.plugin` 配置 | 展示层插件（独立于 PluginRegistry） |
 
 ### 可选插件
 
@@ -264,23 +262,22 @@ plugins:
 
 ## MCP 集成
 
-nano-code 支持 [Model Context Protocol](https://modelcontextprotocol.io/) 标准协议。在 `.nano-code.json` 中声明 MCP Server：
+nano-code 支持 [Model Context Protocol](https://modelcontextprotocol.io/) 标准协议。在 `.nano-code.yaml` 中声明 MCP Server：
 
-```json
-{
-  "plugins": {
-    "mcp-filesystem": {
-      "type": "mcp",
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-filesystem", "."]
-    },
-    "mcp-playwright": {
-      "type": "mcp",
-      "command": "uvx",
-      "args": ["mcp-server-playwright"]
-    }
-  }
-}
+```yaml
+plugins:
+  mcp-filesystem:
+    type: mcp
+    command: npx
+    args:
+      - -y
+      - "@modelcontextprotocol/server-filesystem"
+      - .
+  mcp-playwright:
+    type: mcp
+    command: uvx
+    args:
+      - mcp-server-playwright
 ```
 
 ## 插件开发

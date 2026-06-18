@@ -88,14 +88,14 @@ describe('DisplayManager — multi-plugin', () => {
   let calls: string[];
   const pluginA = {
     name: 'pluginA',
-    onStatus(msg: string) { calls.push(`A:${msg}`); },
+    onStatus(event: { message: string }) { calls.push(`A:${event.message}`); },
     prompt: async () => null,  // 无输入
   };
 
   const pluginB = {
     name: 'pluginB',
-    onStatus(msg: string) { calls.push(`B:${msg}`); },
-    onStreamChunk(msg: string) { calls.push(`B-stream:${msg}`); },
+    onStatus(event: { message: string }) { calls.push(`B:${event.message}`); },
+    onStreamChunk(event: { text: string }) { calls.push(`B-stream:${event.text}`); },
     onUserInput(input: string, src: string) { calls.push(`B-input:${src}:${input}`); },
     prompt: async () => 'input-from-B',
   };
@@ -144,7 +144,7 @@ describe('DisplayManager — multi-plugin', () => {
     const mgr = new DisplayManager();
     mgr.addPlugin(pluginA);
     mgr.addPlugin(pluginB);
-    mgr.onStatus('hello');
+    mgr.onStatus({ message: 'hello', agentName: 'test' });
     assert.equal(calls.length, 2);
     assert.equal(calls[0], 'A:hello');
     assert.equal(calls[1], 'B:hello');
@@ -154,7 +154,7 @@ describe('DisplayManager — multi-plugin', () => {
     const mgr = new DisplayManager();
     mgr.addPlugin(pluginA);
     mgr.addPlugin(pluginB);
-    mgr.onStreamChunk('data');
+    mgr.onStreamChunk({ text: 'data', agentName: 'test' });
     assert.equal(calls.length, 1);
     assert.equal(calls[0], 'B-stream:data');
   });

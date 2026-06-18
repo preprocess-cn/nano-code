@@ -3,10 +3,12 @@ import { ToolResponse, ToolContext, ToolDefinition } from './contract.js';
 import { NanoCodeAgent } from './agent.js';
 import { LLMClient } from './llm.js';
 import { AgentDefinition } from './agent-loader.js';
+import { DisplayManager } from './display.js';
 
 export function createAgentToolPlugin(
   def: AgentDefinition,
   llmClient: LLMClient,
+  display?: DisplayManager,
 ): NanoPlugin {
   return {
     name: `agent:${def.name}`,
@@ -46,7 +48,8 @@ export function createAgentToolPlugin(
       // Register plugins from agent definition (no agent tools → recursive guard)
       if (def.plugins) {
         for (const [name, pluginCfg] of Object.entries(def.plugins)) {
-          await registerBuiltinPlugin(subRegistry, name, pluginCfg.settings);
+          if (pluginCfg?.enabled === false) continue;
+          await registerBuiltinPlugin(subRegistry, name, pluginCfg?.settings);
         }
       }
 
@@ -59,6 +62,7 @@ export function createAgentToolPlugin(
         def.role,
         def.systemPrompt,
         def.name,
+        display,
       );
 
       const result = await subAgent.runTask(query);

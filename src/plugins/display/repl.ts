@@ -1,9 +1,9 @@
 import { intro, text, outro, isCancel } from '@clack/prompts';
-import { DisplayPlugin, StartConfig, StatusEvent, StreamEvent, ToolCallEvent, ToolResultEvent, ErrorEvent, DebugEvent } from '../../display.js';
+import { DisplayPlugin, StartConfig, StatusEvent, StreamEvent, ToolCallEvent, ToolResultEvent, ErrorEvent, DebugEvent, isMainAgent } from '../../display.js';
 
 /** 非主 agent 的消息加 [name] 前缀 */
 function p(agentName: string, msg: string): string {
-  return agentName === 'main' ? msg : `[${agentName}] ${msg}`;
+  return isMainAgent(agentName) ? msg : `[${agentName}] ${msg}`;
 }
 
 export const replDisplay: DisplayPlugin = {
@@ -55,7 +55,7 @@ export const replDisplay: DisplayPlugin = {
 
   onStreamChunk(event: StreamEvent): void {
     if (!event.text) return;
-    if (event.agentName === 'main') {
+    if (isMainAgent(event.agentName)) {
       process.stdout.write(event.text);
     } else {
       const prefixed = event.text.split('\n').map(l => p(event.agentName, l)).join('\n');

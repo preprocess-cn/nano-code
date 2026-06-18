@@ -21,31 +21,25 @@ export class ThinkStream {
     this.buffer += chunk;
     let output = '';
 
-    while (true) {
+    while (this.buffer) {
       if (this.insideThink) {
         const closeIdx = this.buffer.indexOf('</think>');
-        if (closeIdx === -1) {
-          // 仍在 think 区内，丢弃积累内容
-          this.buffer = '';
-          break;
-        }
+        if (closeIdx === -1) { this.buffer = ''; break; }
         this.insideThink = false;
         this.buffer = this.buffer.slice(closeIdx + 8);
-        continue; // 可能后面还有 <think>
+        continue;
       }
 
-      if (!this.insideThink) {
-        const openIdx = this.buffer.indexOf('<think>');
-        if (openIdx !== -1) {
-          output += this.buffer.slice(0, openIdx);
-          this.insideThink = true;
-          this.buffer = this.buffer.slice(openIdx + 7);
-          continue; // 可能后面就有 </think>
-        }
-        output += this.buffer;
-        this.buffer = '';
-        break;
+      const openIdx = this.buffer.indexOf('<think>');
+      if (openIdx !== -1) {
+        output += this.buffer.slice(0, openIdx);
+        this.insideThink = true;
+        this.buffer = this.buffer.slice(openIdx + 7);
+        continue;
       }
+      output += this.buffer;
+      this.buffer = '';
+      break;
     }
 
     return output;

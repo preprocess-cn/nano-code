@@ -42,6 +42,10 @@ export interface DebugEvent extends AgentEvent {
   data: string;
 }
 
+export function isMainAgent(agentName: string): boolean {
+  return agentName === 'main';
+}
+
 // ════════════════════════════════════════════
 // DisplayPlugin — 展示层插件接口
 // ════════════════════════════════════════════
@@ -149,7 +153,7 @@ export function printPluginList(registry: PluginRegistry): void {
 
   console.log(`\n  已注册插件 (${plugins.length}):\n`);
   for (const p of plugins) {
-    const tag = p.name.startsWith('mcp:') ? 'MCP' : '内置';
+    const tag = p.name.startsWith('mcp:') ? 'MCP' : p.name.startsWith('agent:') ? 'agent' : '内置';
     console.log(`  ${p.name} [${tag}]`);
     if (p.description) {
       console.log(`   〉${p.description}`);

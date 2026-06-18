@@ -9,7 +9,7 @@ function mockLLMClient() {
   return {
     model: 'test-model',
     temperature: 0,
-  } as LLMClient;
+  } as unknown as LLMClient;
 }
 
 describe('createAgentToolPlugin', () => {

@@ -7,16 +7,12 @@ import { ToolDefinition, ToolResponse, ToolContext } from '../contract.js';
  * 通过动态 import() 加载 npm 包并将其注册为 NanoPlugin。
  * npm 包应使用默认导出（export default）导出一个 NanoPlugin 对象。
  *
- * 配置示例（.nano-code.json）：
- * ```json
- * {
- *   "plugins": {
- *     "my-helper": {
- *       "type": "npm",
- *       "spec": "@scope/my-nano-plugin"
- *     }
- *   }
- * }
+ * 配置示例（.nano-code.yaml）：
+ * ```yaml
+ * plugins:
+ *   my-helper:
+ *     type: npm
+ *     spec: "@scope/my-nano-plugin"
  * ```
  */
 export const npmLoaderPlugin: NanoPlugin = {

@@ -15,7 +15,7 @@ import { resolveDisplayPlugin } from './plugins/display/loader.js';
 import { cac } from 'cac';
 import { getPackageVersion } from './version.js';
 
-function handleExit(display?: DisplayManager) {
+function handleExit(display?: DisplayManager): never {
   display?.stop('** 感谢使用 nano-code，祝您编码愉快！');
   process.exit(0);
 }
@@ -27,42 +27,26 @@ async function startCLI(options: { debug?: boolean; think?: boolean; skipPermiss
     ? applyProfile(loadConfig(), options.profile)
     : loadConfig();
 
-  // ── Validate presentation config ──
-  const presCfg = config.presentation;
-  if (presCfg?.enabled === false && !presCfg.plugin) {
+  // ── Validate display config ──
+  const dispCfg = config.display;
+  if (dispCfg?.enabled === false && !dispCfg.plugin) {
     console.error('[FATAL] 展示层已被禁用且未指定替代插件。展示层必须存在。');
-    console.error('        请在配置中设置 presentation.plugin 或移除 presentation.enabled=false。');
+    console.error('        请在配置中设置 display.plugin 或移除 display.enabled=false。');
     process.exit(1);
   }
 
-  // ── Load presentation plugin ──
-  const display = new DisplayManager();
-  if (config.presentation?.plugin) {
+  // ── Load display plugin ──
+  const displayMgr = new DisplayManager();
+  if (config.display?.plugin) {
     try {
-      const plugin = await resolveDisplayPlugin(config.presentation.plugin);
-      if (plugin) {
-        display.addPlugin(plugin);
-      } else {
-        // resolveDisplayPlugin 对 "repl" 返回 null，使用默认
-        display.addPlugin(replDisplay);
-      }
+      const plugin = await resolveDisplayPlugin(config.display.plugin);
+      displayMgr.addPlugin(plugin ?? replDisplay);
     } catch (err: any) {
       console.error(err.message);
       process.exit(1);
     }
   } else {
-    // 未配置 → 默认 repl
-    display.addPlugin(replDisplay);
-  }
-
-  if(options.debug) {
-    display.onStatus({ message: `#  当前已开启 [DEBUG 调试模式]，模型: ${config.core.model}`, agentName: 'main' });
-  }
-  if (options.think && !options.debug) {
-    display.onStatus({ message: ' <-> 当前已开启 [思维链显示]，将输出 AI 思考过程。', agentName: 'main' });
-  }
-  if (options.skipPermission) {
-    display.onStatus({ message: ' [!] 当前已开启 [免确认模式]，系统底层安全拦截仍然生效。', agentName: 'main' });
+    displayMgr.addPlugin(replDisplay);
   }
 
   // ── LLM Client ──
@@ -123,7 +107,7 @@ async function startCLI(options: { debug?: boolean; think?: boolean; skipPermiss
   const agentDefs = loadAgentDefinitions();
   for (const def of agentDefs) {
     if (def.enabled === false) continue;
-    const plugin = createAgentToolPlugin(def, llmClient);
+    const plugin = createAgentToolPlugin(def, llmClient, displayMgr);
     await registry.register(plugin);
   }
 
@@ -140,40 +124,47 @@ async function startCLI(options: { debug?: boolean; think?: boolean; skipPermiss
     : '我可以帮您解答编程问题，提供代码示例和建议。';
   const greeting = config.agent?.greeting || defaultGreeting;
 
-  display.start({
+  displayMgr.start({
     greeting,
     agentName: 'main',
     profileName: options.profile,
     hasTools,
   });
 
-  const agent = new NanoCodeAgent(registry, options.debug, options.think, llmClient, config.agent?.role, config.systemPrompt, 'main', display);
+  if(options.debug) {
+    displayMgr.onStatus({ message: `#  当前已开启 [DEBUG 调试模式]，模型: ${config.core.model}`, agentName: 'main' });
+  }
+  if (options.think && !options.debug) {
+    displayMgr.onStatus({ message: ' <-> 当前已开启 [思维链显示]，将输出 AI 思考过程。', agentName: 'main' });
+  }
+  if (options.skipPermission) {
+    displayMgr.onStatus({ message: ' [!] 当前已开启 [免确认模式]，系统底层安全拦截仍然生效。', agentName: 'main' });
+  }
+
+  const agent = new NanoCodeAgent(registry, options.debug, options.think, llmClient, config.agent?.role, config.systemPrompt, 'main', displayMgr);
 
   // ── --continue: restore previous session ──
   if (options.continue) {
     const session = loadSession(process.cwd());
     if (session) {
       agent.loadHistory(session.messages);
-      display.onStatus({ message: `   ↻ 已恢复上次会话 (${session.messages.length} 条消息，最后更新 ${session.updatedAt})\n`, agentName: 'main' });
+      displayMgr.onStatus({ message: `   ↻ 已恢复上次会话 (${session.messages.length} 条消息，最后更新 ${session.updatedAt})\n`, agentName: 'main' });
     } else {
-      display.onStatus({ message: '   - 未找到之前保存的会话，开始新的对话。\n', agentName: 'main' });
+      displayMgr.onStatus({ message: '   - 未找到之前保存的会话，开始新的对话。\n', agentName: 'main' });
     }
   }
 
   // 3. 进入无限交互循环
   while (true) {
-    const userPrompt = await display.prompt();
+    const userPrompt = await displayMgr.prompt();
     if (userPrompt === null) {
-      handleExit(display);
+      handleExit(displayMgr);
     }
 
     try {
       await agent.runTask(userPrompt);
     } catch (error) {
-      display.onError({ message: `X 顶层循环捕获到未处理的致命异常: ${error}`, agentName: 'main', stack: error instanceof Error ? error.stack : undefined });
-      if (error instanceof Error && error.stack) {
-        display.onDebug({ data: error.stack, agentName: 'main' });
-      }
+      displayMgr.onError({ message: `X 顶层循环捕获到未处理的致命异常: ${error}`, agentName: 'main', stack: error instanceof Error ? error.stack : undefined });
     } finally {
       saveSession(process.cwd(), agent.getHistory());
     }

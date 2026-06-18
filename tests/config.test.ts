@@ -6,9 +6,9 @@ describe('Config — merge', () => {
 
   it('returns defaults when both configs are null', () => {
     const cfg = _mergeConfigs(null, null);
-    assert.equal(cfg.core.model, 'gpt-4o');
-    assert.equal(cfg.core.temperature, 0);
-    assert.equal(cfg.core.maxTokens, 4096);
+    assert.equal(cfg.core.model, undefined);
+    assert.equal(cfg.core.temperature, undefined);
+    assert.equal(cfg.core.maxTokens, 128000);
     assert.equal(cfg.core.defaultTimeout, 120000);
     assert.deepEqual(cfg.plugins, {});
     assert.equal(cfg.agent, undefined);
@@ -22,7 +22,7 @@ describe('Config — merge', () => {
     assert.equal(cfg.core.model, 'deepseek-chat');
     assert.equal(cfg.core.temperature, 0.3);
     // Unset fields stay at default
-    assert.equal(cfg.core.maxTokens, 4096);
+    assert.equal(cfg.core.maxTokens, 128000);
     assert.equal(cfg.core.defaultTimeout, 120000);
   });
 
@@ -50,16 +50,16 @@ describe('Config — merge', () => {
       { core: { model: 'custom' } },
     );
     assert.equal(cfg.core.model, 'custom');
-    assert.equal(cfg.core.temperature, 0);   // default
-    assert.equal(cfg.core.maxTokens, 4096);   // default
-    assert.equal(cfg.core.defaultTimeout, 120000); // default
+    assert.equal(cfg.core.temperature, undefined);   // 无默认值，由 LLMClient 兜底
+    assert.equal(cfg.core.maxTokens, 128000);  // default
+    assert.equal(cfg.core.defaultTimeout, 120000);   // default
   });
 
   it('non-object core override is ignored', () => {
     const cfg = _mergeConfigs(null, { core: 'invalid' } as any);
-    // Falls back to default
-    assert.equal(cfg.core.model, 'gpt-4o');
-    assert.equal(cfg.core.temperature, 0);
+    // Falls back to default (model/temperature 无默认，由 LLMClient 兜底)
+    assert.equal(cfg.core.model, undefined);
+    assert.equal(cfg.core.temperature, undefined);
   });
 
   it('merges plugins from global and project', () => {
@@ -99,7 +99,7 @@ describe('Config — merge', () => {
       unknownKey: { foo: 1 },
     } as any);
     // Should still produce a valid config
-    assert.equal(cfg.core.model, 'gpt-4o');
+    assert.equal(cfg.core.model, undefined);
   });
 
 });

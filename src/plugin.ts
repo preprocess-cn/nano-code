@@ -264,9 +264,11 @@ export class PluginRegistry {
 
 // ── Builtin plugin loaders ──
 
-const BUILTIN_LOADERS: Record<string, () => Promise<NanoPlugin>> = {
-  fs: () => import('./plugins/tools/fs.js').then(m => m.fsPlugin),
-  command: () => import('./plugins/tools/command.js').then(m => m.commandPlugin),
+const BUILTIN_LOADERS: Record<string, (settings?: Record<string, any>) => Promise<NanoPlugin>> = {
+  fs: async () => (await import('./plugins/tools/fs.js')).fsPlugin,
+  command: async () => (await import('./plugins/tools/command.js')).commandPlugin,
+  memory: async (s) => (await import('./plugins/tools/memory.js')).createMemoryPlugin(s || {}),
+  'token-budget': async (s) => (await import('./plugins/token-budget.js')).createTokenBudgetPlugin(s || {}),
 };
 
 /**
@@ -278,26 +280,10 @@ export async function registerBuiltinPlugin(
   name: string,
   settings?: Record<string, any>,
 ): Promise<boolean> {
-  if (settings) registry.setPluginConfig(name, settings);
-
   const loader = BUILTIN_LOADERS[name];
-  if (loader) {
-    await registry.register(await loader());
-    return true;
-  }
+  if (!loader) return false;
 
-  switch (name) {
-    case 'memory': {
-      const { createMemoryPlugin } = await import('./plugins/tools/memory.js');
-      await registry.register(createMemoryPlugin(settings || {}));
-      return true;
-    }
-    case 'token-budget': {
-      const { createTokenBudgetPlugin } = await import('./plugins/token-budget.js');
-      await registry.register(createTokenBudgetPlugin(settings || {}));
-      return true;
-    }
-    default:
-      return false;
-  }
+  if (settings) registry.setPluginConfig(name, settings);
+  await registry.register(await loader(settings));
+  return true;
 }

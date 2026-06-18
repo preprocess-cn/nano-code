@@ -2,7 +2,7 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert';
 import { commandPlugin } from '../src/plugins/tools/command.js';
 
-const NO_CONFIRM = { skipPermission: true, cwd: process.cwd(), defaultTimeout: 30000 };
+const NO_CONFIRM = { skipPermission: true, cwd: process.cwd(), defaultTimeout: 30000, sideEffect: false };
 
 describe('Command Runner 环境与执行测试', () => {
 

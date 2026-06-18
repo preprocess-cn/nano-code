@@ -3,6 +3,8 @@ import * as path from 'path';
 import * as os from 'os';
 import * as yaml from 'js-yaml';
 
+const CONFIG_TOP_KEYS = new Set(['core', 'plugins', 'agent', 'display']);
+
 // ── Typed config interface ──
 
 export interface AgentConfig {
@@ -37,8 +39,8 @@ export interface PluginConfigEntry {
 
 export interface NanoConfig {
   core: {
-    model: string;
-    temperature: number;
+    model?: string;
+    temperature?: number;
     maxTokens: number;
     defaultTimeout: number;
     apiKey?: string;
@@ -53,7 +55,7 @@ export interface NanoConfig {
   /** 系统提示词配置（来自 YAML），prompt.ts 读取此字段拼接。 */
   systemPrompt?: SystemPromptConfig;
   /** 展示层配置。plugin 指定展示插件名（默认 "repl"），enabled=false 时必须有其它展示层代替。 */
-  presentation?: {
+  display?: {
     plugin?: string;
     enabled?: boolean;
   };
@@ -63,9 +65,7 @@ export interface NanoConfig {
 
 const DEFAULT_CONFIG: NanoConfig = {
   core: {
-    model: 'gpt-4o',
-    temperature: 0,
-    maxTokens: 4096,
+    maxTokens: 128000,
     defaultTimeout: 120000,
   },
   plugins: {},
@@ -118,7 +118,7 @@ function getGlobalYAMLConfigPath(): string {
 }
 
 function getProjectConfigPath(): string {
-  return path.join(process.cwd(), '.nano-code.json');
+  return path.join(process.cwd(), '.nano-code.yaml');
 }
 
 function getGlobalProfilePath(name: string): string {
@@ -204,26 +204,29 @@ export function ensureDefaultYAML(): void {
 }
 
 /**
- * 加载 YAML 全局配置文件。不存在或解析失败时返回 null。
+ * 加载 YAML 配置文件。不存在或解析失败时返回 null。
  */
-function loadYAMLConfig(): Record<string, unknown> | null {
-  const yamlPath = getGlobalYAMLConfigPath();
+function loadYAMLFromFile(filePath: string): Record<string, unknown> | null {
   try {
-    const raw = fs.readFileSync(yamlPath, 'utf-8');
+    const raw = fs.readFileSync(filePath, 'utf-8');
     const parsed = yaml.load(raw);
     if (typeof parsed !== 'object' || parsed === null) {
-      console.warn(`[config] Warning: ${yamlPath} 必须包含一个对象，跳过。`);
+      console.warn(`[config] Warning: ${filePath} 必须包含一个对象，跳过。`);
       return null;
     }
     return parsed as Record<string, unknown>;
   } catch (err) {
     if (err instanceof yaml.YAMLException) {
-      console.warn(`[config] Warning: ${yamlPath} YAML 解析失败，跳过。`);
+      console.warn(`[config] Warning: ${filePath} YAML 解析失败，跳过。`);
     } else {
-      console.warn(`[config] Warning: 无法读取 ${yamlPath}: ${err}`);
+      console.warn(`[config] Warning: 无法读取 ${filePath}: ${err}`);
     }
     return null;
   }
+}
+
+function loadYAMLConfig(): Record<string, unknown> | null {
+  return loadYAMLFromFile(getGlobalYAMLConfigPath());
 }
 
 /**
@@ -268,11 +271,10 @@ function validateType(val: unknown, type: 'string' | 'number' | 'boolean'): bool
  */
 export function validateConfigObject(raw: Record<string, unknown>): ConfigValidationWarning[] {
   const warnings: ConfigValidationWarning[] = [];
-  const TOP_KEYS = new Set(['core', 'plugins', 'agent', 'presentation']);
-  const PRESENTATION_KEYS = new Set(['plugin', 'enabled']);
+  const DISPLAY_KEYS = new Set(['plugin', 'enabled']);
 
   for (const key of Object.keys(raw)) {
-    if (!TOP_KEYS.has(key)) {
+    if (!CONFIG_TOP_KEYS.has(key)) {
       warnings.push({ path: key, message: `未知的配置项 "${key}"` });
     }
   }
@@ -383,19 +385,19 @@ export function validateConfigObject(raw: Record<string, unknown>): ConfigValida
     }
   }
 
-  // presentation.*
-  if (isNonEmptyObject(raw.presentation)) {
-    const pres = raw.presentation as Record<string, unknown>;
-    for (const key of Object.keys(pres)) {
-      if (!PRESENTATION_KEYS.has(key)) {
-        warnings.push({ path: `presentation.${key}`, message: `未知的展示层配置项 "${key}"` });
+  // display.*
+  if (isNonEmptyObject(raw.display)) {
+    const dsp = raw.display as Record<string, unknown>;
+    for (const key of Object.keys(dsp)) {
+      if (!DISPLAY_KEYS.has(key)) {
+        warnings.push({ path: `display.${key}`, message: `未知的展示层配置项 "${key}"` });
       }
     }
-    if ('plugin' in pres && !validateType(pres.plugin, 'string')) {
-      warnings.push({ path: 'presentation.plugin', message: 'plugin 必须为字符串' });
+    if ('plugin' in dsp && !validateType(dsp.plugin, 'string')) {
+      warnings.push({ path: 'display.plugin', message: 'plugin 必须为字符串' });
     }
-    if ('enabled' in pres && !validateType(pres.enabled, 'boolean')) {
-      warnings.push({ path: 'presentation.enabled', message: 'enabled 必须为布尔值' });
+    if ('enabled' in dsp && !validateType(dsp.enabled, 'boolean')) {
+      warnings.push({ path: 'display.enabled', message: 'enabled 必须为布尔值' });
     }
   }
 
@@ -506,7 +508,7 @@ function mergeConfigs(
 
     // Warn about unknown top-level keys
     for (const key of Object.keys(data)) {
-      if (key !== 'core' && key !== 'plugins' && key !== 'agent' && key !== 'presentation') {
+      if (!CONFIG_TOP_KEYS.has(key)) {
         console.warn(`[config] Warning: Unknown config key "${key}" in ${label} config, ignoring.`);
       }
     }
@@ -526,18 +528,18 @@ function mergeConfigs(
       result.plugins = mergePluginEntries(result.plugins, data.plugins);
     }
 
-    // Merge presentation (shallow — project overrides global)
-    if ('presentation' in data) {
-      const override = isNonEmptyObject(data.presentation)
-        ? data.presentation as Record<string, unknown>
+    // Merge display (shallow — project overrides global)
+    if ('display' in data) {
+      const override = isNonEmptyObject(data.display)
+        ? data.display as Record<string, unknown>
         : null;
       if (override) {
-        result.presentation = {
-          ...result.presentation,
+        result.display = {
+          ...result.display,
           ...override,
-        } as typeof result.presentation;
+        } as typeof result.display;
       } else {
-        result.presentation = undefined;
+        result.display = undefined;
       }
     }
   }
@@ -548,10 +550,26 @@ function mergeConfigs(
 // ── Exported API ──
 
 /**
+ * 加载项目 YAML 配置文件。不存在或解析失败时返回 null。
+ */
+function loadProjectYAMLConfig(): Record<string, unknown> | null {
+  const configPath = getProjectConfigPath();
+  const data = loadYAMLFromFile(configPath);
+  if (!data) return null;
+
+  // Schema validation catches typos and type errors early
+  const warnings = validateConfigObject(data);
+  for (const w of warnings) {
+    console.warn(`[config] Warning: ${configPath} — ${w.path}: ${w.message}`);
+  }
+  return data;
+}
+
+/**
  * Load and merge config:
  *
  *   1. `~/.nano-code/config.yaml` — 全局 YAML（system_plugins + env + 服务商+插件配置）
- *   2. `$CWD/.nano-code.json`     — 项目配置（覆盖全局）
+ *   2. `$CWD/.nano-code.yaml`     — 项目配置（覆盖全局）
  */
 export function loadConfig(): NanoConfig {
   ensureDefaultYAML();
@@ -578,16 +596,15 @@ export function loadConfig(): NanoConfig {
 
   // 只取合并系统认识的三个字段，新加 YAML 字段无需修改此处
   const yamlMerge = yamlData ? pickMergeKeys(yamlData) : null;
-  const result = mergeConfigs(yamlMerge, tryLoadConfigFile(getProjectConfigPath()));
+  const result = mergeConfigs(yamlMerge, loadProjectYAMLConfig());
   result.systemPlugins = systemPlugins;
   result.systemPrompt = systemPrompt;
   return result;
 }
 
 function pickMergeKeys(data: Record<string, unknown>): Record<string, unknown> {
-  const ALLOWED = new Set(['core', 'agent', 'plugins', 'presentation']);
   const result: Record<string, unknown> = {};
-  for (const key of ALLOWED) {
+  for (const key of CONFIG_TOP_KEYS) {
     if (key in data) result[key] = data[key];
   }
   return result;

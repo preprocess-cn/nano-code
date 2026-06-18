@@ -12,7 +12,7 @@
     "start": "node dist/index.js",
     "dev": "tsc --watch & node --watch dist/index.js",
     "debug": "node dist/index.js --debug",
-    "test": "node --import tsx --test tests/*.test.ts"
+    "test": "tsc --noEmit -p tsconfig.test.json && node --import tsx --test tests/*.test.ts"
   },
   "keywords": [
     "cli",
@@ -29,6 +29,8 @@
     "cac": "^7.0.0",
     "dotenv": "^16.4.7",
     "js-yaml": "^4.2.0",
+    "marked": "^18.0.5",
+    "neo-blessed": "^0.2.0",
     "openai": "^4.86.0",
     "zod": "^3.24.1"
   },

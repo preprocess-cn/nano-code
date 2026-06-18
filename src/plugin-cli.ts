@@ -7,7 +7,7 @@ import { loadConfig, getSystemWhitelist } from './config.js';
 import { loadAgentDefinitions } from './agent-loader.js';
 
 const GLOBAL_DIR = path.join(os.homedir(), '.nano-code');
-const PROJECT_CONFIG = path.join(process.cwd(), '.nano-code.json');
+const PROJECT_CONFIG = path.join(process.cwd(), '.nano-code.yaml');
 
 export async function handlePluginCommand(args: string[], _globalOptions: any): Promise<void> {
   const cmd = args[0];
@@ -212,7 +212,7 @@ async function setEnabled(name: string, enabled: boolean): Promise<void> {
   const whitelist = getSystemWhitelist(config);
 
   if (whitelist.has(name)) {
-    console.error(`"${name}" 是系统插件，请通过 .nano-code.json 配置文件操作。`);
+    console.error(`"${name}" 是系统插件，请通过 .nano-code.yaml 配置文件操作。`);
     return;
   }
 
