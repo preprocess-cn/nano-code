@@ -1,15 +1,23 @@
 import { intro, text, outro, isCancel } from '@clack/prompts';
 import { DisplayPlugin, StartConfig, StatusEvent, StreamEvent, ToolCallEvent, ToolResultEvent, ErrorEvent, DebugEvent, isMainAgent } from '../../display.js';
+import { ThinkStream } from '../../think-stream.js';
 
 /** 非主 agent 的消息加 [name] 前缀 */
 function p(agentName: string, msg: string): string {
   return isMainAgent(agentName) ? msg : `[${agentName}] ${msg}`;
 }
 
+let showThink = false;
+let debug = false;
+const thinkFilter = new ThinkStream();
+
 export const replDisplay: DisplayPlugin = {
   name: 'repl',
 
   onStart(config: StartConfig): void {
+    showThink = config.showThink === true;
+    debug = config.debug || false;
+
     console.log('\n');
     intro('! nano-code 终端 AI 编程助手 启动中...');
 
@@ -18,6 +26,12 @@ export const replDisplay: DisplayPlugin = {
       console.log(` * 角色配置：${config.profileName}`);
     }
     console.log(` * 提示：${config.greeting}`);
+    if (debug) {
+      console.log(' * 调试模式已开启，将输出 LLM 交互的详细数据');
+    }
+    if (showThink && !debug) {
+      console.log(' * 思维链显示已开启，将输出 AI 思考过程');
+    }
     console.log(' [!] 退出：输入 "exit"、"quit" 或直接按下 Ctrl+C 即可。');
     console.log('----------------------------------------------------\n');
   },
@@ -44,6 +58,7 @@ export const replDisplay: DisplayPlugin = {
   },
 
   onUserInput(input: string, sourcePlugin: string): void {
+    thinkFilter.reset();
     if (sourcePlugin === 'repl') return;
     const preview = input.length > 10 ? input.slice(0, 10) + '…' : input;
     console.log(`  [来自 ${sourcePlugin}] >> ${preview}`);
@@ -55,15 +70,20 @@ export const replDisplay: DisplayPlugin = {
 
   onStreamChunk(event: StreamEvent): void {
     if (!event.text) return;
+    const text = showThink
+      ? event.text.replace(/<\/?think>/g, '')
+      : thinkFilter.next(event.text);
+    if (!text) return;
     if (isMainAgent(event.agentName)) {
-      process.stdout.write(event.text);
+      process.stdout.write(text);
     } else {
-      const prefixed = event.text.split('\n').map(l => p(event.agentName, l)).join('\n');
+      const prefixed = text.split('\n').map(l => p(event.agentName, l)).join('\n');
       process.stdout.write(prefixed);
     }
   },
 
   onToolCall(event: ToolCallEvent): void {
+    thinkFilter.reset();
     console.log(p(event.agentName, `\n#  AI 申请调用本地工具: [ ${event.toolName} ]`));
   },
 
@@ -89,6 +109,7 @@ export const replDisplay: DisplayPlugin = {
   },
 
   onDebug(event: DebugEvent): void {
+    if (!debug) return;
     console.log(p(event.agentName, event.data));
   },
 };

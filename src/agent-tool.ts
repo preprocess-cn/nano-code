@@ -56,8 +56,6 @@ export function createAgentToolPlugin(
       // Create and run sub-agent
       const subAgent = new NanoCodeAgent(
         subRegistry,
-        false,
-        false,
         llmClient,
         def.role,
         def.systemPrompt,

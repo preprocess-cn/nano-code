@@ -9,6 +9,8 @@ export interface StartConfig {
   agentName: string;
   profileName?: string;
   hasTools: boolean;
+  showThink?: boolean;
+  debug?: boolean;
 }
 
 export interface AgentEvent {

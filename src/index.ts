@@ -129,6 +129,8 @@ async function startCLI(options: { debug?: boolean; think?: boolean; skipPermiss
     agentName: 'main',
     profileName: options.profile,
     hasTools,
+    showThink: options.think,
+    debug: options.debug,
   });
 
   if(options.debug) {
@@ -141,7 +143,7 @@ async function startCLI(options: { debug?: boolean; think?: boolean; skipPermiss
     displayMgr.onStatus({ message: ' [!] 当前已开启 [免确认模式]，系统底层安全拦截仍然生效。', agentName: 'main' });
   }
 
-  const agent = new NanoCodeAgent(registry, options.debug, options.think, llmClient, config.agent?.role, config.systemPrompt, 'main', displayMgr);
+  const agent = new NanoCodeAgent(registry, llmClient, config.agent?.role, config.systemPrompt, 'main', displayMgr);
 
   // ── --continue: restore previous session ──
   if (options.continue) {

@@ -2,25 +2,20 @@ import { LLMClient, ChatMessage } from './llm.js';
 import { PluginRegistry, ToolCall } from './plugin.js';
 import { SystemPromptConfig } from './config.js';
 import { buildSystemPrompt } from './prompt.js';
-import { ThinkStream } from './think-stream.js';
 import { DisplayManager, isMainAgent } from './display.js';
 
 export class NanoCodeAgent {
   private llmClient: LLMClient;
   private messageHistory: ChatMessage[] = [];
   private registry: PluginRegistry;
-  private isDebug = false;
-  private showThink = false;
   private agentRole?: string;
   private promptConfig?: SystemPromptConfig;
   private name: string;
   private display?: DisplayManager;
 
-  constructor(registry: PluginRegistry, isDebug = false, showThink = false, llmClient?: LLMClient, agentRole?: string, promptConfig?: SystemPromptConfig, name = 'main', display?: DisplayManager) {
+  constructor(registry: PluginRegistry, llmClient?: LLMClient, agentRole?: string, promptConfig?: SystemPromptConfig, name = 'main', display?: DisplayManager) {
     this.llmClient = llmClient || new LLMClient();
     this.registry = registry;
-    this.isDebug = isDebug;
-    this.showThink = showThink;
     this.agentRole = agentRole;
     this.promptConfig = promptConfig;
     this.name = name;
@@ -46,16 +41,8 @@ export class NanoCodeAgent {
     });
 
     while (true) {
-      if (this.isDebug) {
-        this.display?.onStatus({ message: '\n==================================================', agentName: this.name });
-        this.display?.onStatus({ message: '>> [DEBUG] 发送给大模型的完整 Messages 历史:', agentName: this.name });
-        this.display?.onDebug({ data: JSON.stringify(this.messageHistory, null, 2), agentName: this.name });
-        this.display?.onStatus({ message: '==================================================\n', agentName: this.name });
-      }
-
       this.display?.onStatus({ message: '? 正在思考并请求大模型...', agentName: this.name });
 
-      const thinkStream = new ThinkStream();
       const systemMessage = buildSystemPrompt(this.registry, this.promptConfig, this.agentRole);
       let messagesWithSystem: ChatMessage[] = [systemMessage, ...this.messageHistory];
       messagesWithSystem = this.registry.execBeforeRequest(messagesWithSystem);
@@ -65,10 +52,8 @@ export class NanoCodeAgent {
 
       const onChunk = (chunk: string) => {
         if (!chunk) return;
-        const text = this.showThink ? chunk : thinkStream.next(chunk) || '';
-        if (!text) return;
-        if (isSubAgent) streamBuffer += text;
-        else this.display?.onStreamChunk({ text, agentName: this.name });
+        if (isSubAgent) streamBuffer += chunk;
+        else this.display?.onStreamChunk({ text: chunk, agentName: this.name });
       };
 
       const response = await this.llmClient.sendSystemMessage(
@@ -78,13 +63,6 @@ export class NanoCodeAgent {
       );
 
       this.registry.execAfterRequest(response);
-
-      if (this.isDebug) {
-        this.display?.onStatus({ message: '\n\n==================================================', agentName: this.name });
-        this.display?.onStatus({ message: '[IN] [DEBUG] 大模型返回的原始 Response 响应:', agentName: this.name });
-        this.display?.onDebug({ data: JSON.stringify(response, null, 2), agentName: this.name });
-        this.display?.onStatus({ message: '==================================================\n', agentName: this.name });
-      }
 
       if (isSubAgent && streamBuffer) {
         this.display?.onStreamChunk({ text: '\n' + streamBuffer + '\n', agentName: this.name });
@@ -151,18 +129,12 @@ export class NanoCodeAgent {
     }
 
     this.display?.onToolCall({ toolName, args: toolArgs, agentName: this.name });
-    if (this.isDebug) {
-      this.display?.onDebug({ data: `// [DEBUG] 工具入参: ${JSON.stringify(toolArgs)}`, agentName: this.name });
-    }
 
     let resultText = '';
     try {
       resultText = await this.registry.execute(toolName, toolArgs);
     } catch (err: any) {
       resultText = `工具物理执行失败: ${err.message}`;
-      if (this.isDebug) {
-        this.display?.onDebug({ data: `X [DEBUG] 工具执行崩溃: ${err.stack}`, agentName: this.name });
-      }
     }
 
     let toolResult: any;
@@ -174,10 +146,6 @@ export class NanoCodeAgent {
     this.registry.execAfterToolCall(toolResult);
 
     this.display?.onToolResult({ status: toolResult.status, message: toolResult.message, agentName: this.name });
-
-    if (this.isDebug) {
-      this.display?.onDebug({ data: `[IN] [DEBUG] 工具返回结果喂给 AI: ${resultText}`, agentName: this.name });
-    }
 
     this.messageHistory.push({
       role: 'tool',
