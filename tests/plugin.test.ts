@@ -145,14 +145,14 @@ describe('PluginRegistry — execute', () => {
   it('routes to correct plugin', async () => {
     const r = new PluginRegistry();
     await r.register(createMockPlugin('p1', ['t1']));
-    const result = JSON.parse(await r.execute('t1', {}));
+    const result = await r.execute('t1', {});
     assert.equal(result.status, 'success');
-    assert.match(result.data, /p1/);
+    assert.match(result.data!, /p1/);
   });
 
   it('returns error for unknown tool', async () => {
     const r = new PluginRegistry();
-    const result = JSON.parse(await r.execute('unknown', {}));
+    const result = await r.execute('unknown', {});
     assert.equal(result.status, 'error');
   });
 
@@ -196,9 +196,9 @@ describe('PluginRegistry — execute', () => {
       async execute() { throw new Error('boom'); },
     };
     await r.register(p);
-    const result = JSON.parse(await r.execute('t1', {}));
+    const result = await r.execute('t1', {});
     assert.equal(result.status, 'error');
-    assert.match(result.message, /boom/);
+    assert.match(result.message!, /boom/);
   });
 });
 

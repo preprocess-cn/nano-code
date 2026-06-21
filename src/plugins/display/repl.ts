@@ -1,6 +1,6 @@
 import { intro, text, outro, isCancel } from '@clack/prompts';
 import { DisplayPlugin, StartConfig, StatusEvent, StreamEvent, ToolCallEvent, ToolResultEvent, ErrorEvent, DebugEvent, isMainAgent } from '../../display.js';
-import { ThinkStream } from '../../think-stream.js';
+import { ThinkStream } from './think-stream.js';
 
 /** 非主 agent 的消息加 [name] 前缀 */
 function p(agentName: string, msg: string): string {

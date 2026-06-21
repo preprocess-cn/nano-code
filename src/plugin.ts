@@ -1,4 +1,4 @@
-import { ToolDefinition, ToolResponse, ToolContext, formatToolResponse } from './contract.js';
+import { ToolDefinition, ToolResponse, ToolContext } from './contract.js';
 import { ChatMessage } from './llm.js';
 
 // ── Companion types for hooks ──
@@ -118,21 +118,21 @@ export class PluginRegistry {
     return schemas;
   }
 
-  async execute(name: string, args: any, ctx?: Partial<ToolContext>): Promise<string> {
+  async execute(name: string, args: any, ctx?: Partial<ToolContext>): Promise<ToolResponse> {
     const pluginName = this.toolIndex.get(name);
     if (!pluginName) {
-      return formatToolResponse({
+      return {
         status: 'error',
         message: `Unknown tool: ${name}`,
-      });
+      };
     }
 
     const plugin = this.plugins.get(pluginName);
     if (!plugin) {
-      return formatToolResponse({
+      return {
         status: 'error',
         message: `Plugin not found: ${pluginName}`,
-      });
+      };
     }
 
     const fullContext: ToolContext = {
@@ -154,12 +154,12 @@ export class PluginRegistry {
         }),
       ]);
       if (timer.ref) clearTimeout(timer.ref);
-      return formatToolResponse(result);
+      return result;
     } catch (error) {
-      return formatToolResponse({
+      return {
         status: 'error',
         message: `Tool execution failed: ${error instanceof Error ? error.message : String(error)}`,
-      });
+      };
     }
   }
 

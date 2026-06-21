@@ -3,6 +3,7 @@ import { PluginRegistry, ToolCall } from './plugin.js';
 import { SystemPromptConfig } from './config.js';
 import { buildSystemPrompt } from './prompt.js';
 import { DisplayManager, isMainAgent } from './display.js';
+import { formatToolResponse, ToolResponse } from './contract.js';
 
 export class NanoCodeAgent {
   private llmClient: LLMClient;
@@ -130,18 +131,11 @@ export class NanoCodeAgent {
 
     this.display?.onToolCall({ toolName, args: toolArgs, agentName: this.name });
 
-    let resultText = '';
+    let toolResult: ToolResponse;
     try {
-      resultText = await this.registry.execute(toolName, toolArgs);
+      toolResult = await this.registry.execute(toolName, toolArgs);
     } catch (err: any) {
-      resultText = `工具物理执行失败: ${err.message}`;
-    }
-
-    let toolResult: any;
-    try {
-      toolResult = JSON.parse(resultText);
-    } catch {
-      toolResult = { status: 'error', data: resultText };
+      toolResult = { status: 'error', message: `工具物理执行失败: ${err.message}` };
     }
     this.registry.execAfterToolCall(toolResult);
 
@@ -151,7 +145,7 @@ export class NanoCodeAgent {
       role: 'tool',
       tool_call_id: rawToolCall.id,
       name: toolName,
-      content: resultText,
+      content: formatToolResponse(toolResult),
     });
 
     return toolResult.status === 'rejected_by_user' ? 'rejected' : 'ok';

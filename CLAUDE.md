@@ -2,44 +2,89 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Build & Test Commands
+## Build & Test
 
-- `npm run build` — TypeScript compile (tsc)
-- `npm start` — run compiled output
-- `npm run dev` — watch mode (tsc --watch + node --watch)
-- `npm test` — run all tests (Node test runner + tsx)
-- `npx tsx src/index.ts` — run directly without building
-- `npx tsx src/index.ts --debug` — run with debug output
-- `npx tsx src/index.ts --think` — show LLM thinking traces
+```bash
+# Build (compile TypeScript)
+npm run build
 
-## Project Overview
+# Run all tests
+npm test
 
-nano-code is a lightweight CLI AI coding assistant with a ReAct agent loop. It connects to any OpenAI-compatible API (OpenAI, DeepSeek, Ollama via `OPENAI_BASE_URL`), streams responses, and provides file operations through tool calling.
+# Run tests in watch mode
+npx tsx --test --watch tests/*.test.ts
 
-## Architecture
+# Type check only (no emit)
+npx tsc --noEmit -p tsconfig.test.json
 
-```
-src/
-  index.ts              — CLI entry (cac arg parsing, clack prompts, main loop)
-  agent.ts              — NanoCodeAgent: ReAct loop, tool call dispatch, think-tag filtering
-  llm.ts                — LLMClient: OpenAI streaming API wrapper
-  tools/
-    index.ts            — Tool registry: aggregates all schemas, routes tool calls
-    schema.ts           — ToolResponse type, formatToolResponse helper
-    fileViewer.ts       — list_project_files, view_file_content (path-traversal safe)
-    fileWriter.ts       — write_file_content (with human-in-the-loop confirm)
-    commandRunner.ts    — run_bash_command (dangerous command blacklist, 30s timeout, log truncation)
-    filePatcher.ts      — patch_file (search-and-replace with exact match)
-tests/
-  commandRunner.test.ts
-  environmentSnapshot.test.ts
-  security.test.ts
+# Run without compiling (development)
+npx tsx src/index.ts
+
+# Run with specific options
+npx tsx src/index.ts --debug    # debug mode (LLM raw packets)
+npx tsx src/index.ts --think    # show chain-of-thought
+npx tsx src/index.ts --continue # resume last session
+npx tsx src/index.ts --profile treehole  # agent profile mode
 ```
 
-## Key Design Decisions
+## Architecture Overview
 
-- **Streaming-first**: LLM responses stream through a `<think>` tag filter that hides reasoning from the user unless `--think` is enabled
-- **Human-in-the-loop**: File writes, bash commands, and file patches require interactive user confirmation via `@clack/prompts`
-- **Security**: Path traversal prevention (all paths resolved against CWD), dangerous-command blacklist (rm -rf, dd, shutdown, fork bombs, reverse shells), silent blocking without prompt
-- **Log truncation**: Command output >8KB is truncated (first 4KB + last 4KB) to protect LLM context
-- **Response format**: All tools return `ToolResponse { status, data?, message? }` serialized as JSON strings
+nano-code is a lightweight CLI AI coding assistant with a **plugin-driven, layered architecture**:
+
+```
+CLI (cac) → Agent Loop → PluginRegistry → LLM Client (OpenAI API)
+                    ↕
+              Builtin Plugins (fs, command, memory, token-budget)
+              MCP Plugins (stdio/HTTP JSON-RPC)
+              npm Plugins (dynamic import())
+              Agent Tools (sub-agents via ~/.nano-code/agents/*.yaml)
+```
+
+### Core Loop (`src/agent.ts`)
+
+`NanoCodeAgent.runTask()` implements a ReAct loop:
+1. Build system prompt (role + project files + plugin hooks)
+2. Send messages to LLM via streaming API
+3. If LLM returns tool calls → execute each via PluginRegistry
+4. Feed tool results back → repeat until LLM stops requesting tools
+
+### Plugin System (`src/plugin.ts`)
+
+`NanoPlugin` interface with hooks: `getTools()`, `execute()`, `onInit`, `onDestroy`, `onSystemPrompt`, `onBeforeRequest`, `onAfterRequest`, `onBeforeToolCall`, `onAfterToolCall`. `PluginRegistry` manages registration, tool routing, and hook chain execution.
+
+### Display Layer (`src/display.ts`)
+
+`DisplayPlugin` interface for UI. `DisplayManager` supports multiple plugins. Default is REPL (`src/plugins/display/repl.ts`). The TUI under `src/plugins/display/` is a separate display implementation still in development.
+
+### Key Source Files
+
+| File | Purpose |
+|------|---------|
+| `src/index.ts` | Entry point, CLI arg parsing, config loading, plugin registration |
+| `src/agent.ts` | `NanoCodeAgent` — main ReAct loop |
+| `src/plugin.ts` | `NanoPlugin` interface + `PluginRegistry` |
+| `src/config.ts` | Multi-layer config (global YAML → project YAML → profile overlay) |
+| `src/llm.ts` | `LLMClient` — OpenAI-compatible streaming API + retry logic |
+| `src/prompt.ts` | System prompt builder (template + project files + plugin hooks) |
+| `src/contract.ts` | Shared types: `ToolResponse`, `ToolDefinition`, `ToolContext` |
+| `src/display.ts` | `DisplayPlugin` interface + `DisplayManager` + `printPluginList` |
+| `src/session.ts` | Session persistence (`.nano-code-session.json`) |
+| `src/think-stream.ts` | `<think>` tag stream filter |
+| `src/agent-loader.ts` | Scan `~/.nano-code/agents/*.yaml` for agent definitions |
+| `src/agent-tool.ts` | Wrap agent definition as a `NanoPlugin` tool for sub-agent |
+| `src/plugin-cli.ts` | `nano-code plugin install/list/enable/disable` |
+| `src/plugins/tools/fs.ts` | File system tools (list, read, write, patch) |
+| `src/plugins/tools/command.ts` | Bash command execution with danger blacklist |
+| `src/plugins/tools/memory.ts` | Persistent memory (save/recall with tags) |
+| `src/plugins/mcp/adapter.ts` | MCP stdio/HTTP transport + JSON-RPC client |
+| `src/plugins/token-budget.ts` | Token usage tracking and budget enforcement |
+| `src/plugins/npm-loader.ts` | Dynamic `import()` of npm packages as NanoPlugin |
+
+### Key Design Decisions
+
+- **Plugin-driven**: Core has no built-in business tools. Everything (fs, command, memory) is a plugin registered at startup.
+- **Sub-agent isolation**: Agent tools (`agent-tool.ts`) spawn independent `NanoCodeAgent` + `PluginRegistry` instances. They share the LLM client but have separate plugin sets and message histories. Recursive guard: sub-agents never register agent tools.
+- **Side-effect flag**: Each tool has `sideEffect: boolean`. `false` = read-only, auto-executed without user confirmation. Used in `ToolContext`.
+- **Config layering**: Shell env > `$CWD/.env` > `~/.nano-code/.env` > project `.nano-code.yaml` > global `~/.nano-code/config.yaml` > defaults.
+- **ThinkStream**: The REPL display uses `ThinkStream` to strip `<think>...</think>` tags from stream output unless `--think` is on.
+- **MCP transport**: Supports both stdio (child process) and HTTP transports, with exponential backoff retry, timeout per request, and cleanup on destroy.
