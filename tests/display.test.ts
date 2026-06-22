@@ -89,6 +89,9 @@ describe('DisplayManager — multi-plugin', () => {
   const pluginA = {
     name: 'pluginA',
     onStatus(event: { message: string }) { calls.push(`A:${event.message}`); },
+    onAgentTurnStart() { calls.push('A:onAgentTurnStart'); },
+    onAgentTurnEnd() { calls.push('A:onAgentTurnEnd'); },
+    onStateSnapshot(snapshot: { messageCount: number }) { calls.push(`A:stateSnapshot:${snapshot.messageCount}`); },
     prompt: async () => null,  // 无输入
   };
 
@@ -97,6 +100,9 @@ describe('DisplayManager — multi-plugin', () => {
     onStatus(event: { message: string }) { calls.push(`B:${event.message}`); },
     onStreamChunk(event: { text: string }) { calls.push(`B-stream:${event.text}`); },
     onUserInput(input: string, src: string) { calls.push(`B-input:${src}:${input}`); },
+    onAgentTurnStart() { calls.push('B:onAgentTurnStart'); },
+    onAgentTurnEnd() { calls.push('B:onAgentTurnEnd'); },
+    onStateSnapshot(snapshot: { messageCount: number }) { calls.push(`B:stateSnapshot:${snapshot.messageCount}`); },
     prompt: async () => 'input-from-B',
   };
 
@@ -187,6 +193,69 @@ describe('DisplayManager — multi-plugin', () => {
     const inputCalls = calls.filter(c => c.startsWith('B-input:'));
     assert.equal(inputCalls.length, 1);
     assert.equal(inputCalls[0], 'B-input:pluginB:input-from-B');
+  });
+
+  it('onAgentTurnStart broadcasts to all plugins', () => {
+    const mgr = new DisplayManager();
+    mgr.addPlugin(pluginA);
+    mgr.addPlugin(pluginB);
+    mgr.onAgentTurnStart({ agentName: 'test' });
+    assert.equal(calls.length, 2);
+    assert.equal(calls[0], 'A:onAgentTurnStart');
+    assert.equal(calls[1], 'B:onAgentTurnStart');
+  });
+
+  it('onAgentTurnEnd broadcasts to all plugins', () => {
+    const mgr = new DisplayManager();
+    mgr.addPlugin(pluginA);
+    mgr.addPlugin(pluginB);
+    mgr.onAgentTurnEnd({ agentName: 'test' });
+    assert.equal(calls.length, 2);
+    assert.equal(calls[0], 'A:onAgentTurnEnd');
+    assert.equal(calls[1], 'B:onAgentTurnEnd');
+  });
+
+  it('onStateSnapshot broadcasts to all plugins', () => {
+    const mgr = new DisplayManager();
+    mgr.addPlugin(pluginA);
+    mgr.addPlugin(pluginB);
+    mgr.onStateSnapshot({ agentName: 'test', messageCount: 5 });
+    assert.equal(calls.length, 2);
+    assert.equal(calls[0], 'A:stateSnapshot:5');
+    assert.equal(calls[1], 'B:stateSnapshot:5');
+  });
+
+  it('onAgentTurnStart/End and onStateSnapshot are no-ops when no plugin implements them', () => {
+    const mgr = new DisplayManager();
+    // plugin with no lifecycle hooks
+    mgr.addPlugin({ name: 'silent' });
+    // None of these should throw
+    mgr.onAgentTurnStart({ agentName: 'test' });
+    mgr.onAgentTurnEnd({ agentName: 'test' });
+    mgr.onStateSnapshot({ agentName: 'test', messageCount: 0 });
+    assert.equal(calls.length, 0);
+  });
+
+  it('DisplayPlugin interface supports ownsOutput and rawInput properties', () => {
+    const plugin: any = { name: 'custom' };
+    plugin.ownsOutput = true;
+    plugin.rawInput = true;
+    assert.equal(plugin.ownsOutput, true);
+    assert.equal(plugin.rawInput, true);
+  });
+
+  it('StartConfig supports stdio fields', () => {
+    const config: any = {
+      greeting: 'hi',
+      agentName: 'main',
+      hasTools: false,
+      stdout: process.stdout,
+      stderr: process.stderr,
+      stdin: process.stdin,
+    };
+    assert.equal(config.stdout, process.stdout);
+    assert.equal(config.stderr, process.stderr);
+    assert.equal(config.stdin, process.stdin);
   });
 
 });

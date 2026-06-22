@@ -36,10 +36,14 @@ export class NanoCodeAgent {
   }
 
   async runTask(userPrompt: string): Promise<string | undefined> {
+    this.display?.onAgentTurnStart({ agentName: this.name });
+
     this.messageHistory.push({
       role: 'user',
       content: userPrompt,
     });
+
+    this.registry.store.set('agent', { agentName: this.name, status: 'running', messageCount: this.messageHistory.length });
 
     while (true) {
       this.display?.onStatus({ message: '? 正在思考并请求大模型...', agentName: this.name });
@@ -57,13 +61,17 @@ export class NanoCodeAgent {
         else this.display?.onStreamChunk({ text: chunk, agentName: this.name });
       };
 
+      const extraParams = this.registry.collectExtraParams();
+      let responseMeta: Record<string, unknown> | undefined;
       const response = await this.llmClient.sendSystemMessage(
         messagesWithSystem,
         this.registry.getAllSchemas(),
         onChunk,
+        extraParams,
+        (meta) => { responseMeta = meta; },
       );
 
-      this.registry.execAfterRequest(response);
+      this.registry.execAfterRequest(response, responseMeta);
 
       if (isSubAgent && streamBuffer) {
         this.display?.onStreamChunk({ text: '\n' + streamBuffer + '\n', agentName: this.name });
@@ -81,13 +89,20 @@ export class NanoCodeAgent {
 
       if (response.stopReason !== 'tool_use' || !response.toolCalls) {
         this.display?.onStatus({ message: '\n', agentName: this.name });
+        this.display?.onStateSnapshot({ agentName: this.name, messageCount: this.messageHistory.length });
+        this.display?.onAgentTurnEnd({ agentName: this.name });
         break;
       }
 
       for (const rawToolCall of response.toolCalls) {
         if (await this.executeToolCall(rawToolCall) === 'rejected') break;
       }
+
+      this.display?.onStateSnapshot({ agentName: this.name, messageCount: this.messageHistory.length });
+		this.registry.store.set("agent", { agentName: this.name, status: "running", messageCount: this.messageHistory.length });
     }
+
+    this.registry.store.set('agent', { agentName: this.name, status: 'idle', messageCount: this.messageHistory.length });
 
     const lastMsg = this.messageHistory[this.messageHistory.length - 1];
     if (lastMsg?.role === 'assistant') {

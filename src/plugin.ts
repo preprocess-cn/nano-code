@@ -1,5 +1,7 @@
 import { ToolDefinition, ToolResponse, ToolContext } from './contract.js';
 import { ChatMessage } from './llm.js';
+import { IStore } from './store.js';
+import { InMemoryStore } from './plugins/store/in-memory.js';
 
 // ── Companion types for hooks ──
 
@@ -7,11 +9,6 @@ export interface LLMResponse {
   text: string | null;
   toolCalls?: ToolCall[];
   stopReason?: string;
-  usage?: {
-    promptTokens: number;
-    completionTokens: number;
-    totalTokens: number;
-  };
 }
 
 export interface ToolCall {
@@ -37,9 +34,13 @@ export interface NanoPlugin {
 
   onSystemPrompt?(prompt: string): string;
   onBeforeRequest?(messages: ChatMessage[]): ChatMessage[];
-  onAfterRequest?(response: LLMResponse): void;
+  /** rawMeta 是 LLM 层返回的原始元数据（如 token 用量），核心不知晓其结构，由插件自行解析 */
+  onAfterRequest?(response: LLMResponse, rawMeta?: Record<string, unknown>): void;
   onBeforeToolCall?(toolCall: ToolCall): ToolCall | null;
   onAfterToolCall?(result: ToolResponse): ToolResponse;
+
+  /** 返回额外参数注入到 LLM API 请求体中。核心只透传，不知晓参数含义 */
+  onExtraParams?(): Record<string, unknown>;
 }
 
 // ── Plugin registry ──
@@ -51,6 +52,9 @@ export class PluginRegistry {
   private configs: Map<string, Record<string, any>> = new Map();
   private defaultCtx: Partial<ToolContext> = {};
   private agentName: string = 'main';
+
+  /** 插件间共享状态通道。核心只做透传，不知晓任何 key 的业务含义 */
+  store: IStore = new InMemoryStore();
 
   setDefaultContext(ctx: Partial<ToolContext>): void {
     this.defaultCtx = ctx;
@@ -191,16 +195,31 @@ export class PluginRegistry {
     return result;
   }
 
-  execAfterRequest(response: LLMResponse): void {
+  execAfterRequest(response: LLMResponse, rawMeta?: Record<string, unknown>): void {
     for (const plugin of this.plugins.values()) {
       if (plugin.onAfterRequest) {
         try {
-          plugin.onAfterRequest(response);
+          plugin.onAfterRequest(response, rawMeta);
         } catch (err) {
           console.error(`[plugin] onAfterRequest failed for "${plugin.name}":`, err);
         }
       }
     }
+  }
+
+  collectExtraParams(): Record<string, unknown> {
+    let params: Record<string, unknown> = {};
+    for (const plugin of this.plugins.values()) {
+      if (plugin.onExtraParams) {
+        try {
+          const result = plugin.onExtraParams();
+          if (result) params = { ...params, ...result };
+        } catch (err) {
+          console.error(`[plugin] onExtraParams failed for "${plugin.name}":`, err);
+        }
+      }
+    }
+    return params;
   }
 
   execBeforeToolCall(toolCall: ToolCall): ToolCall | null {

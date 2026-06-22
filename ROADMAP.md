@@ -1,6 +1,6 @@
 # 开发路线图
 
-## P0 — 核心可靠（当前）
+## P0 — 核心可靠
 
 | 状态 | 功能 | 说明 |
 |------|------|------|
@@ -9,64 +9,55 @@
 | ✅ | Agent 测试覆盖 | getHistory / loadHistory 测试 |
 | ✅ | 会话持久化 | `-c`/`--continue` 接续上次对话，`finally` 块自动保存 |
 
-剩余：端到端的会话接续集成测试。
-
 ## P1 — 日常体验
 
-| # | 功能 | 预估 | 说明 |
-|---|------|------|------|
-| 1 | **npm 插件加载器** | ✅ | 实现 `type: 'npm'`，支持 `import()` 加载 npm 包为 NanoPlugin |
-| 2 | **`plugin` CLI 子命令** | ✅ | `nano-code plugin install/list/enable/disable`，插件生命周期管理 |
-| 3 | **配置校验** | ✅ | 载入 config.json 时做 schema 校验 |
-| 4 | **配置 merge 精简** | ✅ | 泛型 mergeTypedFields |
-| 5 | **agent runTask 职责拆分** | ✅ | think-tag 过滤/流处理/工具调度拆出独立方法 |
+| # | 功能 | 说明 |
+|---|------|------|
+| ✅ | npm 插件加载器 | `import()` 加载 npm 包为 NanoPlugin |
+| ✅ | `plugin` CLI 子命令 | install/list/enable/disable，插件生命周期管理 |
+| ✅ | 配置校验 | config.json 载入时 schema 校验 |
+| ✅ | 配置 merge 精简 | 泛型 mergeTypedFields |
+| ✅ | agent runTask 职责拆分 | think-tag 过滤/流处理/工具调度拆出独立方法 |
 
 ## P2 — 能力增强
 
-| # | 功能 | 预估 | 说明 |
-|---|------|------|------|
-| 6 | **会话上下文修剪** | ~2d | token-budget 之上做智能摘要/裁剪 |
-| 7 | **LLM 失败重试** | ✅ | 3 次指数退避（1s, 2s, 4s） |
-| 8 | **多轮摘要记忆** | ~3d | 超出窗口时自动压缩历史 |
-| 9 | **工具型子 agent 系统** | ✅ | `~/.nano-code/agents/*.yaml` 自动注册为 `agent-<name>` 工具，独立 PluginRegistry + messageHistory |
-| 10 | **角色模式 & 斜杠命令** | ~3d | `profiles/` 目录可用于 `--profile` 切换角色。斜杠命令 `/treehole` 等运行时切换未实现 |
-| 11 | **Agent Plugin 架构** | ✅ | 子 agent 持有独立 `NanoCodeAgent` 实例 + 独立插件集合，通过 agent 名称身份识别 |
-| 12 | **Profile Plugin 架构** | ✅ | 角色型 profile 注册机制（文件扫描），`--profile` 加载，profile 维护独立工具配置 |
-| 13 | **展示层插件系统** | ✅ | `DisplayPlugin` 接口 + `DisplayManager` 多插件管理器，结构化事件，`display.plugin` 配置 |
+| # | 功能 | 说明 |
+|---|------|------|
+| ✅ | LLM 失败重试 | 3 次指数退避（1s, 2s, 4s） |
+| ✅ | 工具型子 agent 系统 | `~/.nano-code/agents/*.yaml` 自动注册为 `agent-<name>` 工具 |
+| ✅ | Agent Plugin 架构 | 子 agent 持有独立 `NanoCodeAgent` + 独立插件集合 |
+| ✅ | Profile Plugin 架构 | 角色型 profile 注册机制，`--profile` 加载 |
+| ✅ | 展示层插件系统 | `DisplayPlugin` 接口 + `DisplayManager` 多插件管理器 |
+| ✅ | 插件间共享状态（Store） | `IStore` 接口 + 默认 `InMemoryStore`，可替换实现 |
+| ✅ | 额外参数注入（extraParams） | `onExtraParams` 钩子透传 LLM API 请求参数 |
+| ✅ | usage 剥离 | LLMResponse 不再含 usage，改为 `rawMeta` 回调由插件自行解析 |
+| ✅ | 插件生命周期事件 | `onAgentTurnStart/End`、`onStateSnapshot` 等 DisplayPlugin 新事件 |
+| ✅ | Agent 构造函数精简 | 移除 `isSubAgent`/`showThink` 参数，改为 display 驱动 |
 
 ## P3 — 生态准备
 
-| # | 功能 | 预估 | 说明 |
-|---|------|------|------|
-| 14 | **CI/CD** | ~3h | GitHub Actions + 自动测试 |
-| 15 | **发布准备** | ~4h | package.json 补全、README 更新、npm publish |
-| 16 | **插件权限系统** | ~3d | npm 插件的安全沙箱 + 权限声明机制 |
-| 17 | **插件热加载** | ~2d | 运行时开关插件无需重启 |
-| 18 | **更多内置插件** | ~2d | 按需提供数据库、HTTP 请求等常用插件 |
+| # | 功能 | 说明 |
+|---|------|------|
+| ☐ | CI/CD | GitHub Actions + 自动测试 |
+| ☐ | 发布准备 | package.json 补全、README 更新、npm publish |
+| ☐ | 插件权限系统 | npm 插件的安全沙箱 + 权限声明机制 |
+| ☐ | 插件热加载 | 运行时开关插件无需重启 |
+| ☐ | 会话上下文修剪 | token-budget 之上做智能摘要/裁剪 |
+| ☐ | 多轮摘要记忆 | 超出窗口时自动压缩历史 |
+| ☐ | 角色模式 & 斜杠命令 | profiles/ 斜杠命令 `/treehole` 等运行时切换 |
+| ☐ | 更多内置插件 | 按需提供数据库、HTTP 请求等常用插件 |
 
-## 展示层插件化（未来方向）
+## 展示层插件（已实现）
 
-当前交互层（TUI/REPL）硬编码在 `index.ts` 中。可抽象为 `PresentationPlugin` 接口：
+`DisplayPlugin` 接口已经抽象，当前内置 `repl` 插件使用 `@clack/prompts` + console 输出。更多展示层场景待实现：
 
-```typescript
-interface PresentationPlugin {
-  start?(config: { greeting: string; agentName: string }): Promise<void>;
-  prompt?(): Promise<string | null>;      // 获取用户输入
-  showStream?(chunk: string): void;       // 流式输出
-  showTool?(toolName: string): void;      // 工具调用
-  showStatus?(msg: string): void;         // 状态信息
-  end?(message: string): void;
-}
-```
-
-场景：
-- **默认 REPL**：`@clack/prompts` + console 输出（当前实现）
-- **极简模式**：`readline` 裸输入
-- **子 agent 模式**：带 `[name]` 前缀的输出（已内建）
-- **CLI one-shot 模式**：stdin/stdout 管道
-- **Web UI**：对接到 HTTP/WebSocket
-
-每个 agent 或 profile 可在定义中指定自己的展示插件。
+| 场景 | 状态 |
+|------|------|
+| **REPL**（`@clack/prompts` + console） | ✅ 已实现 |
+| **子 agent 前缀**（带 `[name]` 输出） | ✅ 已内建 |
+| **极简模式**（`readline` 裸输入） | ☐ 未实现 |
+| **CLI one-shot 模式**（stdin/stdout 管道） | ☐ 未实现 |
+| **Web UI**（HTTP/WebSocket） | ☐ 未实现 |
 
 ## Agent 架构
 
@@ -128,3 +119,7 @@ MCP 和 agent 工具都是"主 agent 委托能力给外部"，区别在：
 - **输出分层**：子 agent 输出带 `[name]` 前缀，主 agent 无前缀
 - **展示层插件系统**：`DisplayPlugin` 接口 + `DisplayManager` 多插件管理器，结构化事件传递，`display.plugin` 配置加载
 - **展示层插件引导**：`plugin-guides/display-plugin.md`，面向 AI 编程工具的开发文档
+- **DisplayPlugin 生命周期事件**：`onAgentTurnStart/End`、`onStateSnapshot`，插件可感知 agent 任务开始/结束
+- **额外参数注入（extraParams）**：`NanoPlugin.onExtraParams()` 钩子，`PluginRegistry.collectExtraParams()` 收集，agent 自动透传 LLM API
+- **usage 剥离**：`LLMResponse` 不再包含 usage，改为 `onMeta` 回调 + `rawMeta` 参数由插件自行解析（`token-budget` 插件已适配）
+- **插件间共享状态（IStore）**：`IStore` 接口（`get/set/subscribe`），默认 `InMemoryStore` 实现，位于 `src/plugins/store/`，可替换为任何后端存储

@@ -82,6 +82,22 @@ describe('Token Budget Plugin', () => {
     assert.match(last.content!, /注意/);
   });
 
+  it('uses exact token counts from rawMeta when available', () => {
+    const plugin = createTokenBudgetPlugin({ maxTokensPerSession: 100000 });
+    // Fallback: rawMeta empty, text-based estimation
+    plugin.onAfterRequest!({ text: 'hello' });
+    const beforeEst = plugin.onBeforeToolCall!({ id: '1', function: { name: 'test', arguments: '{}' } });
+    assert.notEqual(beforeEst, null, 'should not reject yet');
+
+    // Reset: inject exact token counts via rawMeta
+    const plugin2 = createTokenBudgetPlugin({ maxTokensPerSession: 9 });
+    plugin2.onAfterRequest!({ text: 'tiny' }, { promptTokens: 5, completionTokens: 5, totalTokens: 10 });
+
+    // Over budget now
+    const result = plugin2.onBeforeToolCall!({ id: '2', function: { name: 'test', arguments: '{}' } });
+    assert.equal(result, null, 'should reject after rawMeta indicates budget exhausted');
+  });
+
   it('can be registered as a NanoPlugin', async () => {
     const r = new PluginRegistry();
     const plugin = createTokenBudgetPlugin();

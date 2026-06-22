@@ -11,6 +11,12 @@ export interface StartConfig {
   hasTools: boolean;
   showThink?: boolean;
   debug?: boolean;
+  /** 标准输出流，默认 process.stdout */
+  stdout?: NodeJS.WriteStream;
+  /** 标准错误流，默认 process.stderr */
+  stderr?: NodeJS.WriteStream;
+  /** 标准输入流，默认 process.stdin */
+  stdin?: NodeJS.ReadStream;
 }
 
 export interface AgentEvent {
@@ -49,11 +55,27 @@ export function isMainAgent(agentName: string): boolean {
 }
 
 // ════════════════════════════════════════════
+// StateSnapshot — agent 循环结束时的状态快照
+// ════════════════════════════════════════════
+
+export interface StateSnapshot {
+  /** 当前 agent 名称 */
+  agentName: string;
+  /** 消息总数（含 system） */
+  messageCount: number;
+}
+
+// ════════════════════════════════════════════
 // DisplayPlugin — 展示层插件接口
 // ════════════════════════════════════════════
 
 export interface DisplayPlugin {
   name: string;
+
+  /** 当前 display 插件是否独占全部终端输出。true = 核心禁止直接写 stdout */
+  ownsOutput?: boolean;
+  /** 当前 display 插件是否需要按键级原始输入 */
+  rawInput?: boolean;
 
   onStart?(config: StartConfig): void;
   onStop?(message: string): void;
@@ -69,6 +91,14 @@ export interface DisplayPlugin {
   onToolResult?(event: ToolResultEvent): void;
   onError?(event: ErrorEvent): void;
   onDebug?(event: DebugEvent): void;
+
+  /** agent 开始思考/处理任务时触发 */
+  onAgentTurnStart?(event: AgentEvent): void;
+  /** agent 完成一轮思考/任务时触发 */
+  onAgentTurnEnd?(event: AgentEvent): void;
+
+  /** 状态快照推送 */
+  onStateSnapshot?(snapshot: StateSnapshot): void;
 }
 
 // ════════════════════════════════════════════
@@ -139,6 +169,18 @@ export class DisplayManager {
 
   onDebug(event: DebugEvent): void {
     for (const p of this.plugins) p.onDebug?.(event);
+  }
+
+  onAgentTurnStart(event: AgentEvent): void {
+    for (const p of this.plugins) p.onAgentTurnStart?.(event);
+  }
+
+  onAgentTurnEnd(event: AgentEvent): void {
+    for (const p of this.plugins) p.onAgentTurnEnd?.(event);
+  }
+
+  onStateSnapshot(snapshot: StateSnapshot): void {
+    for (const p of this.plugins) p.onStateSnapshot?.(snapshot);
   }
 }
 

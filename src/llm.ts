@@ -51,6 +51,10 @@ export class LLMClient {
   private model: string;
   private temperature: number;
 
+  getModel(): string {
+    return this.model;
+  }
+
   constructor(config?: LLMConfig) {
     const apiKey = config?.apiKey || process.env.OPENAI_API_KEY;
     if (!apiKey) {
@@ -79,7 +83,9 @@ export class LLMClient {
   async sendSystemMessage(
     messages: ChatMessage[],
     tools: any[],
-    onChunk?: (text: string) => void
+    onChunk?: (text: string) => void,
+    extraParams?: Record<string, unknown>,
+    onMeta?: (meta: Record<string, unknown>) => void,
   ) {
     // ── Retry loop with exponential backoff ──
     let lastError: any;
@@ -88,6 +94,8 @@ export class LLMClient {
       try {
         // 请求 OpenAI 的流式接口
         const stream = await this.openai.chat.completions.create({
+          // extraParams 最先 spread，确保核心参数不会被覆盖
+          ...extraParams,
           model: this.model,
           messages: messages as any,
           stream: true,
@@ -99,12 +107,16 @@ export class LLMClient {
 
         let fullText = '';
         let finalToolCalls: any[] = [];
-        let finalUsage: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number } | undefined;
+        let finalMeta: Record<string, unknown> | undefined;
 
         for await (const chunk of stream) {
           // Capture usage from the final chunk (present when stream_options.include_usage is true)
           if (chunk.usage) {
-            finalUsage = chunk.usage;
+            finalMeta = {
+              promptTokens: chunk.usage.prompt_tokens ?? 0,
+              completionTokens: chunk.usage.completion_tokens ?? 0,
+              totalTokens: chunk.usage.total_tokens ?? 0,
+            };
           }
 
           const delta = chunk.choices[0]?.delta;
@@ -150,15 +162,12 @@ export class LLMClient {
         // 过滤掉可能存在的空数据
         const validToolCalls = finalToolCalls.filter(tc => tc && tc.function.name);
 
+        if (finalMeta && onMeta) onMeta(finalMeta);
+
         return {
           text: fullText,
           toolCalls: validToolCalls.length > 0 ? validToolCalls : undefined,
           stopReason: validToolCalls.length > 0 ? 'tool_use' : 'stop',
-          usage: finalUsage ? {
-            promptTokens: finalUsage.prompt_tokens ?? 0,
-            completionTokens: finalUsage.completion_tokens ?? 0,
-            totalTokens: finalUsage.total_tokens ?? 0,
-          } : undefined,
         };
 
       } catch (error) {

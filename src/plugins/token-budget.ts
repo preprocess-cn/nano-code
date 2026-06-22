@@ -119,12 +119,12 @@ export function createTokenBudgetPlugin(config?: TokenBudgetConfig): NanoPlugin 
       return messages;
     },
 
-    onAfterRequest(response: LLMResponse): void {
-      if (response.usage) {
+    onAfterRequest(response: LLMResponse, rawMeta?: Record<string, unknown>): void {
+      if (rawMeta?.promptTokens != null) {
         // Use exact token counts from API response
-        inputTokens += response.usage.promptTokens;
-        outputTokens += response.usage.completionTokens;
-        totalTokens += response.usage.totalTokens;
+        inputTokens += rawMeta.promptTokens as number;
+        outputTokens += rawMeta.completionTokens as number;
+        totalTokens += rawMeta.totalTokens as number;
       } else {
         // Fallback estimation when API doesn't return usage
         const responseText = response.text || '';

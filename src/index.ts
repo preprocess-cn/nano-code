@@ -131,6 +131,9 @@ async function startCLI(options: { debug?: boolean; think?: boolean; skipPermiss
     hasTools,
     showThink: options.think,
     debug: options.debug,
+    stdout: process.stdout,
+    stderr: process.stderr,
+    stdin: process.stdin,
   });
 
   if(options.debug) {

@@ -60,6 +60,26 @@ display:
 
 展示层插件不通过 `plugin-cli` 管理，独立于 PluginRegistry。未配置时默认使用 `repl`。
 
+### Agent 生命周期事件
+
+`DisplayPlugin` 支持 agent 任务生命周期事件，方便 UI 插件感知 agent 状态变化：
+
+```typescript
+interface DisplayPlugin {
+  // ... 基础事件
+  onAgentTurnStart?(event: AgentEvent): void;  // agent 开始处理
+  onAgentTurnEnd?(event: AgentEvent): void;    // agent 完成一轮处理
+  onStateSnapshot?(snapshot: StateSnapshot): void; // 状态快照（含 messageCount）
+}
+```
+
+Store 中的 `agent` key 自动更新 agent 运行状态：
+
+```typescript
+registry.store.get('agent')
+// → { agentName: 'main', status: 'running'|'idle', messageCount: 10 }
+```
+
 ## 配置
 
 ### 环境变量（`.env`）
@@ -225,11 +245,11 @@ plugins:
 │                   Core                           │
 │  CLI → Agent Loop → PluginRegistry → LLM Client │
 └─────────────────────────────────────────────────┘
-         ↕ register & dispatch
-┌─────────────────────────────────────────────────┐
-│                  Plugins                         │
-│  fs │ command │ memory │ MCP │ token-budget │ … │
-└─────────────────────────────────────────────────┘
+         ↕ register & dispatch     ↕ shared state
+┌──────────────────────────────────┴────────────────┐
+│                  Plugins                           │
+│  fs │ command │ memory │ MCP │ token-budget │ …  │
+└───────────────────────────────────────────────────┘
          ↕ 子 agent 调用（独立实例）
 ┌─────────────────────────────────────────────────┐
 │            Agent 工具（~/.nano-code/agents/）     │
@@ -238,7 +258,7 @@ plugins:
 ```
 
 - **Core** — Agent 循环（支持主/子两层）、LLM 通信、插件编排、配置管理
-- **Plugins** — 所有功能通过插件提供，Core 不内置任何业务工具
+- **Plugins** — 所有功能通过插件提供，Core 不内置任何业务工具。插件间通过 `IStore` 共享状态，无需互相依赖
 - **Agent 工具** — 领域专家子 agent，通过 YAML 定义，自动注册为工具，独立上下文执行
 
 ### 内置插件
@@ -248,8 +268,9 @@ plugins:
 | **fs** | `"fs": {}` | 文件列表、读取、写入、精准修改 |
 | **command** | `"command": {}` | Bash 命令执行（含危险命令黑名单） |
 | **memory** | `"memory": {}` | 记忆存储与检索，支持多会话持久化和标签查询 |
+| **store** | 内建默认 `InMemoryStore` | 插件间共享状态通道，`IStore` 接口可替换实现 |
 | **agent** | 自动发现 `~/.nano-code/agents/*.yaml` | `agent-<name>` 子 agent 调用工具 |
-| **display** | 通过 `display.plugin` 配置 | 展示层插件（独立于 PluginRegistry） |
+| **display** | 通过 `display.plugin` 配置 | 展示层插件，支持生命周期事件（独立于 PluginRegistry） |
 
 ### 可选插件
 
@@ -294,11 +315,24 @@ interface NanoPlugin {
   onDestroy?(): Promise<void>;
   onSystemPrompt?(prompt: string): string;
   onBeforeRequest?(messages): ChatMessage[];
-  onAfterRequest?(response): void;
+  onAfterRequest?(response, rawMeta?): void;  // rawMeta 由插件自行解析
   onBeforeToolCall?(toolCall): ToolCall | null;
   onAfterToolCall?(result): ToolResponse;
+  onExtraParams?(): Record<string, unknown>;  // 注入 LLM API 请求参数
 }
 ```
+
+插件间共享状态通过 `IStore` 接口（`registry.store`），不直接依赖其他插件：
+
+```typescript
+interface IStore {
+  get<T>(key: string): T | undefined;
+  set<T>(key: string, value: unknown): void;
+  subscribe(key: string, fn: () => void): () => void;
+}
+```
+
+默认实现为 `InMemoryStore`（`src/plugins/store/in-memory.ts`），可替换为任何后端存储。
 
 详细指南请参考 [`docs/plugin-development.md`](docs/plugin-development.md)。
 

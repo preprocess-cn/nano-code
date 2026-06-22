@@ -234,6 +234,19 @@ describe('PluginRegistry — hooks', () => {
     assert.deepEqual(seen, ['p1', 'p2']);
   });
 
+  it('execAfterRequest passes rawMeta to plugins', async () => {
+    const r = new PluginRegistry();
+    const captured: any[] = [];
+    await r.register({
+      ...createMockPlugin('p1'),
+      onAfterRequest: (_resp: LLMResponse, meta?: Record<string, unknown>) => { captured.push(meta); },
+    });
+    const meta = { promptTokens: 10, completionTokens: 20 };
+    r.execAfterRequest({ text: 'hi' }, meta);
+    assert.equal(captured.length, 1);
+    assert.deepEqual(captured[0], meta);
+  });
+
   it('execBeforeToolCall short-circuits on first null', async () => {
     const r = new PluginRegistry();
     const tc = createToolCall();
@@ -274,6 +287,50 @@ describe('PluginRegistry — hooks', () => {
     assert.equal(result, 'base +p2');
   });
 
+  it('collectExtraParams returns empty object when no plugin defines hook', async () => {
+    const r = new PluginRegistry();
+    await r.register(createMockPlugin('p1'));
+    assert.deepEqual(r.collectExtraParams(), {});
+  });
+
+  it('collectExtraParams returns params from single plugin', async () => {
+    const r = new PluginRegistry();
+    await r.register({
+      ...createMockPlugin('p1'),
+      onExtraParams: () => ({ max_tokens: 4096 }),
+    });
+    assert.deepEqual(r.collectExtraParams(), { max_tokens: 4096 });
+  });
+
+  it('collectExtraParams merges params from multiple plugins (later wins)', async () => {
+    const r = new PluginRegistry();
+    await r.register({
+      ...createMockPlugin('p1'),
+      onExtraParams: () => ({ max_tokens: 2048, top_k: 10 }),
+    });
+    await r.register({
+      ...createMockPlugin('p2'),
+      onExtraParams: () => ({ max_tokens: 4096 }),  // 覆盖 p1 的 max_tokens
+    });
+    const result = r.collectExtraParams();
+    assert.equal(result.max_tokens, 4096);  // p2 覆盖
+    assert.equal(result.top_k, 10);          // p1 的保留
+  });
+
+  it('plugin error in onExtraParams does not break chain', async () => {
+    const r = new PluginRegistry();
+    await r.register({
+      ...createMockPlugin('p1'),
+      onExtraParams: () => { throw new Error('oops'); },
+    });
+    await r.register({
+      ...createMockPlugin('p2'),
+      onExtraParams: () => ({ top_k: 50 }),
+    });
+    const result = r.collectExtraParams();
+    assert.deepEqual(result, { top_k: 50 });
+  });
+
   it('execBeforeToolCall error continues to next plugin', async () => {
     const r = new PluginRegistry();
     const tc = createToolCall();
@@ -283,6 +340,34 @@ describe('PluginRegistry — hooks', () => {
     assert.notEqual(result, null);
     assert.equal(result!.function.name, 'test_tool');
   });
+});
+
+// ── Store integration on PluginRegistry ──
+
+describe('PluginRegistry — store integration', () => {
+
+  it('registry has a store instance', () => {
+    const r = new PluginRegistry();
+    assert.ok(r.store, 'store should exist');
+    assert.equal(typeof r.store.get, 'function');
+    assert.equal(typeof r.store.set, 'function');
+    assert.equal(typeof r.store.subscribe, 'function');
+  });
+
+  it('plugins can access store via registry', async () => {
+    const r = new PluginRegistry();
+    let stored: any = null;
+    const p: NanoPlugin = {
+      ...createMockPlugin('p1'),
+      async onInit(registry: PluginRegistry) {
+        registry.store.set('test', { from: 'p1' });
+        stored = registry.store.get('test');
+      },
+    };
+    await r.register(p);
+    assert.deepEqual(stored, { from: 'p1' });
+  });
+
 });
 
 // ── Config namespace isolation ──
