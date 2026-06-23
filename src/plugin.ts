@@ -1,4 +1,4 @@
-import { ToolDefinition, ToolResponse, ToolContext } from './contract.js';
+import { ToolDefinition, ToolResponse, ToolContext, type PermissionConfirmRequest, type PermissionConfirmResponse, type CommandOutputHandler } from './contract.js';
 import { ChatMessage } from './llm.js';
 import { IStore } from './store.js';
 import { InMemoryStore } from './plugins/store/in-memory.js';
@@ -52,12 +52,26 @@ export class PluginRegistry {
   private configs: Map<string, Record<string, any>> = new Map();
   private defaultCtx: Partial<ToolContext> = {};
   private agentName: string = 'main';
+  private _confirmCallback?: (req: PermissionConfirmRequest) => Promise<PermissionConfirmResponse>;
+  private _outputHandler?: CommandOutputHandler;
 
   /** 插件间共享状态通道。核心只做透传，不知晓任何 key 的业务含义 */
   store: IStore = new InMemoryStore();
 
   setDefaultContext(ctx: Partial<ToolContext>): void {
     this.defaultCtx = ctx;
+  }
+
+  setConfirmCallback(cb: (req: PermissionConfirmRequest) => Promise<PermissionConfirmResponse>): void {
+    this._confirmCallback = cb;
+  }
+
+  getConfirmCallback(): ((req: PermissionConfirmRequest) => Promise<PermissionConfirmResponse>) | undefined {
+    return this._confirmCallback;
+  }
+
+  setOutputHandler(handler: CommandOutputHandler): void {
+    this._outputHandler = handler;
   }
 
   setAgentName(name: string): void {
@@ -144,6 +158,8 @@ export class PluginRegistry {
       cwd: ctx?.cwd ?? this.defaultCtx.cwd ?? process.cwd(),
       defaultTimeout: ctx?.defaultTimeout ?? this.defaultCtx.defaultTimeout ?? 30000,
       sideEffect: this.toolSideEffects.get(name) ?? true,
+      confirmCallback: this._confirmCallback,
+      outputHandler: this._outputHandler,
     };
 
     try {

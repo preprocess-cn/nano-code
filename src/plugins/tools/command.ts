@@ -88,12 +88,11 @@ export const commandPlugin: NanoPlugin = {
           }
 
           if (!ctx.skipPermission && ctx.sideEffect) {
-            console.log(`\n[!]  AI 正在申请执行终端命令：`);
-            console.log(`-> \x1b[33m${args.command}\x1b[0m`);
+            const confirmed = ctx.confirmCallback
+              ? await ctx.confirmCallback({ toolName: 'command', message: '是否批准在您的本地电脑运行此命令？', details: args.command })
+              : await userConfirmation.ask('[?] 是否批准在您的本地电脑运行此命令？');
 
-            const isConfirmed = await userConfirmation.ask('[?] 是否批准在您的本地电脑运行此命令？');
-
-            if (!isConfirmed) {
+            if (!confirmed) {
               return {
                 status: 'rejected_by_user',
                 message: 'Command execution rejected by user.'
@@ -101,7 +100,9 @@ export const commandPlugin: NanoPlugin = {
             }
           }
 
-          console.log('>> 正在执行中，请稍候...');
+          const out = ctx.outputHandler;
+          if (out) out.stdout('>> 正在执行中，请稍候...\n');
+          else console.log('>> 正在执行中，请稍候...');
 
           return await new Promise<ToolResponse>((resolve) => {
             const child = spawn(trimmedCmd, {
@@ -116,13 +117,15 @@ export const commandPlugin: NanoPlugin = {
             child.stdout.on('data', (data) => {
               const chunk = data.toString();
               stdoutAccumulator += chunk;
-              process.stdout.write(chunk);
+              if (out) out.stdout(chunk);
+              else process.stdout.write(chunk);
             });
 
             child.stderr.on('data', (data) => {
               const chunk = data.toString();
               stderrAccumulator += chunk;
-              process.stderr.write(chunk);
+              if (out) out.stderr(chunk);
+              else process.stderr.write(chunk);
             });
 
             const timeoutTimer = setTimeout(() => {

@@ -1,7 +1,8 @@
 import type { DisplayPlugin, StartConfig, StatusEvent, StreamEvent, ToolCallEvent, ToolResultEvent, ErrorEvent, AgentEvent, StateSnapshot } from '../../../display.js';
 import { inkRender, type Instance } from './ink.js';
-import { InkApp, type UIMessage, type TextSegment } from './InkApp.js';
+import { InkApp, type UIMessage, type TextSegment, type PermissionPrompt } from './InkApp.js';
 import { ThinkStream } from '../think-stream.js';
+import type { PluginRegistry } from '../../../plugin.js';
 import React from 'react';
 
 function parseThinkSegments(text: string): TextSegment[] {
@@ -55,6 +56,9 @@ function createPlugin(): DisplayPlugin {
   let thinkStream: ThinkStream | null = null;
   let lastStreamTarget: UIMessage | null = null;
   let lastThinkTarget: UIMessage | null = null;
+  // Permission confirm state
+  let pendingPermission: PermissionPrompt | null = null;
+  let permissionResolve: ((value: boolean) => void) | null = null;
 
   function render(): void {
     if (!inkInstance) return;
@@ -79,6 +83,16 @@ function createPlugin(): DisplayPlugin {
               r(null);
             }
           },
+          pendingPermission,
+          onPermissionResponse: (allowed: boolean) => {
+            if (permissionResolve) {
+              const r = permissionResolve;
+              permissionResolve = null;
+              pendingPermission = null;
+              r(allowed);
+              render();
+            }
+          },
         }),
       );
     } catch (err) {
@@ -90,6 +104,22 @@ function createPlugin(): DisplayPlugin {
     name: 'claude-code-ink',
     ownsOutput: true,
     rawInput: true,
+
+    async onInit(registry: PluginRegistry): Promise<void> {
+      registry.setConfirmCallback(async (req) => {
+        return new Promise<boolean>((resolve) => {
+          pendingPermission = { toolName: req.toolName, message: req.message, details: req.details };
+          permissionResolve = resolve;
+          render();
+        });
+      });
+      // Ink controls all terminal output; tool stdout/stderr is rendered
+      // through the tool result message system, not written to the terminal.
+      registry.setOutputHandler({
+        stdout(_chunk: string) {},
+        stderr(_chunk: string) {},
+      });
+    },
 
     onStart(config: StartConfig): void {
       greeting = config.greeting;

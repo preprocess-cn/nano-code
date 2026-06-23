@@ -157,8 +157,10 @@ export const fsPlugin: NanoPlugin = {
 
           if (!ctx.skipPermission && ctx.sideEffect) {
             const actionText = fileExists ? '[!] 覆盖修改' : '[NEW] 创建新文件';
-            const isConfirmed = await writerConfirmation.ask(`AI 申请 ${actionText} [ ${args.path} ]，是否批准此操作？`);
-            if (!isConfirmed) {
+            const confirmed = ctx.confirmCallback
+              ? await ctx.confirmCallback({ toolName: 'write_file_content', message: `是否批准此操作？`, details: `AI 申请 ${actionText} [ ${args.path} ]` })
+              : await writerConfirmation.ask(`AI 申请 ${actionText} [ ${args.path} ]，是否批准此操作？`);
+            if (!confirmed) {
               return { status: "rejected_by_user", message: 'The user explicitly rejected the file write operation' };
             }
           }
@@ -186,8 +188,10 @@ export const fsPlugin: NanoPlugin = {
           }
 
           if (!ctx.skipPermission && ctx.sideEffect) {
-            const isConfirmed = await patchConfirmation.ask(relativePath, search, replace);
-            if (!isConfirmed) {
+            const confirmed = ctx.confirmCallback
+              ? await ctx.confirmCallback({ toolName: 'patch_file', message: `是否批准修改 [ ${relativePath} ]？`, details: `[-] 修改前:\n${search}\n[+] 修改后:\n${replace}` })
+              : await patchConfirmation.ask(relativePath, search, replace);
+            if (!confirmed) {
               return { status: 'rejected_by_user', message: 'File modification rejected by user.' };
             }
           }

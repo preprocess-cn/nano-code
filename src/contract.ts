@@ -28,12 +28,30 @@ export interface ToolDefinition {
   };
 }
 
+export interface PermissionConfirmRequest {
+  toolName: string;
+  message: string;
+  details?: string;
+}
+
+export type PermissionConfirmResponse = boolean;
+
+/** Display-layer output handler for command stdout/stderr streaming. */
+export interface CommandOutputHandler {
+  stdout(chunk: string): void;
+  stderr(chunk: string): void;
+}
+
 export interface ToolContext {
   skipPermission: boolean;
   cwd: string;
   defaultTimeout: number;
   /** Whether the current tool has side effects. false = no confirmation prompt needed. */
   sideEffect: boolean;
+  /** Injected by display plugin. When set, tool plugins use this instead of direct @clack/prompts. */
+  confirmCallback?: (req: PermissionConfirmRequest) => Promise<PermissionConfirmResponse>;
+  /** Injected by display plugin. When set, tool plugins stream output here instead of process.stdout. */
+  outputHandler?: CommandOutputHandler;
 }
 
 export function formatToolResponse(response: ToolResponse): string {

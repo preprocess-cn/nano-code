@@ -111,6 +111,9 @@ async function startCLI(options: { debug?: boolean; think?: boolean; skipPermiss
     await registry.register(plugin);
   }
 
+  // ── 初始化 display 插件（注入 confirmCallback 等）──
+  await displayMgr.init(registry);
+
   // ── --list-plugins mode: print and exit ──
   if (options.listPlugins) {
     printPluginList(registry);

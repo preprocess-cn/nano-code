@@ -77,6 +77,9 @@ export interface DisplayPlugin {
   /** 当前 display 插件是否需要按键级原始输入 */
   rawInput?: boolean;
 
+  /** display 插件初始化，可在此向 registry 注册 confirmCallback 等 */
+  onInit?(registry: PluginRegistry): Promise<void>;
+
   onStart?(config: StartConfig): void;
   onStop?(message: string): void;
 
@@ -110,6 +113,15 @@ export class DisplayManager {
 
   addPlugin(plugin: DisplayPlugin): void {
     this.plugins.push(plugin);
+  }
+
+  async init(registry: PluginRegistry): Promise<void> {
+    for (const p of this.plugins) {
+      if (p.onInit) {
+        try { await p.onInit(registry); }
+        catch (err) { console.error(`[display] onInit failed for "${p.name}":`, err); }
+      }
+    }
   }
 
   removePlugin(name: string): void {

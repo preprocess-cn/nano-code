@@ -1,6 +1,7 @@
-import { intro, text, outro, isCancel } from '@clack/prompts';
+import { intro, text, outro, isCancel, confirm } from '@clack/prompts';
 import { DisplayPlugin, StartConfig, StatusEvent, StreamEvent, ToolCallEvent, ToolResultEvent, ErrorEvent, DebugEvent, isMainAgent } from '../../display.js';
 import { ThinkStream } from './think-stream.js';
+import type { PluginRegistry } from '../../plugin.js';
 
 /** 非主 agent 的消息加 [name] 前缀 */
 function p(agentName: string, msg: string): string {
@@ -13,6 +14,20 @@ const thinkFilter = new ThinkStream();
 
 export const replDisplay: DisplayPlugin = {
   name: 'repl',
+
+  async onInit(registry: PluginRegistry): Promise<void> {
+    registry.setConfirmCallback(async (req) => {
+      console.log(`\n[!]  AI 正在申请执行：${req.toolName}`);
+      if (req.details) console.log(`-> \x1b[33m${req.details}\x1b[0m`);
+      const result = await confirm({ message: req.message, initialValue: true });
+      if (typeof result === 'symbol' || !result) return false;
+      return true;
+    });
+    registry.setOutputHandler({
+      stdout(chunk: string) { process.stdout.write(chunk); },
+      stderr(chunk: string) { process.stderr.write(chunk); },
+    });
+  },
 
   onStart(config: StartConfig): void {
     showThink = config.showThink === true;
@@ -71,7 +86,7 @@ export const replDisplay: DisplayPlugin = {
   onStreamChunk(event: StreamEvent): void {
     if (!event.text) return;
     const text = showThink
-      ? event.text.replace(/<\/?think>/g, '')
+      ? event.text.replace(/<think>/g, '\x1b[90m').replace(/<\/think>/g, '\x1b[0m')
       : thinkFilter.next(event.text);
     if (!text) return;
     if (isMainAgent(event.agentName)) {

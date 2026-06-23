@@ -16,6 +16,12 @@ export interface UIMessage {
   segments?: TextSegment[];
 }
 
+export interface PermissionPrompt {
+  toolName: string;
+  message: string;
+  details?: string;
+}
+
 export interface InkAppProps {
   greeting: string;
   messages: UIMessage[];
@@ -23,6 +29,8 @@ export interface InkAppProps {
   onInputChange: (text: string) => void;
   onInputSubmit: (text: string) => void;
   onExit: () => void;
+  pendingPermission?: PermissionPrompt | null;
+  onPermissionResponse?: (allowed: boolean) => void;
 }
 
 function AgentLabel({ agentName }: { agentName: string }): React.ReactElement | null {
@@ -65,7 +73,36 @@ function MessageItem({ msg }: { msg: UIMessage }): React.ReactElement {
   );
 }
 
-function AppContent({ messages, onInputSubmit, onExit, greeting }: InkAppProps): React.ReactElement {
+function PermissionDialog({
+  toolName, message, details, onResponse,
+}: PermissionPrompt & { onResponse: (allowed: boolean) => void }): React.ReactElement {
+  // Keyboard: Enter/→ = Allow, Esc/← = Deny
+  useInput((_input: string, key: {
+    escape: boolean; return: boolean; leftArrow: boolean; rightArrow: boolean;
+  }) => {
+    if (key.escape || key.leftArrow) { onResponse(false); return; }
+    if (key.return || key.rightArrow) { onResponse(true); return; }
+  });
+
+  return React.createElement(
+    Box,
+    { flexDirection: 'column', borderStyle: 'round', borderColor: '#fbbf24', paddingX: 2, paddingY: 1 },
+    React.createElement(Text, { bold: true, color: '#fbbf24' }, `[!] 权限确认: ${toolName}`),
+    React.createElement(Text, null, message),
+    details ? React.createElement(Text, { dimColor: true }, details.split('\n').slice(0, 3).join('\n')) : null,
+    React.createElement(Box, { height: 1 }),
+    React.createElement(
+      Box,
+      { flexDirection: 'row' },
+      React.createElement(Text, { color: '#10b981', bold: true }, '[ Enter/→ ] 批准'),
+      React.createElement(Text, null, '    '),
+      React.createElement(Text, { color: '#ef4444' }, '[ Esc/← ] 拒绝'),
+    ),
+  );
+}
+
+function AppContent(props: InkAppProps): React.ReactElement {
+  const { messages, onInputSubmit, onExit, greeting, pendingPermission, onPermissionResponse } = props;
   const { setRawMode } = useStdin();
   const [input, setInput] = useState('');
   const [, setScrollTick] = useState(0);
@@ -164,6 +201,12 @@ function AppContent({ messages, onInputSubmit, onExit, greeting }: InkAppProps):
     upArrow: boolean; downArrow: boolean; pageUp: boolean; pageDown: boolean;
     wheelUp: boolean; wheelDown: boolean;
   }) => {
+    // When permission dialog is active, suppress normal input handling
+    // (PermissionDialog has its own useInput for Allow/Deny)
+    if (pendingPermission && onPermissionResponse) {
+      if (key.pageUp || key.pageDown || key.wheelUp || key.wheelDown) return; // allow scroll
+      return; // suppress all other input — PermissionDialog handles allow/deny
+    }
     const sb = scrollRef.current;
 
     // Page Up / Wheel Up: scroll back in history
@@ -248,6 +291,12 @@ function AppContent({ messages, onInputSubmit, onExit, greeting }: InkAppProps):
         ...messages.map((msg, i) =>
           React.createElement(MessageItem, { key: i, msg }),
         ),
+        pendingPermission && onPermissionResponse
+          ? React.createElement(PermissionDialog, {
+              ...pendingPermission,
+              onResponse: onPermissionResponse,
+            })
+          : null,
       ),
     ),
     // Bottom area — flexShrink=0 prevents Yoga from compressing it
