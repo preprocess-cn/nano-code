@@ -231,28 +231,35 @@ function AppContent({ messages, onInputSubmit, onExit, greeting }: InkAppProps):
   }
 
   // Normal conversation view
+  // Two-sibling layout (ref: Claude Code FullscreenLayout):
+  // - Scroll container: flexGrow=1, overflow=hidden — constrains ScrollBox
+  // - Bottom area: flexShrink=0 — always visible, never compressed
   return React.createElement(
     AlternateScreen,
     null,
+    // Scroll container (header + ScrollBox) — clips overflow, grows to fill space
     React.createElement(
       Box,
-      { flexDirection: 'column', flexGrow: 1 },
-      // Scroll indicator row — always rendered to prevent layout shift
+      { flexDirection: 'column', flexGrow: 1, overflow: 'hidden', paddingLeft: 1, paddingRight: 1 },
       headerRow,
-      // Messages area — fills remaining space, scrolls when content overflows
       React.createElement(
         ScrollBox,
-        { ref: scrollRef, flexGrow: 1, stickyScroll: true, paddingLeft: 1, paddingRight: 1, paddingTop: 1 },
+        { ref: scrollRef, flexGrow: 1, stickyScroll: true, paddingTop: 1 },
         ...messages.map((msg, i) =>
           React.createElement(MessageItem, { key: i, msg }),
         ),
       ),
+    ),
+    // Bottom area — flexShrink=0 prevents Yoga from compressing it
+    React.createElement(
+      Box,
+      { flexDirection: 'column', flexShrink: 0, paddingLeft: 1, paddingRight: 1, paddingBottom: 1 },
       // Separator
       React.createElement(Box, { height: 1 }, React.createElement(Text, { dimColor: true }, '─'.repeat(40))),
-      // Input line — always visible at bottom (outside ScrollBox)
+      // Input line
       React.createElement(
         Box,
-        { paddingLeft: 1, paddingRight: 1, paddingBottom: 1 },
+        null,
         React.createElement(Text, { bold: true }, '> '),
         React.createElement(Box, { ref: cursorRef }, React.createElement(Text, null, input)),
       ),
