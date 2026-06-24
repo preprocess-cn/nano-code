@@ -14,6 +14,12 @@ const DISPLAY_DIR = path.join(os.homedir(), '.nano-code', 'presentations');
 export async function resolveDisplayPlugin(spec: string): Promise<DisplayPlugin | null> {
   if (spec === 'repl') return null;
 
+  // Built-in ink display plugin
+  if (spec === 'claude-code-ink') {
+    const { inkDisplayPlugin } = await import('./claude-code-ink/index.js');
+    return inkDisplayPlugin;
+  }
+
   let resolvedPath: string | null = null;
 
   if (spec.startsWith('/') || spec.startsWith('./') || spec.startsWith('../')) {

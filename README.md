@@ -55,8 +55,18 @@ nano-code plugin disable <name>                # 禁用插件或 agent
 ```yaml
 # ~/.nano-code/config.yaml
 display:
-  plugin: repl  # 默认 REPL 交互。可指定路径或 ~/.nano-code/presentations/<name>.js
+  # plugin: repl              # 默认 REPL 交互（基于 @clack/prompts）
+  plugin: claude-code-ink     # Ink 终端 UI（类 Claude Code 体验）
 ```
+
+内置两个展示层插件：
+
+| 插件 | 说明 |
+|------|------|
+| `repl` | 默认，基于 `@clack/prompts` + `console` 的简单 REPL 交互 |
+| `claude-code-ink` | 基于 React + Ink 的全屏终端 UI，支持 ScrollBox 滚动、`--think` 思考内容灰色斜体区分、agent 前缀等 |
+
+`claude-code-ink` 模式下 `--think` 输出的思考内容会以灰色斜体渲染，与正常输出形成视觉区分。
 
 展示层插件不通过 `plugin-cli` 管理，独立于 PluginRegistry。未配置时默认使用 `repl`。
 

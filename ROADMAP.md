@@ -49,15 +49,19 @@
 
 ## 展示层插件（已实现）
 
-`DisplayPlugin` 接口已经抽象，当前内置 `repl` 插件使用 `@clack/prompts` + console 输出。更多展示层场景待实现：
+`DisplayPlugin` 接口已经抽象，当前内置两个展示层插件：
 
 | 场景 | 状态 |
 |------|------|
 | **REPL**（`@clack/prompts` + console） | ✅ 已实现 |
+| **Ink 全屏终端 UI**（类 Claude Code 体验） | ✅ 已实现 |
 | **子 agent 前缀**（带 `[name]` 输出） | ✅ 已内建 |
+| **`--think` 思考内容视觉区分**（灰色斜体） | ✅ 已实现 |
 | **极简模式**（`readline` 裸输入） | ☐ 未实现 |
 | **CLI one-shot 模式**（stdin/stdout 管道） | ☐ 未实现 |
 | **Web UI**（HTTP/WebSocket） | ☐ 未实现 |
+
+Ink 展示层（`claude-code-ink`）基于 React + 自研 Ink 引擎（fork 自 Claude Code），支持 ScrollBox 滚动、全屏 terminal UI、`--think` 思考内容灰色斜体视觉区分等功能。
 
 ## Agent 架构
 

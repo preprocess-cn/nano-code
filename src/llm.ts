@@ -58,8 +58,7 @@ export class LLMClient {
   constructor(config?: LLMConfig) {
     const apiKey = config?.apiKey || process.env.OPENAI_API_KEY;
     if (!apiKey) {
-      console.error('X 错误: 未能在环境变量中找到 OPENAI_API_KEY。请在 .env 文件中配置。');
-      process.exit(1);
+      throw new Error('未能在环境变量中找到 OPENAI_API_KEY。请在 .env 文件中配置。');
     }
 
     this.openai = new OpenAI({
@@ -122,15 +121,10 @@ export class LLMClient {
           const delta = chunk.choices[0]?.delta;
           if (!delta) continue;
 
-          // [!] 联动修复：只要流开始吐数据了（哪怕是工具片段），就触发回调，通知 Agent 关掉 Spinner
-          if ((delta.content || delta.tool_calls) && onChunk) {
-            // 传入空字符串，主要目的是触发回调，执行外界的 stop 逻辑
-            onChunk(delta.content || '');
-          }
-
           // 1. 处理流式文本片段
           if (delta.content) {
             fullText += delta.content;
+            if (onChunk) onChunk(delta.content);
           }
 
           // 2. 处理流式返回的工具调用（OpenAI 的工具调用在流中是分段拼接的）
@@ -186,7 +180,6 @@ export class LLMClient {
       }
     }
 
-    // Should never reach here (retry loop always either returns or throws)
     throw lastError;
   }
 }

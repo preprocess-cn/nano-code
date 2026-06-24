@@ -1,9 +1,9 @@
 import { LLMClient, ChatMessage } from './llm.js';
 import { PluginRegistry, ToolCall } from './plugin.js';
 import { SystemPromptConfig } from './config.js';
-import { buildSystemPrompt } from './prompt.js';
+import { buildSystemPrompt, formatToolResponse } from './prompt.js';
 import { DisplayManager, isMainAgent } from './display.js';
-import { formatToolResponse, ToolResponse } from './contract.js';
+import { ToolResponse } from './contract.js';
 
 export class NanoCodeAgent {
   private llmClient: LLMClient;
@@ -63,6 +63,7 @@ export class NanoCodeAgent {
 
       const extraParams = this.registry.collectExtraParams();
       let responseMeta: Record<string, unknown> | undefined;
+
       const response = await this.llmClient.sendSystemMessage(
         messagesWithSystem,
         this.registry.getAllSchemas(),

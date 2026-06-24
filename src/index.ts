@@ -50,12 +50,18 @@ async function startCLI(options: { debug?: boolean; think?: boolean; skipPermiss
   }
 
   // ── LLM Client ──
-  const llmClient = new LLMClient({
-    model: config.core.model,
-    temperature: config.core.temperature,
-    apiKey: config.core.apiKey,
-    baseURL: config.core.baseURL,
-  });
+  let llmClient: LLMClient;
+  try {
+    llmClient = new LLMClient({
+      model: config.core.model,
+      temperature: config.core.temperature,
+      apiKey: config.core.apiKey,
+      baseURL: config.core.baseURL,
+    });
+  } catch (err: any) {
+    console.error('X 错误:', err.message);
+    process.exit(1);
+  }
 
   // ── Plugin registry ──
   const registry = new PluginRegistry();
