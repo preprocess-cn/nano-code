@@ -28,10 +28,29 @@ export interface ToolDefinition {
   };
 }
 
+export interface DiffLine {
+  type: 'add' | 'remove' | 'context';
+  content: string;
+  oldLineNumber?: number;
+  newLineNumber?: number;
+}
+
+export interface DiffHunk {
+  oldStart: number;
+  oldLines: number;
+  newStart: number;
+  newLines: number;
+  lines: DiffLine[];
+}
+
 export interface PermissionConfirmRequest {
   toolName: string;
   message: string;
   details?: string;
+  /** Diff hunks for file edit/write operations. When set, display plugins should render a diff view. */
+  diff?: DiffHunk[];
+  /** Target file path (needed for syntax highlighting in diff view). */
+  filePath?: string;
 }
 
 export type PermissionConfirmResponse = boolean;

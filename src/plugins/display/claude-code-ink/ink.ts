@@ -10,6 +10,7 @@ export { default as Text } from './design-system/ThemedText.js';
 export { ThemeProvider, usePreviewTheme, useTheme, useThemeSetting, color };
 
 export { Ansi } from './engine/Ansi.js';
+export { RawAnsi } from './engine/components/RawAnsi.js';
 export type { DOMElement } from './engine/dom.js';
 export { default as BaseBox } from './engine/components/Box.js';
 export type { Props as NewlineProps } from './engine/components/Newline.js';

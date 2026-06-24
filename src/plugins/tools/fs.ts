@@ -4,6 +4,7 @@ import * as path from 'path';
 import { confirm } from '@clack/prompts';
 import { NanoPlugin } from '../../plugin.js';
 import { ToolDefinition, ToolResponse, ToolContext } from '../../contract.js';
+import { getPatchForDisplay, newFileHunk } from '../../utils/diff.js';
 
 function safeResolvePath(relativeTarget: string): string {
   const cwd = process.cwd();
@@ -153,12 +154,18 @@ export const fsPlugin: NanoPlugin = {
           }
           const finalPath = safeResolvePath(args.path);
           let fileExists = false;
-          try { await fs.access(finalPath); fileExists = true; } catch { fileExists = false; }
+          let oldContent = '';
+          try { oldContent = await fs.readFile(finalPath, 'utf-8'); fileExists = true; } catch { fileExists = false; }
+
+          // Compute diff for permission preview
+          const diff = fileExists
+            ? getPatchForDisplay({ filePath: args.path, oldContent, newContent: args.content })
+            : newFileHunk(args.path, args.content);
 
           if (!ctx.skipPermission && ctx.sideEffect) {
             const actionText = fileExists ? '[!] 覆盖修改' : '[NEW] 创建新文件';
             const confirmed = ctx.confirmCallback
-              ? await ctx.confirmCallback({ toolName: 'write_file_content', message: `是否批准此操作？`, details: `AI 申请 ${actionText} [ ${args.path} ]` })
+              ? await ctx.confirmCallback({ toolName: 'write_file_content', message: `是否批准此操作？`, details: `AI 申请 ${actionText} [ ${args.path} ]`, diff, filePath: args.path })
               : await writerConfirmation.ask(`AI 申请 ${actionText} [ ${args.path} ]，是否批准此操作？`);
             if (!confirmed) {
               return { status: "rejected_by_user", message: 'The user explicitly rejected the file write operation' };
@@ -187,21 +194,23 @@ export const fsPlugin: NanoPlugin = {
             return toolError(`Error: File does not exist at path: ${relativePath}`);
           }
 
-          if (!ctx.skipPermission && ctx.sideEffect) {
-            const confirmed = ctx.confirmCallback
-              ? await ctx.confirmCallback({ toolName: 'patch_file', message: `是否批准修改 [ ${relativePath} ]？`, details: `[-] 修改前:\n${search}\n[+] 修改后:\n${replace}` })
-              : await patchConfirmation.ask(relativePath, search, replace);
-            if (!confirmed) {
-              return { status: 'rejected_by_user', message: 'File modification rejected by user.' };
-            }
-          }
-
           const fileContent = fsSync.readFileSync(absolutePath, 'utf8');
           if (!fileContent.includes(search)) {
             return toolError('Error: Could not patch file. The "search" string was not found in the file. Please ensure your indentation and characters match exactly.');
           }
 
           const updatedContent = fileContent.replace(search, replace);
+          const diff = getPatchForDisplay({ filePath: relativePath, oldContent: fileContent, newContent: updatedContent });
+
+          if (!ctx.skipPermission && ctx.sideEffect) {
+            const confirmed = ctx.confirmCallback
+              ? await ctx.confirmCallback({ toolName: 'patch_file', message: `是否批准修改 [ ${relativePath} ]？`, details: `[-] 修改前:\n${search}\n[+] 修改后:\n${replace}`, diff, filePath: relativePath })
+              : await patchConfirmation.ask(relativePath, search, replace);
+            if (!confirmed) {
+              return { status: 'rejected_by_user', message: 'File modification rejected by user.' };
+            }
+          }
+
           fsSync.writeFileSync(absolutePath, updatedContent, 'utf8');
           return { status: 'success', data: `File patched successfully: ${relativePath}. Applied 1 precise modification.` };
         } catch (err: any) {

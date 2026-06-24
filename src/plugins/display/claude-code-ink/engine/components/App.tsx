@@ -14,7 +14,7 @@ import reconciler from '../reconciler.js';
 import { finishSelection, hasSelection, type SelectionState, startSelection } from '../selection.js';
 import { isXtermJs, setXtversionName, supportsExtendedKeys } from '../terminal.js';
 import { getTerminalFocused, setTerminalFocused } from '../terminal-focus-state.js';
-import { TerminalQuerier, xtversion } from '../terminal-querier.js';
+import { TerminalQuerier } from '../terminal-querier.js';
 import { DISABLE_KITTY_KEYBOARD, DISABLE_MODIFY_OTHER_KEYS, ENABLE_KITTY_KEYBOARD, ENABLE_MODIFY_OTHER_KEYS, FOCUS_IN, FOCUS_OUT } from '../termio/csi.js';
 import { DBP, DFE, DISABLE_MOUSE_TRACKING, EBP, EFE, HIDE_CURSOR, SHOW_CURSOR } from '../termio/dec.js';
 import AppContext from './AppContext.js';
@@ -243,24 +243,9 @@ export default class App extends PureComponent<Props, State> {
           this.props.stdout.write(ENABLE_KITTY_KEYBOARD);
           this.props.stdout.write(ENABLE_MODIFY_OTHER_KEYS);
         }
-        // Probe terminal identity. XTVERSION survives SSH (query/reply goes
-        // through the pty), unlike TERM_PROGRAM. Used for wheel-scroll base
-        // detection when env vars are absent. Fire-and-forget: the DA1
-        // sentinel bounds the round-trip, and if the terminal ignores the
-        // query, flush() still resolves and name stays undefined.
-        // Deferred to next tick so it fires AFTER the current synchronous
-        // init sequence completes — avoids interleaving with alt-screen/mouse
-        // tracking enable writes that may happen in the same render cycle.
-        setImmediate(() => {
-          void Promise.all([this.querier.send(xtversion()), this.querier.flush()]).then(([r]) => {
-            if (r) {
-              setXtversionName(r.name);
-              logForDebugging(`XTVERSION: terminal identified as "${r.name}"`);
-            } else {
-              logForDebugging('XTVERSION: no reply (terminal ignored query)');
-            }
-          });
-        });
+        // nano-code: skip XTVERSION probe (CSI >0q). It is only needed for
+        // xterm.js wheel-scroll detection; in xterm its response can leak
+        // into the input box as visible text during the init render window.
       }
       this.rawModeEnabledCount++;
       return;

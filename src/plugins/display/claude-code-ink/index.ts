@@ -108,7 +108,7 @@ function createPlugin(): DisplayPlugin {
     async onInit(registry: PluginRegistry): Promise<void> {
       registry.setConfirmCallback(async (req) => {
         return new Promise<boolean>((resolve) => {
-          pendingPermission = { toolName: req.toolName, message: req.message, details: req.details };
+          pendingPermission = { toolName: req.toolName, message: req.message, details: req.details, diff: req.diff, filePath: req.filePath };
           permissionResolve = resolve;
           render();
         });

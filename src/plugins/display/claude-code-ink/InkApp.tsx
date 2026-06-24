@@ -1,8 +1,10 @@
-import React, { useState, useEffect, useLayoutEffect, useRef } from 'react';
-import { Box, Text, useInput, useStdin, ThemeProvider, stringWidth } from './ink.js';
+import React, { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
+import { Box, Text, useInput, useStdin, ThemeProvider, stringWidth, RawAnsi } from './ink.js';
 import { AlternateScreen } from './engine/components/AlternateScreen.js';
 import ScrollBox, { type ScrollBoxHandle } from './engine/components/ScrollBox.js';
 import { useDeclaredCursor } from './engine/hooks/use-declared-cursor.js';
+import { ColorDiff } from './color-diff.js';
+import type { DiffHunk } from '../../../contract.js';
 
 export interface TextSegment {
   text: string;
@@ -20,6 +22,8 @@ export interface PermissionPrompt {
   toolName: string;
   message: string;
   details?: string;
+  diff?: DiffHunk[];
+  filePath?: string;
 }
 
 export interface InkAppProps {
@@ -116,8 +120,35 @@ function Select<T>({ options, onChange, onCancel }: {
   );
 }
 
+function DiffView({ hunks, filePath }: { hunks: DiffHunk[]; filePath: string }): React.ReactElement | null {
+  const dim = false; // Always show full color for permission review
+  const lines = useMemo(() => {
+    const cd = new ColorDiff(hunks, filePath);
+    return cd.render('dark', process.stdout.columns ?? 80, dim);
+  }, [hunks, filePath, dim]);
+
+  if (!lines || lines.length === 0) return null;
+
+  return React.createElement(
+    Box,
+    {
+      flexDirection: 'column',
+      borderStyle: 'dashed',
+      borderColor: '#6b7280',
+      borderLeft: false,
+      borderRight: false,
+      marginY: 1,
+    },
+    React.createElement(
+      Box,
+      { flexDirection: 'column', paddingX: 1 },
+      React.createElement(RawAnsi, { lines, width: (process.stdout.columns ?? 80) - 8 }),
+    ),
+  );
+}
+
 function PermissionDialog({
-  toolName, message, details, onResponse,
+  toolName, message, details, diff, filePath, onResponse,
 }: PermissionPrompt & { onResponse: (allowed: boolean) => void }): React.ReactElement {
   const options: SelectOption[] = [
     { label: '批准 (Yes)', value: 'allow' },
@@ -150,6 +181,14 @@ function PermissionDialog({
           React.createElement(Text, { dimColor: true }, details.split('\n').slice(0, 5).join('\n')),
         )
       : null,
+    // Diff view (optional) — file edit/write diff
+    diff && filePath
+      ? React.createElement(
+          Box,
+          { flexDirection: 'column', paddingX: 1 },
+          React.createElement(DiffView, { hunks: diff, filePath }),
+        )
+      : null,
     // Select options + hint
     React.createElement(
       Box,
@@ -170,20 +209,29 @@ function AppContent(props: InkAppProps): React.ReactElement {
   const { messages, onInputSubmit, onExit, greeting, pendingPermission, onPermissionResponse } = props;
   const { setRawMode } = useStdin();
   const [input, setInput] = useState('');
+  const [cursorPos, setCursorPos] = useState(0);
+  const [historyIdx, setHistoryIdx] = useState(-1);
+  const draftRef = useRef('');
   const [, setScrollTick] = useState(0);
   const scrollRef = useRef<ScrollBoxHandle>(null);
+
+  // Collect user input messages for up/down history navigation
+  const userMessages = useMemo(
+    () => messages.filter(m => m.kind === 'userInput'),
+    [messages],
+  );
 
   // Raw mode: useLayoutEffect so it's set synchronously during commit
   useLayoutEffect(() => {
     setRawMode(true);
   }, [setRawMode]);
 
-  // Native cursor position at the end of input text.
+  // Native cursor position within the input text.
   // The cursor Box is right after "> " prompt (sibling in a row layout),
-  // so column is just the input width — no extra offset needed.
+  // so column is the display width of input up to cursorPos.
   const cursorRef = useDeclaredCursor({
     line: 0,
-    column: stringWidth(input),
+    column: stringWidth(input.slice(0, cursorPos)),
     active: true,
   });
 
@@ -263,7 +311,8 @@ function AppContent(props: InkAppProps): React.ReactElement {
 
   useInput((_input: string, key: {
     escape: boolean; ctrl: boolean; return: boolean; backspace: boolean;
-    upArrow: boolean; downArrow: boolean; pageUp: boolean; pageDown: boolean;
+    upArrow: boolean; downArrow: boolean; leftArrow: boolean; rightArrow: boolean;
+    delete: boolean; pageUp: boolean; pageDown: boolean;
     wheelUp: boolean; wheelDown: boolean;
   }) => {
     // When permission dialog is active, suppress normal input handling
@@ -289,6 +338,58 @@ function AppContent(props: InkAppProps): React.ReactElement {
       return;
     }
 
+    // Up arrow: navigate to previous user input (history)
+    if (key.upArrow) {
+      if (userMessages.length === 0) return;
+      if (historyIdx === -1) {
+        // Save current draft before entering history browsing
+        draftRef.current = input;
+      }
+      const newIdx = historyIdx === -1
+        ? userMessages.length - 1
+        : Math.max(0, historyIdx - 1);
+      setHistoryIdx(newIdx);
+      const text = userMessages[newIdx]!.text;
+      setInput(text);
+      setCursorPos(text.length);
+      return;
+    }
+
+    // Down arrow: navigate to next user input, restore draft when past the last
+    if (key.downArrow) {
+      if (historyIdx >= 0) {
+        const newIdx = historyIdx + 1;
+        if (newIdx >= userMessages.length) {
+          setHistoryIdx(-1);
+          setInput(draftRef.current);
+          setCursorPos(draftRef.current.length);
+        } else {
+          setHistoryIdx(newIdx);
+          const text = userMessages[newIdx]!.text;
+          setInput(text);
+          setCursorPos(text.length);
+        }
+      }
+      return;
+    }
+
+    // Reset history browsing when user types or moves cursor
+    if (historyIdx >= 0) {
+      setHistoryIdx(-1);
+    }
+
+    // Left arrow: move cursor left
+    if (key.leftArrow) {
+      setCursorPos(p => Math.max(0, p - 1));
+      return;
+    }
+
+    // Right arrow: move cursor right
+    if (key.rightArrow) {
+      setCursorPos(p => Math.min(input.length, p + 1));
+      return;
+    }
+
     if (key.escape) {
       onExit();
       return;
@@ -297,16 +398,31 @@ function AppContent(props: InkAppProps): React.ReactElement {
       if (input.trim()) {
         onInputSubmit(input.trim());
         setInput('');
+        setCursorPos(0);
+        setHistoryIdx(-1);
+        draftRef.current = '';
       }
       return;
     }
+    // Backspace: delete character before cursor
     if (key.backspace) {
-      setInput(prev => prev.slice(0, -1));
+      if (cursorPos > 0) {
+        setInput(prev => prev.slice(0, cursorPos - 1) + prev.slice(cursorPos));
+        setCursorPos(p => p - 1);
+      }
       return;
     }
-    // Accept any printable input (IME composition, paste, single char)
+    // Delete: delete character after cursor
+    if (key.delete) {
+      if (cursorPos < input.length) {
+        setInput(prev => prev.slice(0, cursorPos) + prev.slice(cursorPos + 1));
+      }
+      return;
+    }
+    // Accept any printable input — insert at cursor position
     if (_input) {
-      setInput(prev => prev + _input);
+      setInput(prev => prev.slice(0, cursorPos) + _input + prev.slice(cursorPos));
+      setCursorPos(p => p + _input.length);
     }
   });
 
