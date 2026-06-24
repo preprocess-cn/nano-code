@@ -73,30 +73,95 @@ function MessageItem({ msg }: { msg: UIMessage }): React.ReactElement {
   );
 }
 
-function PermissionDialog({
-  toolName, message, details, onResponse,
-}: PermissionPrompt & { onResponse: (allowed: boolean) => void }): React.ReactElement {
-  // Keyboard: Enter/→ = Allow, Esc/← = Deny
+interface SelectOption<T = string> {
+  label: string;
+  value: T;
+}
+
+function Select<T>({ options, onChange, onCancel }: {
+  options: SelectOption<T>[];
+  onChange: (value: T) => void;
+  onCancel: () => void;
+}): React.ReactElement {
+  const [focusedIndex, setFocusedIndex] = useState(0);
+
   useInput((_input: string, key: {
-    escape: boolean; return: boolean; leftArrow: boolean; rightArrow: boolean;
+    upArrow: boolean; downArrow: boolean; return: boolean; escape: boolean;
   }) => {
-    if (key.escape || key.leftArrow) { onResponse(false); return; }
-    if (key.return || key.rightArrow) { onResponse(true); return; }
+    if (key.upArrow) {
+      setFocusedIndex(i => Math.max(0, i - 1));
+    } else if (key.downArrow) {
+      setFocusedIndex(i => Math.min(options.length - 1, i + 1));
+    } else if (key.return) {
+      onChange(options[focusedIndex].value);
+    } else if (key.escape) {
+      onCancel();
+    }
   });
 
   return React.createElement(
     Box,
-    { flexDirection: 'column', borderStyle: 'round', borderColor: '#fbbf24', paddingX: 2, paddingY: 1 },
-    React.createElement(Text, { bold: true, color: '#fbbf24' }, `[!] 权限确认: ${toolName}`),
-    React.createElement(Text, null, message),
-    details ? React.createElement(Text, { dimColor: true }, details.split('\n').slice(0, 3).join('\n')) : null,
-    React.createElement(Box, { height: 1 }),
+    { flexDirection: 'column' },
+    ...options.map((opt, i) => {
+      const isFocused = i === focusedIndex;
+      return React.createElement(
+        Box,
+        { key: i, flexDirection: 'row' },
+        React.createElement(Text, {
+          color: isFocused ? '#10b981' : undefined,
+          dimColor: !isFocused,
+        }, isFocused ? `● ${opt.label}` : `○ ${opt.label}`),
+      );
+    }),
+  );
+}
+
+function PermissionDialog({
+  toolName, message, details, onResponse,
+}: PermissionPrompt & { onResponse: (allowed: boolean) => void }): React.ReactElement {
+  const options: SelectOption[] = [
+    { label: '批准 (Yes)', value: 'allow' },
+    { label: '拒绝 (No)', value: 'deny' },
+  ];
+
+  return React.createElement(
+    Box,
+    {
+      flexDirection: 'column',
+      borderStyle: 'round',
+      borderColor: '#fbbf24',
+      borderLeft: false,
+      borderRight: false,
+      borderBottom: false,
+      marginTop: 1,
+    },
+    // Title section — matches Claude Code PermissionDialog structure
     React.createElement(
       Box,
-      { flexDirection: 'row' },
-      React.createElement(Text, { color: '#10b981', bold: true }, '[ Enter/→ ] 批准'),
-      React.createElement(Text, null, '    '),
-      React.createElement(Text, { color: '#ef4444' }, '[ Esc/← ] 拒绝'),
+      { flexDirection: 'column', paddingX: 1 },
+      React.createElement(Text, { bold: true, color: '#fbbf24' }, toolName),
+      React.createElement(Text, { dimColor: true }, message),
+    ),
+    // Details (optional) — command content
+    details
+      ? React.createElement(
+          Box,
+          { flexDirection: 'column', paddingX: 2, paddingY: 1 },
+          React.createElement(Text, { dimColor: true }, details.split('\n').slice(0, 5).join('\n')),
+        )
+      : null,
+    // Select options + hint
+    React.createElement(
+      Box,
+      { flexDirection: 'column', paddingX: 1 },
+      React.createElement(Select, {
+        options,
+        onChange: (value) => onResponse(value === 'allow'),
+        onCancel: () => onResponse(false),
+      }),
+      React.createElement(Box, { marginTop: 1 },
+        React.createElement(Text, { dimColor: true }, 'Esc to cancel'),
+      ),
     ),
   );
 }
@@ -262,20 +327,35 @@ function AppContent(props: InkAppProps): React.ReactElement {
           React.createElement(Box, { height: 1 }),
           React.createElement(Text, { dimColor: true }, '输入 exit 或 quit 退出'),
         ),
-        React.createElement(Box, { height: 1 }, React.createElement(Text, { dimColor: true }, '─'.repeat(40))),
         React.createElement(
           Box,
-          { paddingLeft: 1, paddingRight: 1 },
-          React.createElement(Text, { bold: true }, '> '),
-          React.createElement(Box, { ref: cursorRef }, React.createElement(Text, null, input)),
+          { paddingLeft: 1, paddingRight: 1, paddingBottom: 1 },
+          React.createElement(
+            Box,
+            {
+              flexDirection: 'row',
+              alignItems: 'flex-start',
+              borderStyle: 'round',
+              borderColor: '#6b7280',
+              borderLeft: false, borderRight: false, borderBottom: true,
+              width: '100%',
+            },
+            React.createElement(Text, { bold: true, color: '#9ca3af' }, '> '),
+            React.createElement(
+              Box,
+              { ref: cursorRef, flexGrow: 1 },
+              React.createElement(Text, null, input),
+            ),
+          ),
         ),
       ),
     );
   }
 
   // Normal conversation view
-  // Two-sibling layout (ref: Claude Code FullscreenLayout):
+  // Three-sibling layout (ref: Claude Code FullscreenLayout):
   // - Scroll container: flexGrow=1, overflow=hidden — constrains ScrollBox
+  // - Permission dialog: flexShrink=0 — between scroll and input, outside ScrollBox
   // - Bottom area: flexShrink=0 — always visible, never compressed
   return React.createElement(
     AlternateScreen,
@@ -291,26 +371,40 @@ function AppContent(props: InkAppProps): React.ReactElement {
         ...messages.map((msg, i) =>
           React.createElement(MessageItem, { key: i, msg }),
         ),
-        pendingPermission && onPermissionResponse
-          ? React.createElement(PermissionDialog, {
-              ...pendingPermission,
-              onResponse: onPermissionResponse,
-            })
-          : null,
       ),
     ),
+    // Permission dialog — between scroll area and input, outside ScrollBox so borderStyle renders
+    pendingPermission && onPermissionResponse
+      ? React.createElement(
+          Box,
+          { flexShrink: 0, paddingLeft: 1, paddingRight: 1 },
+          React.createElement(PermissionDialog, {
+            ...pendingPermission,
+            onResponse: onPermissionResponse,
+          }),
+        )
+      : null,
     // Bottom area — flexShrink=0 prevents Yoga from compressing it
+    // Claude Code style: bottom-border row for prompt + input
     React.createElement(
       Box,
-      { flexDirection: 'column', flexShrink: 0, paddingLeft: 1, paddingRight: 1, paddingBottom: 1 },
-      // Separator
-      React.createElement(Box, { height: 1 }, React.createElement(Text, { dimColor: true }, '─'.repeat(40))),
-      // Input line
+      { flexDirection: 'column', flexShrink: 0, paddingLeft: 1, paddingRight: 1, paddingBottom: 1, marginTop: 1 },
       React.createElement(
         Box,
-        null,
-        React.createElement(Text, { bold: true }, '> '),
-        React.createElement(Box, { ref: cursorRef }, React.createElement(Text, null, input)),
+        {
+          flexDirection: 'row',
+          alignItems: 'flex-start',
+          borderStyle: 'round',
+          borderColor: '#6b7280',
+          borderLeft: false, borderRight: false, borderBottom: true,
+          width: '100%',
+        },
+        React.createElement(Text, { bold: true, color: '#9ca3af' }, '> '),
+        React.createElement(
+          Box,
+          { ref: cursorRef, flexGrow: 1 },
+          React.createElement(Text, null, input),
+        ),
       ),
     ),
   );
