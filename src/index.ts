@@ -14,9 +14,23 @@ import { replDisplay } from './plugins/display/repl.js';
 import { resolveDisplayPlugin } from './plugins/display/loader.js';
 import { cac } from 'cac';
 import { getPackageVersion } from './version.js';
+import {
+  EXIT_MESSAGE,
+  FATAL_NO_DISPLAY,
+  FATAL_NO_DISPLAY_HINT,
+  MSG_DEBUG_MODE,
+  MSG_THINK_MODE,
+  MSG_SKIP_PERMISSION,
+  MSG_SESSION_RESTORED,
+  MSG_SESSION_NOT_FOUND,
+  MSG_TOP_LEVEL_ERROR,
+  MSG_LLM_INIT_ERROR,
+  GREETING_WITH_TOOLS,
+  GREETING_NO_TOOLS,
+} from './display-strings.js';
 
 function handleExit(display?: DisplayManager): never {
-  display?.stop('** 感谢使用 nano-code，祝您编码愉快！');
+  display?.stop(EXIT_MESSAGE);
   process.exit(0);
 }
 
@@ -30,8 +44,8 @@ async function startCLI(options: { debug?: boolean; think?: boolean; skipPermiss
   // ── Validate display config ──
   const dispCfg = config.display;
   if (dispCfg?.enabled === false && !dispCfg.plugin) {
-    console.error('[FATAL] 展示层已被禁用且未指定替代插件。展示层必须存在。');
-    console.error('        请在配置中设置 display.plugin 或移除 display.enabled=false。');
+    console.error(FATAL_NO_DISPLAY);
+    console.error(FATAL_NO_DISPLAY_HINT);
     process.exit(1);
   }
 
@@ -59,7 +73,7 @@ async function startCLI(options: { debug?: boolean; think?: boolean; skipPermiss
       baseURL: config.core.baseURL,
     });
   } catch (err: any) {
-    console.error('X 错误:', err.message);
+    console.error(MSG_LLM_INIT_ERROR, err.message);
     process.exit(1);
   }
 
@@ -129,8 +143,8 @@ async function startCLI(options: { debug?: boolean; think?: boolean; skipPermiss
   // ── Determine agent identity and show greeting ──
   const hasTools = registry.getAllSchemas().length > 0;
   const defaultGreeting = hasTools
-    ? '我可以帮您查看项目结构、读取代码并直接修改。'
-    : '我可以帮您解答编程问题，提供代码示例和建议。';
+    ? GREETING_WITH_TOOLS
+    : GREETING_NO_TOOLS;
   const greeting = config.agent?.greeting || defaultGreeting;
 
   displayMgr.start({
@@ -146,13 +160,13 @@ async function startCLI(options: { debug?: boolean; think?: boolean; skipPermiss
   });
 
   if(options.debug) {
-    displayMgr.onStatus({ message: `#  当前已开启 [DEBUG 调试模式]，模型: ${config.core.model}`, agentName: 'main' });
+    displayMgr.onStatus({ message: MSG_DEBUG_MODE(config.core.model), agentName: 'main' });
   }
   if (options.think && !options.debug) {
-    displayMgr.onStatus({ message: ' <-> 当前已开启 [思维链显示]，将输出 AI 思考过程。', agentName: 'main' });
+    displayMgr.onStatus({ message: MSG_THINK_MODE, agentName: 'main' });
   }
   if (options.skipPermission) {
-    displayMgr.onStatus({ message: ' [!] 当前已开启 [免确认模式]，系统底层安全拦截仍然生效。', agentName: 'main' });
+    displayMgr.onStatus({ message: MSG_SKIP_PERMISSION, agentName: 'main' });
   }
 
   const agent = new NanoCodeAgent(registry, llmClient, config.agent?.role, config.systemPrompt, 'main', displayMgr);
@@ -162,9 +176,18 @@ async function startCLI(options: { debug?: boolean; think?: boolean; skipPermiss
     const session = loadSession(process.cwd());
     if (session) {
       agent.loadHistory(session.messages);
-      displayMgr.onStatus({ message: `   ↻ 已恢复上次会话 (${session.messages.length} 条消息，最后更新 ${session.updatedAt})\n`, agentName: 'main' });
+      // Display restored messages in the UI so the user sees the full context
+      for (const msg of session.messages) {
+        if (msg.role === 'user') {
+          displayMgr.onUserInput(msg.content ?? '', 'system');
+        } else if (msg.role === 'assistant') {
+          const text = msg.content ?? '';
+          if (text) displayMgr.onStreamChunk({ text, agentName: 'main' });
+        }
+      }
+      displayMgr.onStatus({ message: MSG_SESSION_RESTORED(session.messages.length, session.updatedAt), agentName: 'main' });
     } else {
-      displayMgr.onStatus({ message: '   - 未找到之前保存的会话，开始新的对话。\n', agentName: 'main' });
+      displayMgr.onStatus({ message: MSG_SESSION_NOT_FOUND, agentName: 'main' });
     }
   }
 
@@ -178,7 +201,7 @@ async function startCLI(options: { debug?: boolean; think?: boolean; skipPermiss
     try {
       await agent.runTask(userPrompt);
     } catch (error) {
-      displayMgr.onError({ message: `X 顶层循环捕获到未处理的致命异常: ${error}`, agentName: 'main', stack: error instanceof Error ? error.stack : undefined });
+      displayMgr.onError({ message: MSG_TOP_LEVEL_ERROR(error), agentName: 'main', stack: error instanceof Error ? error.stack : undefined });
     } finally {
       saveSession(process.cwd(), agent.getHistory());
     }

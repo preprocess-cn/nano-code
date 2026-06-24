@@ -4,6 +4,7 @@ import { AlternateScreen } from './engine/components/AlternateScreen.js';
 import ScrollBox, { type ScrollBoxHandle } from './engine/components/ScrollBox.js';
 import { useDeclaredCursor } from './engine/hooks/use-declared-cursor.js';
 import { ColorDiff } from './color-diff.js';
+import { Markdown, StreamingMarkdown } from './components/Markdown.js';
 import type { DiffHunk } from '../../../contract.js';
 
 export interface TextSegment {
@@ -43,9 +44,33 @@ function AgentLabel({ agentName }: { agentName: string }): React.ReactElement | 
 }
 
 function MessageItem({ msg }: { msg: UIMessage }): React.ReactElement {
+  const isThink = msg.kind === 'thinking';
+
+  if (msg.kind === 'stream') {
+    const label = msg.agentName !== 'main'
+      ? React.createElement(AgentLabel, { agentName: msg.agentName })
+      : null;
+    return React.createElement(
+      Box,
+      { flexDirection: 'row' },
+      label,
+      React.createElement(StreamingMarkdown, { children: msg.text }),
+    );
+  }
+
+  if (isThink) {
+    const label = msg.agentName !== 'main'
+      ? React.createElement(AgentLabel, { agentName: msg.agentName })
+      : null;
+    return React.createElement(
+      Box,
+      { flexDirection: 'row' },
+      label,
+      React.createElement(Markdown, { dimColor: true, children: msg.text }),
+    );
+  }
+
   const colorMap: Record<string, string | undefined> = {
-    stream: undefined,
-    thinking: undefined,
     status: '#6b7280',
     toolCall: '#fbbf24',
     toolResult: '#10b981',
@@ -54,16 +79,8 @@ function MessageItem({ msg }: { msg: UIMessage }): React.ReactElement {
   };
 
   const baseColor = colorMap[msg.kind];
-  const isThink = msg.kind === 'thinking';
-
-  // Same pattern as Claude Code's AssistantThinkingMessage:
-  // <Text dimColor italic> for thinking text
   const textProps: Record<string, unknown> = {};
   if (baseColor) textProps.color = baseColor;
-  if (isThink) {
-    textProps.dimColor = true;
-    textProps.italic = true;
-  }
 
   return React.createElement(
     Box,

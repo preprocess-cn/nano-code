@@ -62,3 +62,7 @@ export interface ToolContext {
   outputHandler?: CommandOutputHandler;
 }
 
+export function isMainAgent(agentName: string): boolean {
+  return agentName === 'main';
+}
+

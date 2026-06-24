@@ -50,10 +50,6 @@ export interface DebugEvent extends AgentEvent {
   data: string;
 }
 
-export function isMainAgent(agentName: string): boolean {
-  return agentName === 'main';
-}
-
 // ════════════════════════════════════════════
 // StateSnapshot — agent 循环结束时的状态快照
 // ════════════════════════════════════════════
@@ -157,6 +153,10 @@ export class DisplayManager {
       }
     }
     return null;
+  }
+
+  onUserInput(input: string, sourcePlugin: string): void {
+    for (const p of this.plugins) p.onUserInput?.(input, sourcePlugin);
   }
 
   onStatus(event: StatusEvent): void {

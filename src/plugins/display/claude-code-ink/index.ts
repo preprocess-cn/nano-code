@@ -3,6 +3,7 @@ import { inkRender, type Instance } from './ink.js';
 import { InkApp, type UIMessage, type TextSegment, type PermissionPrompt } from './InkApp.js';
 import { ThinkStream } from '../think-stream.js';
 import type { PluginRegistry } from '../../../plugin.js';
+import { formatStatusText } from '../../../display-strings.js';
 import React from 'react';
 
 function parseThinkSegments(text: string): TextSegment[] {
@@ -146,7 +147,7 @@ function createPlugin(): DisplayPlugin {
         const initPromise = inkRender(
           React.createElement(InkApp, {
             greeting,
-            messages: [],
+            messages: [...messages],
             inputBuffer: '',
             onInputChange: () => {},
             onInputSubmit: (text: string) => {
@@ -190,7 +191,9 @@ function createPlugin(): DisplayPlugin {
     },
 
     onStatus(event: StatusEvent): void {
-      messages.push({ agentName: event.agentName, text: event.message, kind: 'status' });
+      const text = formatStatusText(event.message);
+      if (!text) { render(); return; }
+      messages.push({ agentName: event.agentName, text, kind: 'status' });
       render();
     },
 

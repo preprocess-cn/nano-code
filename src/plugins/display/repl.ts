@@ -1,5 +1,7 @@
 import { intro, text, outro, isCancel, confirm } from '@clack/prompts';
-import { DisplayPlugin, StartConfig, StatusEvent, StreamEvent, ToolCallEvent, ToolResultEvent, ErrorEvent, DebugEvent, isMainAgent } from '../../display.js';
+import { DisplayPlugin, StartConfig, StatusEvent, StreamEvent, ToolCallEvent, ToolResultEvent, ErrorEvent, DebugEvent } from '../../display.js';
+import { isMainAgent } from '../../contract.js';
+import { formatStatusText } from '../../display-strings.js';
 import { ThinkStream } from './think-stream.js';
 import type { PluginRegistry } from '../../plugin.js';
 
@@ -80,7 +82,8 @@ export const replDisplay: DisplayPlugin = {
   },
 
   onStatus(event: StatusEvent): void {
-    console.log(p(event.agentName, event.message));
+    const text = formatStatusText(event.message);
+    if (text) console.log(p(event.agentName, text));
   },
 
   onStreamChunk(event: StreamEvent): void {

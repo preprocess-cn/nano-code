@@ -2,8 +2,8 @@ import { LLMClient, ChatMessage } from './llm.js';
 import { PluginRegistry, ToolCall } from './plugin.js';
 import { SystemPromptConfig } from './config.js';
 import { buildSystemPrompt, formatToolResponse } from './prompt.js';
-import { DisplayManager, isMainAgent } from './display.js';
-import { ToolResponse } from './contract.js';
+import { DisplayManager } from './display.js';
+import { ToolResponse, isMainAgent } from './contract.js';
 
 export class NanoCodeAgent {
   private llmClient: LLMClient;
@@ -46,7 +46,7 @@ export class NanoCodeAgent {
     this.registry.store.set('agent', { agentName: this.name, status: 'running', messageCount: this.messageHistory.length });
 
     while (true) {
-      this.display?.onStatus({ message: '? 正在思考并请求大模型...', agentName: this.name });
+      this.display?.onStatus({ message: 'thinking', agentName: this.name });
 
       const systemMessage = buildSystemPrompt(this.registry, this.promptConfig, this.agentRole);
       let messagesWithSystem: ChatMessage[] = [systemMessage, ...this.messageHistory];
@@ -89,7 +89,7 @@ export class NanoCodeAgent {
       this.messageHistory.push(assistantMessage);
 
       if (response.stopReason !== 'tool_use' || !response.toolCalls) {
-        this.display?.onStatus({ message: '\n', agentName: this.name });
+        this.display?.onStatus({ message: 'end', agentName: this.name });
         this.display?.onStateSnapshot({ agentName: this.name, messageCount: this.messageHistory.length });
         this.display?.onAgentTurnEnd({ agentName: this.name });
         break;
@@ -135,7 +135,7 @@ export class NanoCodeAgent {
 
     const allowedCall = this.registry.execBeforeToolCall(toolCall);
     if (allowedCall === null) {
-      this.display?.onStatus({ message: `[!] [拦截] 插件拒绝了工具调用: [ ${toolName} ]`, agentName: this.name });
+      this.display?.onStatus({ message: `tool_blocked:${toolName}`, agentName: this.name });
       this.messageHistory.push({
         role: 'tool',
         tool_call_id: toolCall.id,
