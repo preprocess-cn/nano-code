@@ -42,13 +42,14 @@
 | ☐ | 发布准备 | package.json 补全、README 更新、npm publish |
 | ☐ | 插件权限系统 | npm 插件的安全沙箱 + 权限声明机制 |
 | ☐ | 插件热加载 | 运行时开关插件无需重启 |
-| ☐ | 会话上下文修剪 | token-budget 之上做智能摘要/裁剪 |
+| ☐ | 上下文裁剪与压缩 | 基于 analyzer 数据的智能摘要/裁剪 |
+| ☐ | **Ink 上下文可视化** | 参考 Claude Code `ContextVisualization.tsx`，在 Ink display 中渲染色块网格，数据源为 `analyzer.ts` 的 7 维度分析 |
 | ☐ | 多轮摘要记忆 | 超出窗口时自动压缩历史 |
 | ☐ | 角色模式 & 斜杠命令 | profiles/ 斜杠命令 `/treehole` 等运行时切换 |
-| ☐ | 更多内置插件 | 按需提供数据库、HTTP 请求等常用插件 |
+| ✅ | 内置 Skill 系统 | 10 个对齐 Claude Code 的内置技能：simplify/verify/batch/debug/lorem-ipsum/update-config/remember/stuck/skillify/keybindings |
 | ☐ | ToolUseContext | 工具执行的共享运行时上下文（模型覆盖、effort、权限绑定等），贯穿 ReAct 循环 |
 | ☐ | contextModifier | 工具可通过 ToolResponse 返回上下文修改器，作用于后续工具调用的执行环境 |
-| ☐ | Skill 系统 | skills_list / skill_view / skill 工具，inline（newMessages 注入）+ fork（子 agent）双模式 |
+| ✅ | Skill 系统 | 10 个内置 TypeScript 技能（bundled），skills_list / skill_view / skill 工具，inline（newMessages 注入）+ fork（子 agent）双模式，skills 配置禁用开关 |
 
 ## 展示层插件（已实现）
 

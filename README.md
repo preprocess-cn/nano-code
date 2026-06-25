@@ -143,9 +143,15 @@ plugins:
   token-budget:
     settings:
       maxTokensPerSession: 100000
+
+skills:
+  disabled:
+    - debug
+    - stuck
+  # disableSkillTool: true   # 完全禁用 skill/skills_list/skill_view 工具
 ```
 
-配置文件优先级高于 `.env` 文件。`apiKey` 和 `baseURL` 也可以在配置文件中指定，不配置时从 `.env` 或环境变量读取。`model`、`temperature` 等参数为可选项，不配置时使用默认值。
+配置文件优先级高于 `.env` 文件。`apiKey` 和 `baseURL` 也可以在配置文件中指定，不配置时从 `.env` 或环境变量读取。`model`、`temperature` 等参数为可选项，不配置时使用默认值。`skills` 段在启动时检查，运行时修改需要重启生效。
 
 ### 全局 YAML 配置（`~/.nano-code/config.yaml`）
 
@@ -158,6 +164,7 @@ system_plugins:
   - command
   - memory
   - token-budget
+  - skills
 
 # 环境变量兜底（shell 和 .env 优先级更高）
 env:
@@ -278,6 +285,7 @@ plugins:
 | **fs** | `"fs": {}` | 文件列表、读取、写入、精准修改 |
 | **command** | `"command": {}` | Bash 命令执行（含危险命令黑名单） |
 | **memory** | `"memory": {}` | 记忆存储与检索，支持多会话持久化和标签查询 |
+| **skills** | 系统白名单自动启用 | 10 个内置 TypeScript 技能 + 文件系统 SKILL.md 技能，`skill`/`skills_list`/`skill_view`/`run_agent` 工具 |
 | **store** | 内建默认 `InMemoryStore` | 插件间共享状态通道，`IStore` 接口可替换实现 |
 | **agent** | 自动发现 `~/.nano-code/agents/*.yaml` | `agent-<name>` 子 agent 调用工具 |
 | **display** | 通过 `display.plugin` 配置 | 展示层插件，支持生命周期事件（独立于 PluginRegistry） |

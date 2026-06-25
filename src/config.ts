@@ -59,6 +59,13 @@ export interface NanoConfig {
     plugin?: string;
     enabled?: boolean;
   };
+  /** 技能系统配置。对齐 Claude Code skill_listing / disableModelInvocation 机制。 */
+  skills?: {
+    /** 禁用的技能名列表。启动时检查，运行时修改需要重启生效 */
+    disabled?: string[];
+    /** 完全禁用 skill/skills_list/skill_view 工具（默认 false） */
+    disableSkillTool?: boolean;
+  };
 }
 
 // ── Defaults ──

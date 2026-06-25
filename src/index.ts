@@ -10,6 +10,7 @@ import { handlePluginCommand } from './plugin-cli.js';
 import { loadAgentDefinitions } from './agent-loader.js';
 import { createAgentToolPlugin } from './agent-tool.js';
 import { createSkillsPlugin } from './plugins/skills/index.js';
+import { registerAllDefaultBundledSkills, unregisterBundledSkill } from './plugins/skills/bundled/index.js';
 import { createCommandsPlugin, setCommandAgent } from './plugins/commands/index.js';
 import { createSkillsSlashPlugin } from './plugins/commands/skills-slash.js';
 import { createBangPlugin } from './plugins/commands/bang.js';
@@ -127,8 +128,17 @@ async function startCLI(options: { debug?: boolean; think?: boolean; skipPermiss
     await registerBuiltinPlugin(registry, name);
   }
 
+  // ── 注册所有内置技能（按配置禁用指定技能）──
+  registerAllDefaultBundledSkills();
+  const disabledSkills = config.skills?.disabled ?? [];
+  for (const name of disabledSkills) {
+    unregisterBundledSkill(name);
+  }
   // ── 注册技能系统插件 ──
-  const skillsPlugin = createSkillsPlugin(llmClient, displayMgr);
+  const skillsPlugin = createSkillsPlugin(llmClient, displayMgr, {
+    disabled: disabledSkills,
+    disableSkillTool: config.skills?.disableSkillTool ?? false,
+  });
   await registry.register(skillsPlugin);
 
   // ── 自动发现并注册 agent 工具 ──
