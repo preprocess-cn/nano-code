@@ -5,12 +5,13 @@ import { InkApp, type UIMessage, type TextSegment, type PermissionPrompt } from 
 import { ThinkStream } from '../think-stream.js';
 import type { PluginRegistry } from '../../../plugin.js';
 import { formatStatusText } from '../../../display-strings.js';
+import { getCurrentAgentMode } from '../../commands/agent-slash.js';
 import React from 'react';
 
 export interface CommandSuggestion {
   name: string;
   description: string;
-  type: 'builtin' | 'skill';
+  type: 'builtin' | 'skill' | 'agent';
 }
 
 function parseThinkSegments(text: string): TextSegment[] {
@@ -84,6 +85,7 @@ function createPlugin(): DisplayPlugin {
           messages: [...messages],
           inputBuffer: '',
           suggestions,
+          activeAgentName: getCurrentAgentMode()?.name,
           onInputChange: () => {},
           onInputSubmit: (text: string) => {
             if (promptResolve) {
@@ -166,6 +168,7 @@ function createPlugin(): DisplayPlugin {
             messages: [...messages],
             inputBuffer: '',
             suggestions: initSuggestions,
+            activeAgentName: getCurrentAgentMode()?.name,
             onInputChange: () => {},
             onInputSubmit: (text: string) => {
               if (promptResolve) {

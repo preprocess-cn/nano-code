@@ -35,6 +35,16 @@ export class NanoCodeAgent {
     this.messageHistory = [...messages];
   }
 
+  /** 运行时切换 agent 角色 */
+  setRole(role?: string, promptConfig?: SystemPromptConfig): void {
+    this.agentRole = role;
+    this.promptConfig = promptConfig;
+  }
+
+  getAgentRole(): string | undefined {
+    return this.agentRole;
+  }
+
   /** 清空对话历史 */
   clearHistory(): void {
     this.messageHistory = [];

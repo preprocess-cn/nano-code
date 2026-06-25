@@ -32,7 +32,7 @@ export interface PermissionPrompt {
 export interface CommandSuggestion {
   name: string;
   description: string;
-  type: 'builtin' | 'skill';
+  type: 'builtin' | 'skill' | 'agent';
 }
 
 export interface InkAppProps {
@@ -43,6 +43,7 @@ export interface InkAppProps {
   onInputSubmit: (text: string) => void;
   onExit: () => void;
   suggestions?: CommandSuggestion[];
+  activeAgentName?: string;
   pendingPermission?: PermissionPrompt | null;
   onPermissionResponse?: (allowed: boolean) => void;
 }
@@ -340,8 +341,24 @@ function filterSuggestions(suggestions: CommandSuggestion[], query: string): Com
     .map(r => r.s);
 }
 
+function suggestionPrefix(s: CommandSuggestion): string {
+  return s.type === 'agent' ? '◆ ' : '/';
+}
+
+function AgentHeader({ name }: { name: string }): React.ReactElement {
+  return React.createElement(
+    Box,
+    { flexDirection: 'row', paddingX: 1, marginTop: 1 },
+    React.createElement(Box, { flexDirection: 'row', flexGrow: 1 },
+      React.createElement(Text, null, 'Viewing '),
+      React.createElement(Text, { color: '#06b6d4', bold: true }, `@${name}`),
+    ),
+    React.createElement(Text, { dimColor: true, color: '#6b7280' }, 'Esc to return'),
+  );
+}
+
 function AppContent(props: InkAppProps): React.ReactElement {
-  const { messages, onInputSubmit, onExit, greeting, pendingPermission, onPermissionResponse } = props;
+  const { messages, onInputSubmit, onExit, greeting, pendingPermission, onPermissionResponse, activeAgentName } = props;
   const { setRawMode } = useStdin();
   const [input, setInput] = useState('');
   const [cursorPos, setCursorPos] = useState(0);
@@ -674,9 +691,9 @@ function AppContent(props: InkAppProps): React.ReactElement {
                 ...suggestionFiltered.slice(0, 8).map((s, i) =>
                   React.createElement(Text, {
                     key: s.name,
-                    color: i === selectedSuggestionIndex ? '#7c3aed' : undefined,
+                    color: i === selectedSuggestionIndex ? '#7c3aed' : s.type === 'agent' ? '#06b6d4' : undefined,
                     dimColor: i !== selectedSuggestionIndex,
-                  }, `${i === selectedSuggestionIndex ? '● ' : '○ '}/${s.name}  ${s.description}`),
+                  }, `${i === selectedSuggestionIndex ? '● ' : '○ '}${suggestionPrefix(s)}${s.name}  ${s.description}`),
                 ),
                 ...(suggestionFiltered.length > 8
                   ? [React.createElement(Text, { key: '__more', dimColor: true }, `...还有 ${suggestionFiltered.length - 8} 个`)]
@@ -720,6 +737,10 @@ function AppContent(props: InkAppProps): React.ReactElement {
           }),
         )
       : null,
+    // Agent header — shown when user has switched to an agent
+    activeAgentName
+      ? React.createElement(AgentHeader, { name: activeAgentName })
+      : null,
     // Bottom area — flexShrink=0 prevents Yoga from compressing it
     // Claude Code style: bottom-border row for prompt + input + suggestions
     React.createElement(
@@ -750,9 +771,9 @@ function AppContent(props: InkAppProps): React.ReactElement {
             ...suggestionFiltered.slice(0, 8).map((s, i) =>
               React.createElement(Text, {
                 key: s.name,
-                color: i === selectedSuggestionIndex ? '#7c3aed' : undefined,
+                color: i === selectedSuggestionIndex ? '#7c3aed' : s.type === 'agent' ? '#06b6d4' : undefined,
                 dimColor: i !== selectedSuggestionIndex,
-              }, `${i === selectedSuggestionIndex ? '● ' : '○ '}/${s.name}  ${s.description}`),
+              }, `${i === selectedSuggestionIndex ? '● ' : '○ '}${suggestionPrefix(s)}${s.name}  ${s.description}`),
             ),
             ...(suggestionFiltered.length > 8
               ? [React.createElement(Text, { key: '__more', dimColor: true }, `...还有 ${suggestionFiltered.length - 8} 个`)]

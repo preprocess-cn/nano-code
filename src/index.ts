@@ -13,6 +13,7 @@ import { createSkillsPlugin } from './plugins/skills/index.js';
 import { registerAllDefaultBundledSkills, unregisterBundledSkill } from './plugins/skills/bundled/index.js';
 import { createCommandsPlugin, setCommandAgent } from './plugins/commands/index.js';
 import { createSkillsSlashPlugin } from './plugins/commands/skills-slash.js';
+import { createAgentSlashPlugin, setTargetAgent } from './plugins/commands/agent-slash.js';
 import { createBangPlugin } from './plugins/commands/bang.js';
 import { initCommandSuggestions } from './plugins/display/claude-code-ink/skills-bridge.js';
 import { DisplayManager } from './display.js';
@@ -152,6 +153,8 @@ async function startCLI(options: { debug?: boolean; think?: boolean; skipPermiss
 
   // ── 注册命令相关插件 ──
   await registry.register(createCommandsPlugin(displayMgr, registry, config));
+  await registry.register(createAgentSlashPlugin(displayMgr));
+  // agent-slash 在 skills-slash 之前注册，agent 名优先匹配
   await registry.register(createSkillsSlashPlugin(llmClient, displayMgr));
   await registry.register(createBangPlugin(displayMgr));
 
@@ -198,6 +201,7 @@ async function startCLI(options: { debug?: boolean; think?: boolean; skipPermiss
 
   const agent = new NanoCodeAgent(registry, llmClient, config.agent?.role, config.systemPrompt, 'main', displayMgr);
   setCommandAgent(agent);
+  setTargetAgent(agent, displayMgr);
 
   // ── --continue: restore previous session ──
   if (options.continue) {

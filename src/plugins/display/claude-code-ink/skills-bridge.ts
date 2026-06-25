@@ -1,6 +1,7 @@
 import { getBundledSkills } from '../../skills/bundled/index.js';
 import { loadAllSkills } from '../../skills/loader.js';
 import { getBuiltinCommands } from '../../commands/builtin.js';
+import { loadAgentDefinitions } from '../../../agent-loader.js';
 import { setSuggestionProvider, type CommandSuggestion } from './index.js';
 
 /**
@@ -36,6 +37,14 @@ export function initCommandSuggestions(disabledSkills: string[]): void {
       if (disabledSkills.includes(s.name)) continue;
       items.push({ name: s.name, description: s.description, type: 'skill' });
     }
+
+    // 工具型 agent（~/.nano-code/agents/）
+    for (const a of loadAgentDefinitions()) {
+      if (a.enabled === false) continue;
+      items.push({ name: a.name, description: a.description, type: 'agent' });
+    }
+    // 主模式重置
+    items.push({ name: 'main', description: '切换回主模式（默认 agent）', type: 'agent' });
 
     return items.sort((a, b) => a.name.localeCompare(b.name));
   });

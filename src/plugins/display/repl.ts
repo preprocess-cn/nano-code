@@ -4,6 +4,7 @@ import { isMainAgent } from '../../contract.js';
 import { formatStatusText } from '../../display-strings.js';
 import { ThinkStream } from './think-stream.js';
 import type { PluginRegistry } from '../../plugin.js';
+import { getCurrentAgentMode } from '../commands/agent-slash.js';
 
 /** 非主 agent 的消息加 [name] 前缀 */
 function p(agentName: string, msg: string): string {
@@ -58,8 +59,10 @@ export const replDisplay: DisplayPlugin = {
   },
 
   async prompt(): Promise<string | null> {
+    const agentMode = getCurrentAgentMode();
+    const promptMsg = agentMode ? `[${agentMode.name}] >>  请输入开发任务或指令：` : '>>  请输入开发任务或指令：';
     const result = await text({
-      message: '>>  请输入开发任务或指令：',
+      message: promptMsg,
       placeholder: '例如："帮我看看这个项目的文件结构" 或 "创建一个 utils.ts 并在里面写一个冒泡排序"',
       validate: (value: string) => {
         if (!value.trim()) return '指令不能为空，请输入点什么吧！';
