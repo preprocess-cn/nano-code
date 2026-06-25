@@ -5,7 +5,6 @@ import { PluginRegistry } from './plugin.js';
 import { ChatMessage } from './llm.js';
 import { SystemPromptConfig } from './config.js';
 import { ToolResponse } from './contract.js';
-import { buildSkillsPromptSection } from './plugins/skills/bundled/index.js';
 
 /**
  * 组装系统提示词。
@@ -37,12 +36,6 @@ export function buildSystemPrompt(
     if (tmpl) {
       parts.push(tmpl.replace(/\{role\}/g, role));
     }
-  }
-
-  // ④ 技能列表 — 对齐 Claude Code skill_listing 机制，注入非 disableModelInvocation 的技能
-  const skillsSection = buildSkillsPromptSection();
-  if (skillsSection) {
-    parts.push(skillsSection);
   }
 
   // ② 项目级指令文件（如 AGENT.md，用于向 LLM 传递项目特定指令）

@@ -320,7 +320,7 @@ FS version`, 'utf-8');
   });
 });
 
-// ── buildSystemPrompt integration ──
+// ── buildSystemPrompt integration (via plugin onSystemPrompt) ──
 
 describe('buildSystemPrompt with skill listing', () => {
   let bundled: typeof import('../src/plugins/skills/bundled/index.js');
@@ -340,7 +340,9 @@ describe('buildSystemPrompt with skill listing', () => {
 
     const { buildSystemPrompt } = await import('../src/prompt.js');
     const { PluginRegistry } = await import('../src/plugin.js');
+    const { createSkillsPlugin } = await import('../src/plugins/skills/index.js');
     const registry = new PluginRegistry();
+    await registry.register(createSkillsPlugin());
 
     const result = buildSystemPrompt(registry, undefined);
     assert.ok(result.content);
@@ -359,11 +361,41 @@ describe('buildSystemPrompt with skill listing', () => {
 
     const { buildSystemPrompt } = await import('../src/prompt.js');
     const { PluginRegistry } = await import('../src/plugin.js');
+    const { createSkillsPlugin } = await import('../src/plugins/skills/index.js');
     const registry = new PluginRegistry();
+    await registry.register(createSkillsPlugin());
 
     const result = buildSystemPrompt(registry, undefined);
     assert.ok(result.content);
     assert.ok(!result.content!.includes('hidden-skill'));
+  });
+
+  it('does not duplicate skill listing when plugin is registered', async () => {
+    bundled.registerBundledSkill({
+      name: 'alpha',
+      description: 'Alpha tool',
+      getPrompt: async () => '',
+    });
+    bundled.registerBundledSkill({
+      name: 'beta',
+      description: 'Beta tool',
+      getPrompt: async () => '',
+    });
+
+    const { buildSystemPrompt } = await import('../src/prompt.js');
+    const { PluginRegistry } = await import('../src/plugin.js');
+    const { createSkillsPlugin } = await import('../src/plugins/skills/index.js');
+    const registry = new PluginRegistry();
+    await registry.register(createSkillsPlugin());
+
+    const result = buildSystemPrompt(registry, undefined);
+    assert.ok(result.content);
+
+    // Each skill name should appear exactly once (no duplicate injection)
+    const alphaMatches = result.content!.match(/alpha/g);
+    const betaMatches = result.content!.match(/beta/g);
+    assert.strictEqual(alphaMatches?.length ?? 0, 1);
+    assert.strictEqual(betaMatches?.length ?? 0, 1);
   });
 
   it('returns empty section when no skills registered', async () => {
@@ -372,7 +404,6 @@ describe('buildSystemPrompt with skill listing', () => {
     const registry = new PluginRegistry();
 
     const result = buildSystemPrompt(registry, undefined);
-    // Should still have base content, just no skill listing
     assert.ok(result.content);
   });
 });
