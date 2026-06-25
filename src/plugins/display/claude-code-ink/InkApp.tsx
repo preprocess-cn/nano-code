@@ -29,6 +29,12 @@ export interface PermissionPrompt {
   filePath?: string;
 }
 
+export interface CommandSuggestion {
+  name: string;
+  description: string;
+  type: 'builtin' | 'skill';
+}
+
 export interface InkAppProps {
   greeting: string;
   messages: UIMessage[];
@@ -36,6 +42,7 @@ export interface InkAppProps {
   onInputChange: (text: string) => void;
   onInputSubmit: (text: string) => void;
   onExit: () => void;
+  suggestions?: CommandSuggestion[];
   pendingPermission?: PermissionPrompt | null;
   onPermissionResponse?: (allowed: boolean) => void;
 }
@@ -163,7 +170,6 @@ function MessageItem({ msg }: { msg: UIMessage }): React.ReactElement {
   }
 
   const colorMap: Record<string, string | undefined> = {
-    status: '#6b7280',
     toolCall: '#fbbf24',
     toolResult: '#10b981',
     error: '#ef4444',
@@ -314,6 +320,26 @@ function PermissionDialog({
   );
 }
 
+function filterSuggestions(suggestions: CommandSuggestion[], query: string): CommandSuggestion[] {
+  if (!query) return suggestions.slice().sort((a, b) => a.name.localeCompare(b.name));
+  const lower = query.toLowerCase();
+  const ranked = suggestions.map(s => {
+    const nl = s.name.toLowerCase();
+    const dl = s.description.toLowerCase();
+    let rank: number;
+    if (nl === lower) rank = 0;
+    else if (nl.startsWith(lower)) rank = 1;
+    else if (nl.includes(lower)) rank = 2;
+    else if (dl.includes(lower)) rank = 3;
+    else rank = 99;
+    return { s, rank };
+  });
+  return ranked
+    .filter(r => r.rank < 99)
+    .sort((a, b) => a.rank - b.rank || a.s.name.localeCompare(b.s.name))
+    .map(r => r.s);
+}
+
 function AppContent(props: InkAppProps): React.ReactElement {
   const { messages, onInputSubmit, onExit, greeting, pendingPermission, onPermissionResponse } = props;
   const { setRawMode } = useStdin();
@@ -323,6 +349,24 @@ function AppContent(props: InkAppProps): React.ReactElement {
   const draftRef = useRef('');
   const [, setScrollTick] = useState(0);
   const scrollRef = useRef<ScrollBoxHandle>(null);
+  const [suggestionFiltered, setSuggestionFiltered] = useState<CommandSuggestion[]>([]);
+  const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(0);
+  const [isSuggestionOpen, setIsSuggestionOpen] = useState(false);
+
+  // Filter suggestions when input or the full list changes
+  useEffect(() => {
+    const suggestions = props.suggestions ?? [];
+    if (input.startsWith('/') && suggestions.length > 0) {
+      const query = input.slice(1).toLowerCase();
+      const filtered = filterSuggestions(suggestions, query);
+      setSuggestionFiltered(filtered);
+      setSelectedSuggestionIndex(0);
+      setIsSuggestionOpen(true);
+    } else {
+      setIsSuggestionOpen(false);
+      setSuggestionFiltered([]);
+    }
+  }, [input, props.suggestions]);
 
   // Collect user input messages for up/down history navigation
   const userMessages = useMemo(
@@ -350,6 +394,13 @@ function AppContent(props: InkAppProps): React.ReactElement {
     if (!h) return;
     return h.subscribe(() => setScrollTick(n => n + 1));
   }, []);
+
+  // Dynamic border color based on input prefix
+  const inputBorderColor = input.startsWith('!')
+    ? '#ff0087' // bash mode (pink, matches Claude Code bashBorder)
+    : input.startsWith('/')
+      ? '#7c3aed' // slash/command mode (accent purple)
+      : '#6b7280'; // normal mode (gray)
 
   // Show terminal cursor — Ink hides it in componentDidMount (parent class
   // component), which runs after useLayoutEffect but BEFORE useEffect.
@@ -422,7 +473,7 @@ function AppContent(props: InkAppProps): React.ReactElement {
     escape: boolean; ctrl: boolean; return: boolean; backspace: boolean;
     upArrow: boolean; downArrow: boolean; leftArrow: boolean; rightArrow: boolean;
     delete: boolean; pageUp: boolean; pageDown: boolean;
-    wheelUp: boolean; wheelDown: boolean;
+    wheelUp: boolean; wheelDown: boolean; tab: boolean;
   }) => {
     // When permission dialog is active, suppress normal input handling
     // (PermissionDialog has its own useInput for Allow/Deny)
@@ -445,6 +496,49 @@ function AppContent(props: InkAppProps): React.ReactElement {
         sb.scrollTo(Math.min(st, maxScroll));
       }
       return;
+    }
+
+    // ── Suggestion popup keyboard navigation ──
+    if (isSuggestionOpen) {
+      // Up: previous suggestion
+      if (key.upArrow) {
+        setSelectedSuggestionIndex(i => Math.max(0, i - 1));
+        return;
+      }
+      // Down: next suggestion
+      if (key.downArrow) {
+        setSelectedSuggestionIndex(i => Math.min(suggestionFiltered.length - 1, i + 1));
+        return;
+      }
+      // Tab: complete with selected suggestion (insert name, stay editing)
+      if (key.tab) {
+        const selected = suggestionFiltered[selectedSuggestionIndex];
+        if (selected) {
+          setInput('/' + selected.name + ' ');
+          setCursorPos(selected.name.length + 2);
+        }
+        setIsSuggestionOpen(false);
+        return;
+      }
+      // Escape: close popup
+      if (key.escape) {
+        setIsSuggestionOpen(false);
+        return;
+      }
+      // Enter: complete + submit if a suggestion is selected
+      if (key.return) {
+        const selected = suggestionFiltered[selectedSuggestionIndex];
+        if (selected) {
+          const completed = '/' + selected.name + ' ';
+          onInputSubmit(completed.trim());
+          setInput('');
+          setCursorPos(0);
+          setHistoryIdx(-1);
+          draftRef.current = '';
+          return;
+        }
+        // No selection: fall through to normal submit
+      }
     }
 
     // Up arrow: navigate to previous user input (history)
@@ -554,14 +648,14 @@ function AppContent(props: InkAppProps): React.ReactElement {
         ),
         React.createElement(
           Box,
-          { paddingLeft: 1, paddingRight: 1, paddingBottom: 1 },
+          { flexDirection: 'column', paddingLeft: 1, paddingRight: 1, paddingBottom: 1 },
           React.createElement(
             Box,
             {
               flexDirection: 'row',
               alignItems: 'flex-start',
               borderStyle: 'round',
-              borderColor: '#6b7280',
+              borderColor: inputBorderColor,
               borderLeft: false, borderRight: false, borderBottom: true,
               width: '100%',
             },
@@ -572,6 +666,23 @@ function AppContent(props: InkAppProps): React.ReactElement {
               React.createElement(Text, null, input),
             ),
           ),
+          // Suggestion popup
+          isSuggestionOpen && suggestionFiltered.length > 0
+            ? React.createElement(
+                Box,
+                { flexDirection: 'column', paddingLeft: 2, paddingTop: 1 },
+                ...suggestionFiltered.slice(0, 8).map((s, i) =>
+                  React.createElement(Text, {
+                    key: s.name,
+                    color: i === selectedSuggestionIndex ? '#7c3aed' : undefined,
+                    dimColor: i !== selectedSuggestionIndex,
+                  }, `${i === selectedSuggestionIndex ? '● ' : '○ '}/${s.name}  ${s.description}`),
+                ),
+                ...(suggestionFiltered.length > 8
+                  ? [React.createElement(Text, { key: '__more', dimColor: true }, `...还有 ${suggestionFiltered.length - 8} 个`)]
+                  : []),
+              )
+            : null,
         ),
       ),
     );
@@ -610,7 +721,7 @@ function AppContent(props: InkAppProps): React.ReactElement {
         )
       : null,
     // Bottom area — flexShrink=0 prevents Yoga from compressing it
-    // Claude Code style: bottom-border row for prompt + input
+    // Claude Code style: bottom-border row for prompt + input + suggestions
     React.createElement(
       Box,
       { flexDirection: 'column', flexShrink: 0, paddingLeft: 1, paddingRight: 1, paddingBottom: 1, marginTop: 1 },
@@ -620,7 +731,7 @@ function AppContent(props: InkAppProps): React.ReactElement {
           flexDirection: 'row',
           alignItems: 'flex-start',
           borderStyle: 'round',
-          borderColor: '#6b7280',
+          borderColor: inputBorderColor,
           borderLeft: false, borderRight: false, borderBottom: true,
           width: '100%',
         },
@@ -631,6 +742,23 @@ function AppContent(props: InkAppProps): React.ReactElement {
           React.createElement(Text, null, input),
         ),
       ),
+      // Suggestion popup
+      isSuggestionOpen && suggestionFiltered.length > 0
+        ? React.createElement(
+            Box,
+            { flexDirection: 'column', paddingLeft: 2, paddingTop: 1 },
+            ...suggestionFiltered.slice(0, 8).map((s, i) =>
+              React.createElement(Text, {
+                key: s.name,
+                color: i === selectedSuggestionIndex ? '#7c3aed' : undefined,
+                dimColor: i !== selectedSuggestionIndex,
+              }, `${i === selectedSuggestionIndex ? '● ' : '○ '}/${s.name}  ${s.description}`),
+            ),
+            ...(suggestionFiltered.length > 8
+              ? [React.createElement(Text, { key: '__more', dimColor: true }, `...还有 ${suggestionFiltered.length - 8} 个`)]
+              : []),
+          )
+        : null,
     ),
   );
 }

@@ -7,6 +7,12 @@ import type { PluginRegistry } from '../../../plugin.js';
 import { formatStatusText } from '../../../display-strings.js';
 import React from 'react';
 
+export interface CommandSuggestion {
+  name: string;
+  description: string;
+  type: 'builtin' | 'skill';
+}
+
 function parseThinkSegments(text: string): TextSegment[] {
   const segments: TextSegment[] = [];
   let remaining = text;
@@ -46,6 +52,12 @@ function parseThinkSegments(text: string): TextSegment[] {
 
 type InputResolve = (value: string | null) => void;
 
+let _suggestionProvider: (() => CommandSuggestion[]) | null = null;
+
+export function setSuggestionProvider(provider: (() => CommandSuggestion[]) | null): void {
+  _suggestionProvider = provider;
+}
+
 function createPlugin(): DisplayPlugin {
   let inkInstance: Instance | null = null;
   let messages: UIMessage[] = [];
@@ -64,12 +76,14 @@ function createPlugin(): DisplayPlugin {
 
   function render(): void {
     if (!inkInstance) return;
+    const suggestions = _suggestionProvider?.() ?? [];
     try {
       inkInstance.rerender(
         React.createElement(InkApp, {
           greeting,
           messages: [...messages],
           inputBuffer: '',
+          suggestions,
           onInputChange: () => {},
           onInputSubmit: (text: string) => {
             if (promptResolve) {
@@ -145,11 +159,13 @@ function createPlugin(): DisplayPlugin {
 
     prompt(): Promise<string | null> {
       if (!inkInstance) {
+        const initSuggestions = _suggestionProvider?.() ?? [];
         const initPromise = inkRender(
           React.createElement(InkApp, {
             greeting,
             messages: [...messages],
             inputBuffer: '',
+            suggestions: initSuggestions,
             onInputChange: () => {},
             onInputSubmit: (text: string) => {
               if (promptResolve) {

@@ -14,6 +14,7 @@ import { registerAllDefaultBundledSkills, unregisterBundledSkill } from './plugi
 import { createCommandsPlugin, setCommandAgent } from './plugins/commands/index.js';
 import { createSkillsSlashPlugin } from './plugins/commands/skills-slash.js';
 import { createBangPlugin } from './plugins/commands/bang.js';
+import { initCommandSuggestions } from './plugins/display/claude-code-ink/skills-bridge.js';
 import { DisplayManager } from './display.js';
 import { replDisplay } from './plugins/display/repl.js';
 import { resolveDisplayPlugin } from './plugins/display/loader.js';
@@ -153,6 +154,9 @@ async function startCLI(options: { debug?: boolean; think?: boolean; skipPermiss
   await registry.register(createCommandsPlugin(displayMgr, registry, config));
   await registry.register(createSkillsSlashPlugin(llmClient, displayMgr));
   await registry.register(createBangPlugin(displayMgr));
+
+  // ── 初始化 Ink 插件建议列表（依赖技能/命令系统已就绪）──
+  initCommandSuggestions(disabledSkills);
 
   // ── 初始化 display 插件（注入 confirmCallback 等）──
   await displayMgr.init(registry);
