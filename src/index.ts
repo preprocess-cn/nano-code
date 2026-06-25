@@ -10,6 +10,9 @@ import { handlePluginCommand } from './plugin-cli.js';
 import { loadAgentDefinitions } from './agent-loader.js';
 import { createAgentToolPlugin } from './agent-tool.js';
 import { createSkillsPlugin } from './plugins/skills/index.js';
+import { createCommandsPlugin, setCommandAgent } from './plugins/commands/index.js';
+import { createSkillsSlashPlugin } from './plugins/commands/skills-slash.js';
+import { createBangPlugin } from './plugins/commands/bang.js';
 import { DisplayManager } from './display.js';
 import { replDisplay } from './plugins/display/repl.js';
 import { resolveDisplayPlugin } from './plugins/display/loader.js';
@@ -136,6 +139,11 @@ async function startCLI(options: { debug?: boolean; think?: boolean; skipPermiss
     await registry.register(plugin);
   }
 
+  // ── 注册命令相关插件 ──
+  await registry.register(createCommandsPlugin(displayMgr, registry, config));
+  await registry.register(createSkillsSlashPlugin(llmClient, displayMgr));
+  await registry.register(createBangPlugin(displayMgr));
+
   // ── 初始化 display 插件（注入 confirmCallback 等）──
   await displayMgr.init(registry);
 
@@ -175,6 +183,7 @@ async function startCLI(options: { debug?: boolean; think?: boolean; skipPermiss
   }
 
   const agent = new NanoCodeAgent(registry, llmClient, config.agent?.role, config.systemPrompt, 'main', displayMgr);
+  setCommandAgent(agent);
 
   // ── --continue: restore previous session ──
   if (options.continue) {
@@ -198,13 +207,27 @@ async function startCLI(options: { debug?: boolean; think?: boolean; skipPermiss
 
   // 3. 进入无限交互循环
   while (true) {
-    const userPrompt = await displayMgr.prompt();
-    if (userPrompt === null) {
+    const userInput = await displayMgr.prompt();
+    if (userInput === null) {
       handleExit(displayMgr);
     }
 
+    // 插件拦截用户输入（斜杠命令、! bash 等）
+    const intercept = await registry.execBeforeAgentInput(userInput);
+    if (intercept) {
+      if (intercept.exit) handleExit(displayMgr);
+      if (intercept.message) {
+        displayMgr.onStatus({ message: intercept.message, agentName: 'main' });
+      }
+      if (intercept.injectMessages) {
+        agent.injectMessages(intercept.injectMessages);
+      }
+      if (intercept.skipAgent) continue;
+      // handled && !skipAgent → fall through to runTask（可能用 replaceInput 替换原始输入）
+    }
+
     try {
-      await agent.runTask(userPrompt);
+      await agent.runTask(intercept?.replaceInput ?? userInput);
     } catch (error) {
       displayMgr.onError({ message: MSG_TOP_LEVEL_ERROR(error), agentName: 'main', stack: error instanceof Error ? error.stack : undefined });
     } finally {

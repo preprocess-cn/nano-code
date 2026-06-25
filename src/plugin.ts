@@ -1,4 +1,4 @@
-import { ToolDefinition, ToolResponse, ToolContext, type PermissionConfirmRequest, type PermissionConfirmResponse, type CommandOutputHandler } from './contract.js';
+import { ToolDefinition, ToolResponse, ToolContext, CommandInterceptResult, type PermissionConfirmRequest, type PermissionConfirmResponse, type CommandOutputHandler } from './contract.js';
 import { ChatMessage } from './llm.js';
 import { IStore } from './store.js';
 import { InMemoryStore } from './plugins/store/in-memory.js';
@@ -38,6 +38,14 @@ export interface NanoPlugin {
   onAfterRequest?(response: LLMResponse, rawMeta?: Record<string, unknown>): void;
   onBeforeToolCall?(toolCall: ToolCall): ToolCall | null;
   onAfterToolCall?(result: ToolResponse): ToolResponse;
+
+  /**
+   * 在用户输入发送给 agent 之前拦截处理。
+   * 返回 { handled: true, ... } 表示插件已处理该输入，主循环据此决定后续行为。
+   * 返回 null 表示插件不处理，交由后续插件或 agent。
+   * 用于实现斜杠命令、! 前缀 bash 等直接处理。
+   */
+  onBeforeAgentInput?(input: string): Promise<CommandInterceptResult | null>;
 
   /** 返回额外参数注入到 LLM API 请求体中。核心只透传，不知晓参数含义 */
   onExtraParams?(): Record<string, unknown>;
@@ -273,6 +281,29 @@ export class PluginRegistry {
   }
 
   /**
+   * 遍历所有实现了 onBeforeAgentInput 的插件，返回第一个处理结果。
+   * 无插件处理该输入时返回 null（正常交由 agent 处理）。
+   */
+  async execBeforeAgentInput(input: string): Promise<CommandInterceptResult | null> {
+    for (const plugin of this.plugins.values()) {
+      if (plugin.onBeforeAgentInput) {
+        try {
+          const result = await plugin.onBeforeAgentInput(input);
+          if (result?.handled) return result;
+        } catch (err) {
+          console.error(`[plugin] onBeforeAgentInput failed for "${plugin.name}":`, err);
+        }
+      }
+    }
+    // 以 / 或 ! 开头但无插件处理 → 返回错误提示
+    const trimmed = input.trim();
+    if (trimmed.startsWith('/') || trimmed.startsWith('!')) {
+      return { handled: true, skipAgent: true, message: `未知命令：${trimmed.split(/\s+/)[0]}` };
+    }
+    return null;
+  }
+
+  /**
    * Return a snapshot of every registered plugin and its tools.
    */
   listPlugins(): Array<{ name: string; description?: string; version?: string; tools: ToolDefinition[] }> {
@@ -305,7 +336,7 @@ const BUILTIN_LOADERS: Record<string, (settings?: Record<string, any>) => Promis
   fs: async () => (await import('./plugins/tools/fs.js')).fsPlugin,
   command: async () => (await import('./plugins/tools/command.js')).commandPlugin,
   memory: async (s) => (await import('./plugins/tools/memory.js')).createMemoryPlugin(s || {}),
-  'token-budget': async (s) => (await import('./plugins/token-budget.js')).createTokenBudgetPlugin(s || {}),
+  'token-budget': async (s) => (await import('./plugins/token-budget/index.js')).createTokenBudgetPlugin(s || {}),
   skills: async () => (await import('./plugins/skills/index.js')).createSkillsPlugin(),
 };
 

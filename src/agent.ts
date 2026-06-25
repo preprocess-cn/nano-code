@@ -3,7 +3,7 @@ import { PluginRegistry, ToolCall } from './plugin.js';
 import { SystemPromptConfig } from './config.js';
 import { buildSystemPrompt, formatToolResponse } from './prompt.js';
 import { DisplayManager } from './display.js';
-import { ToolResponse, isMainAgent } from './contract.js';
+import { ToolResponse, InjectedMessage, isMainAgent } from './contract.js';
 
 export class NanoCodeAgent {
   private llmClient: LLMClient;
@@ -33,6 +33,18 @@ export class NanoCodeAgent {
 
   loadHistory(messages: ChatMessage[]): void {
     this.messageHistory = [...messages];
+  }
+
+  /** 清空对话历史 */
+  clearHistory(): void {
+    this.messageHistory = [];
+  }
+
+  /** 注入消息到历史末尾（默认 user 角色，/context 用 assistant） */
+  injectMessages(msgs: InjectedMessage[]): void {
+    for (const msg of msgs) {
+      this.messageHistory.push({ role: msg.role || 'user', content: msg.content });
+    }
   }
 
   async runTask(userPrompt: string): Promise<string | undefined> {

@@ -6,6 +6,7 @@ import { useDeclaredCursor } from './engine/hooks/use-declared-cursor.js';
 import { ColorDiff } from './color-diff.js';
 import { Markdown, StreamingMarkdown } from './components/Markdown.js';
 import type { DiffHunk } from '../../../contract.js';
+import type { ContextAnalysis } from '../../token-budget/analyzer.js';
 
 export interface TextSegment {
   text: string;
@@ -17,6 +18,7 @@ export interface UIMessage {
   text: string;
   kind: 'stream' | 'thinking' | 'status' | 'toolCall' | 'toolResult' | 'error' | 'userInput';
   segments?: TextSegment[];
+  contextAnalysis?: ContextAnalysis;
 }
 
 export interface PermissionPrompt {
@@ -43,7 +45,97 @@ function AgentLabel({ agentName }: { agentName: string }): React.ReactElement | 
   return React.createElement(Text, { dimColor: true }, `[${agentName}] `);
 }
 
+const DIM_COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#06b6d4', '#f97316', '#ef4444'];
+const DIM_BLOCK = '■';
+
+function ContextVis({ analysis }: { analysis: ContextAnalysis }): React.ReactElement {
+  const cols = process.stdout.columns ?? 80;
+  // Available squares: reserve ~4 cols for left padding, each block is '■ ' = 2 chars
+  const blockCount = Math.max(4, Math.floor((cols - 4) / 2));
+  const tokensPerBlock = analysis.contextWindow / blockCount;
+
+  // Build block segments
+  const segments: { color: string; count: number; label: string }[] = [];
+  let filled = 0;
+  for (const dim of analysis.dimensions) {
+    if (dim.tokens <= 0) continue;
+    const count = Math.max(1, Math.round(dim.tokens / tokensPerBlock));
+    segments.push({ color: DIM_COLORS[segments.length % DIM_COLORS.length], count, label: dim.name });
+    filled += count;
+  }
+  // Cap to blockCount
+  if (filled > blockCount) {
+    // Scale down proportionally
+    const scale = blockCount / filled;
+    let adjusted = 0;
+    for (const seg of segments) {
+      seg.count = Math.max(1, Math.round(seg.count * scale));
+      adjusted += seg.count;
+    }
+    // Trim overflow
+    while (adjusted > blockCount && segments.length > 0) {
+      const last = segments[segments.length - 1];
+      if (last.count > 1) { last.count--; adjusted--; }
+      else break;
+    }
+    filled = adjusted;
+  }
+  const free = Math.max(0, blockCount - filled);
+
+  // Legend items
+  const legendItems = analysis.dimensions.filter(d => d.tokens > 0);
+  const legendChildren = legendItems.map((dim, i) => {
+    const pctStr = dim.percentage > 0 ? dim.percentage.toFixed(1) : '-';
+    return React.createElement(
+      Box,
+      { key: dim.name, marginRight: 2 },
+      React.createElement(Text, { color: DIM_COLORS[i % DIM_COLORS.length] }, DIM_BLOCK),
+      React.createElement(Text, null, ` ${dim.name}: ${dim.tokens.toLocaleString()} (${pctStr}%)`),
+    );
+  });
+
+  // Block rows
+  const blockChildren: React.ReactElement[] = [];
+  let segIdx = 0;
+  let remaining = segments.length > 0 ? segments[0].count : 0;
+  for (let i = 0; i < blockCount; i++) {
+    while (segIdx < segments.length && remaining <= 0) {
+      segIdx++;
+      remaining = segIdx < segments.length ? segments[segIdx].count : 0;
+    }
+    if (segIdx < segments.length) {
+      const color = segments[segIdx].color;
+      blockChildren.push(React.createElement(Text, { key: i, color }, DIM_BLOCK));
+      remaining--;
+    } else {
+      blockChildren.push(React.createElement(Text, { key: i, dimColor: true }, '·'));
+    }
+  }
+
+  return React.createElement(
+    Box,
+    { flexDirection: 'column', paddingY: 1 },
+    // Color block bar
+    React.createElement(Box, { flexDirection: 'row', gap: 0 }, ...blockChildren),
+    // Spacer
+    React.createElement(Box, { height: 1 }),
+    // Legend
+    React.createElement(Box, { flexDirection: 'row', flexWrap: 'wrap' }, ...legendChildren),
+    // Summary line
+    React.createElement(
+      Text,
+      { dimColor: true },
+      `${analysis.modelName} · ${analysis.totalTokens.toLocaleString()} / ${analysis.contextWindow.toLocaleString()} tokens (${analysis.percentage}%)${analysis.usageSource === 'api' ? ' · API 实际' : ''}${analysis.freeTokens > 0 ? ` · ${analysis.freeTokens.toLocaleString()} free` : ''}`,
+    ),
+  );
+}
+
 function MessageItem({ msg }: { msg: UIMessage }): React.ReactElement {
+  // Context analysis visualization
+  if (msg.contextAnalysis) {
+    return React.createElement(ContextVis, { analysis: msg.contextAnalysis });
+  }
+
   const isThink = msg.kind === 'thinking';
 
   if (msg.kind === 'stream') {

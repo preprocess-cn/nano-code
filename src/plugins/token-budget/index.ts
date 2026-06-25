@@ -1,21 +1,8 @@
-import { NanoPlugin, PluginRegistry, ToolCall, LLMResponse } from '../plugin.js';
-import { ToolResponse, ToolContext, ToolDefinition } from '../contract.js';
-import { ChatMessage } from '../llm.js';
-
-// ── Token estimation (fallback when API doesn't return usage) ──
-
-function estimateTokens(text: string): number {
-  return Math.ceil(text.length / 3);
-}
-
-function countMessagesTokens(messages: ChatMessage[]): number {
-  let total = 0;
-  for (const m of messages) {
-    total += estimateTokens(m.content || '');
-    total += 4; // overhead per message for role markers
-  }
-  return total;
-}
+import { NanoPlugin, PluginRegistry, ToolCall, LLMResponse } from '../../plugin.js';
+import { ToolResponse, ToolContext, ToolDefinition } from '../../contract.js';
+import { ChatMessage } from '../../llm.js';
+import { countMessagesTokens } from './counter.js';
+import { initTokenizer } from './counter.js';
 
 // ── Plugin ──
 
@@ -36,7 +23,7 @@ export function createTokenBudgetPlugin(config?: TokenBudgetConfig): NanoPlugin 
 
   let inputTokens = 0;
   let outputTokens = 0;
-  let totalTokens = 0;
+  let totalTokensAccumulated = 0;
   let warned = false;
   let compressed = false;
 
@@ -53,6 +40,9 @@ export function createTokenBudgetPlugin(config?: TokenBudgetConfig): NanoPlugin 
     },
 
     async onInit(_registry: PluginRegistry): Promise<void> {
+      // Warm up tokenizer
+      await initTokenizer();
+
       // Load config from registry if available
       const registryConfig = _registry.getPluginConfig('token-budget') as TokenBudgetConfig;
       if (registryConfig.maxTokensPerSession) cfg.maxTokensPerSession = registryConfig.maxTokensPerSession;
@@ -62,9 +52,16 @@ export function createTokenBudgetPlugin(config?: TokenBudgetConfig): NanoPlugin 
 
       inputTokens = 0;
       outputTokens = 0;
-      totalTokens = 0;
+      totalTokensAccumulated = 0;
       warned = false;
       compressed = false;
+
+      // Expose getApiUsage via shared store for other plugins (e.g. /context)
+      _registry.store.set('token-budget:getApiUsage', () => ({
+        inputTokens,
+        outputTokens,
+        totalTokens: totalTokensAccumulated,
+      }));
     },
 
     onBeforeRequest(messages: ChatMessage[]): ChatMessage[] {
@@ -83,8 +80,8 @@ export function createTokenBudgetPlugin(config?: TokenBudgetConfig): NanoPlugin 
       }
 
       // Check session limit — hard stop
-      if (totalTokens + estimated > cfg.maxTokensPerSession) {
-        console.warn(`\n[token-budget] 会话预算已超 (${totalTokens + estimated}/${cfg.maxTokensPerSession})，终止工具调用`);
+      if (totalTokensAccumulated + estimated > cfg.maxTokensPerSession) {
+        console.warn(`\n[token-budget] 会话预算已超 (${totalTokensAccumulated + estimated}/${cfg.maxTokensPerSession})，终止工具调用`);
         return [
           ...messages,
           {
@@ -99,13 +96,13 @@ export function createTokenBudgetPlugin(config?: TokenBudgetConfig): NanoPlugin 
       }
 
       // Warning at threshold
-      if (!warned && totalTokens > cfg.warnAtTokens) {
+      if (!warned && totalTokensAccumulated > cfg.warnAtTokens) {
         warned = true;
-        console.warn(`\n[token-budget] 已使用 ${totalTokens} tokens，接近预算 (${cfg.maxTokensPerSession})`);
+        console.warn(`\n[token-budget] 已使用 ${totalTokensAccumulated} tokens，接近预算 (${cfg.maxTokensPerSession})`);
       }
 
       // Compression hint at threshold
-      if (!compressed && totalTokens > cfg.compressionThreshold) {
+      if (!compressed && totalTokensAccumulated > cfg.compressionThreshold) {
         compressed = true;
         return [
           ...messages,
@@ -121,22 +118,22 @@ export function createTokenBudgetPlugin(config?: TokenBudgetConfig): NanoPlugin 
 
     onAfterRequest(response: LLMResponse, rawMeta?: Record<string, unknown>): void {
       if (rawMeta?.promptTokens != null) {
-        // Use exact token counts from API response
+        // Use exact token counts from API response (priority 1)
         inputTokens += rawMeta.promptTokens as number;
         outputTokens += rawMeta.completionTokens as number;
-        totalTokens += rawMeta.totalTokens as number;
+        totalTokensAccumulated += rawMeta.totalTokens as number;
       } else {
         // Fallback estimation when API doesn't return usage
         const responseText = response.text || '';
-        const estOutput = estimateTokens(responseText);
+        const estOutput = Math.ceil(responseText.length / 3);
         outputTokens += estOutput;
-        totalTokens = inputTokens + outputTokens;
+        totalTokensAccumulated = inputTokens + outputTokens;
       }
     },
 
     onBeforeToolCall(toolCall: ToolCall): ToolCall | null {
       // Reject tool calls if over budget
-      if (totalTokens > cfg.maxTokensPerSession) {
+      if (totalTokensAccumulated > cfg.maxTokensPerSession) {
         console.warn(`[token-budget] 预算耗尽，拒绝工具调用: ${toolCall.function.name}`);
         return null;
       }

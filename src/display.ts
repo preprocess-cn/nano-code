@@ -1,4 +1,5 @@
 import { PluginRegistry } from './plugin.js';
+import type { ContextAnalysis } from './plugins/token-budget/analyzer.js';
 
 // ════════════════════════════════════════════
 // 结构化事件类型
@@ -98,6 +99,9 @@ export interface DisplayPlugin {
 
   /** 状态快照推送 */
   onStateSnapshot?(snapshot: StateSnapshot): void;
+
+  /** 上下文分析可视化（Ink 展示层渲染色块） */
+  onContextAnalysis?(analysis: ContextAnalysis): void;
 }
 
 // ════════════════════════════════════════════
@@ -193,6 +197,10 @@ export class DisplayManager {
 
   onStateSnapshot(snapshot: StateSnapshot): void {
     for (const p of this.plugins) p.onStateSnapshot?.(snapshot);
+  }
+
+  onContextAnalysis(analysis: ContextAnalysis): void {
+    for (const p of this.plugins) p.onContextAnalysis?.(analysis);
   }
 }
 

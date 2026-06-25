@@ -1,4 +1,5 @@
 import type { DisplayPlugin, StartConfig, StatusEvent, StreamEvent, ToolCallEvent, ToolResultEvent, ErrorEvent, AgentEvent, StateSnapshot } from '../../../display.js';
+import type { ContextAnalysis } from '../../token-budget/analyzer.js';
 import { inkRender, type Instance } from './ink.js';
 import { InkApp, type UIMessage, type TextSegment, type PermissionPrompt } from './InkApp.js';
 import { ThinkStream } from '../think-stream.js';
@@ -300,6 +301,16 @@ function createPlugin(): DisplayPlugin {
     onAgentTurnEnd(_event: AgentEvent): void {},
 
     onStateSnapshot(_snapshot: StateSnapshot): void {},
+
+    onContextAnalysis(analysis: ContextAnalysis): void {
+      messages.push({
+        agentName: 'main',
+        text: '',
+        kind: 'status',
+        contextAnalysis: analysis,
+      });
+      render();
+    },
   };
 }
 

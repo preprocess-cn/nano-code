@@ -67,11 +67,7 @@ export const replDisplay: DisplayPlugin = {
     });
 
     if (isCancel(result)) return null;
-
-    const command = (result as string).trim();
-    if (command.toLowerCase() === 'exit' || command.toLowerCase() === 'quit') return null;
-
-    return command;
+    return (result as string).trim();
   },
 
   onUserInput(input: string, sourcePlugin: string): void {

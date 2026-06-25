@@ -6,7 +6,7 @@ export type ToolStatus = 'success' | 'rejected_by_user' | 'error';
  * LLM 在下一轮循环中看到这些消息继续推理。
  */
 export interface InjectedMessage {
-  role: 'user';
+  role?: 'user' | 'assistant';
   content: string;
 }
 
@@ -85,6 +85,23 @@ export interface ToolContext {
   confirmCallback?: (req: PermissionConfirmRequest) => Promise<PermissionConfirmResponse>;
   /** Injected by display plugin. When set, tool plugins stream output here instead of process.stdout. */
   outputHandler?: CommandOutputHandler;
+}
+
+/**
+ * 插件 onBeforeAgentInput 钩子的返回值。
+ * handled: true 表示插件已处理该输入。
+ * exit: 退出进程。skipAgent: 跳过 agent.runTask。
+ * injectMessages: 注入到 agent 历史的消息。
+ * replaceInput: 替换发送给 agent 的用户输入（不设置时使用原始输入）。
+ * message: 要显示的状态消息。
+ */
+export interface CommandInterceptResult {
+  handled: true;
+  exit?: boolean;
+  skipAgent?: boolean;
+  injectMessages?: InjectedMessage[];
+  replaceInput?: string;
+  message?: string;
 }
 
 export function isMainAgent(agentName: string): boolean {
