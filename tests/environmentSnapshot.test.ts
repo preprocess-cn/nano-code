@@ -20,4 +20,18 @@ describe('Environment Snapshot 环境快照注入测试', () => {
     const parsed = JSON.parse(result);
     assert.strictEqual(parsed.message, undefined);
   });
+
+  test('newMessages 和 contextModifier 不会出现在序列化输出中', () => {
+    const result = formatToolResponse({
+      status: 'success',
+      data: 'result',
+      newMessages: [{ role: 'user', content: 'skill instruction' }],
+      contextModifier: {},
+    });
+    const parsed = JSON.parse(result);
+    assert.strictEqual(parsed.status, 'success');
+    assert.strictEqual(parsed.data, 'result');
+    assert.strictEqual(parsed.newMessages, undefined, 'newMessages 不应出现在 LLM 可见输出中');
+    assert.strictEqual(parsed.contextModifier, undefined, 'contextModifier 不应出现在 LLM 可见输出中');
+  });
 });

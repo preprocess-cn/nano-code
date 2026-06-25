@@ -82,6 +82,7 @@ system_plugins:
   - command
   - memory
   - token-budget
+  - skills
 
 # 环境变量兜底（shell 和 .env 优先级更高）
 env:

@@ -9,6 +9,7 @@ import { printPluginList } from './display.js';
 import { handlePluginCommand } from './plugin-cli.js';
 import { loadAgentDefinitions } from './agent-loader.js';
 import { createAgentToolPlugin } from './agent-tool.js';
+import { createSkillsPlugin } from './plugins/skills/index.js';
 import { DisplayManager } from './display.js';
 import { replDisplay } from './plugins/display/repl.js';
 import { resolveDisplayPlugin } from './plugins/display/loader.js';
@@ -122,6 +123,10 @@ async function startCLI(options: { debug?: boolean; think?: boolean; skipPermiss
     if (config.plugins[name]) continue;
     await registerBuiltinPlugin(registry, name);
   }
+
+  // ── 注册技能系统插件 ──
+  const skillsPlugin = createSkillsPlugin(llmClient, displayMgr);
+  await registry.register(skillsPlugin);
 
   // ── 自动发现并注册 agent 工具 ──
   const agentDefs = loadAgentDefinitions();

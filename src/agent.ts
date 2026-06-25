@@ -155,6 +155,16 @@ export class NanoCodeAgent {
     }
     this.registry.execAfterToolCall(toolResult);
 
+    // Inline skill 展开：将 newMessages 注入消息历史（在 tool_result 之前）
+    if (toolResult.newMessages) {
+      for (const msg of toolResult.newMessages) {
+        this.messageHistory.push({
+          role: 'user',
+          content: msg.content,
+        });
+      }
+    }
+
     this.display?.onToolResult({ status: toolResult.status, message: toolResult.message, agentName: this.name });
 
     this.messageHistory.push({

@@ -84,10 +84,15 @@ export function formatToolResponse(response: ToolResponse): string {
     });
   }
 
-  const enriched = { ...response };
-  if (enriched.status !== 'success') {
-    enriched.message = (enriched.message || '') + getEnvironmentSnapshot();
+  // 只序列化 LLM 需要看到的字段，剥离控制面数据
+  const llmVisible: Record<string, unknown> = {
+    status: response.status,
+    data: response.data,
+    message: response.message,
+  };
+  if (response.status !== 'success') {
+    llmVisible.message = (response.message || '') + getEnvironmentSnapshot();
   }
 
-  return JSON.stringify(enriched);
+  return JSON.stringify(llmVisible);
 }

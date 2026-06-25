@@ -46,6 +46,9 @@
 | ☐ | 多轮摘要记忆 | 超出窗口时自动压缩历史 |
 | ☐ | 角色模式 & 斜杠命令 | profiles/ 斜杠命令 `/treehole` 等运行时切换 |
 | ☐ | 更多内置插件 | 按需提供数据库、HTTP 请求等常用插件 |
+| ☐ | ToolUseContext | 工具执行的共享运行时上下文（模型覆盖、effort、权限绑定等），贯穿 ReAct 循环 |
+| ☐ | contextModifier | 工具可通过 ToolResponse 返回上下文修改器，作用于后续工具调用的执行环境 |
+| ☐ | Skill 系统 | skills_list / skill_view / skill 工具，inline（newMessages 注入）+ fork（子 agent）双模式 |
 
 ## 展示层插件（已实现）
 

@@ -1,9 +1,34 @@
 export type ToolStatus = 'success' | 'rejected_by_user' | 'error';
 
+/**
+ * 工具注入到主循环的额外消息。
+ * 用于 inline skill 展开：skill 的内容以 user 消息形式注入消息历史，
+ * LLM 在下一轮循环中看到这些消息继续推理。
+ */
+export interface InjectedMessage {
+  role: 'user';
+  content: string;
+}
+
+/**
+ * 工具响应。
+ *
+ * newMessages: inline skill 展开时注入主循环的消息。
+ *   主 agent 的 executeToolCall 检测到此字段后，
+ *   将消息追加到 messageHistory 中。
+ *
+ * contextModifier: 保留字段，用于未来 ToolUseContext 设计。
+ *   工具可返回修改器改变后续工具调用的执行环境
+ *   （如限制可用工具集、覆盖模型、调整 effort 级别）。
+ */
 export interface ToolResponse {
   status: ToolStatus;
   data?: string;
   message?: string;
+  /** 额外消息注入主循环（inline skill 展开用） */
+  newMessages?: InjectedMessage[];
+  /** 保留：执行上下文修改器（用于未来 ToolUseContext） */
+  contextModifier?: unknown;
 }
 
 export interface ToolDefinition {

@@ -241,3 +241,153 @@ describe('NanoCodeAgent — malformed tool call JSON', () => {
   });
 
 });
+
+describe('NanoCodeAgent — newMessages injection', () => {
+
+  it('injects newMessages from tool response into messageHistory before tool_result', async () => {
+    let callCount = 0;
+    const mock = {
+      sendSystemMessage: async (_messages: any, _tools: any, _onChunk?: any) => {
+        callCount++;
+        if (callCount === 1) {
+          return {
+            text: null,
+            toolCalls: [{
+              id: 'call_nm',
+              type: 'function',
+              function: { name: 'inline_skill', arguments: '{"skill":"test"}' },
+            }],
+            stopReason: 'tool_use',
+          };
+        }
+        return { text: 'done', stopReason: 'stop' };
+      },
+      getModel: () => 'gpt-4o',
+    };
+
+    const registry = new PluginRegistry();
+    registry.register({
+      name: 'test-skill',
+      getTools: () => [{
+        type: 'function',
+        function: { name: 'inline_skill', description: 'test', parameters: { type: 'object', properties: {} } },
+      }],
+      execute: async () => ({
+        status: 'success' as const,
+        message: 'skill launched',
+        newMessages: [{ role: 'user' as const, content: 'skill instruction content' }],
+      }),
+    });
+
+    const agent = new NanoCodeAgent(registry, mock as any);
+    await agent.runTask('use skill');
+
+    const history = agent.getHistory();
+    // user + assistant(tool_call) + user(newMessage) + tool(result) + assistant(done)
+    assert.equal(history.length, 5);
+    assert.equal(history[0].role, 'user');
+    assert.equal(history[0].content, 'use skill');
+    assert.equal(history[1].role, 'assistant');
+    assert.ok(history[1].tool_calls, 'should have tool_calls');
+    // newMessage should be injected BEFORE tool_result
+    assert.equal(history[2].role, 'user', 'third message should be newMessage');
+    assert.equal(history[2].content, 'skill instruction content');
+    // tool_result follows the newMessage
+    assert.equal(history[3].role, 'tool', 'fourth message should be tool_result');
+    assert.equal(history[4].role, 'assistant', 'fifth message should be final assistant');
+    assert.equal(history[4].content, 'done');
+  });
+
+  it('handles multiple newMessages correctly', async () => {
+    let callCount = 0;
+    const mock = {
+      sendSystemMessage: async (_messages: any, _tools: any, _onChunk?: any) => {
+        callCount++;
+        if (callCount === 1) {
+          return {
+            text: null,
+            toolCalls: [{
+              id: 'call_multi',
+              type: 'function',
+              function: { name: 'multi_skill', arguments: '{}' },
+            }],
+            stopReason: 'tool_use',
+          };
+        }
+        return { text: 'done', stopReason: 'stop' };
+      },
+      getModel: () => 'gpt-4o',
+    };
+
+    const registry = new PluginRegistry();
+    registry.register({
+      name: 'multi-skill',
+      getTools: () => [{
+        type: 'function',
+        function: { name: 'multi_skill', description: 'test', parameters: { type: 'object', properties: {} } },
+      }],
+      execute: async () => ({
+        status: 'success' as const,
+        message: 'multi skill',
+        newMessages: [
+          { role: 'user' as const, content: 'step 1 instruction' },
+          { role: 'user' as const, content: 'step 2 instruction' },
+        ],
+      }),
+    });
+
+    const agent = new NanoCodeAgent(registry, mock as any);
+    await agent.runTask('do multi skill');
+
+    const history = agent.getHistory();
+    // user + assistant(tc) + user(nm1) + user(nm2) + tool(result) + assistant(done)
+    assert.equal(history.length, 6);
+    assert.equal(history[2].role, 'user');
+    assert.equal(history[2].content, 'step 1 instruction');
+    assert.equal(history[3].role, 'user');
+    assert.equal(history[3].content, 'step 2 instruction');
+    assert.equal(history[4].role, 'tool');
+  });
+
+  it('does not inject anything when newMessages is undefined', async () => {
+    let callCount = 0;
+    const mock = {
+      sendSystemMessage: async (_messages: any, _tools: any, _onChunk?: any) => {
+        callCount++;
+        if (callCount === 1) {
+          return {
+            text: null,
+            toolCalls: [{
+              id: 'call_normal',
+              type: 'function',
+              function: { name: 'normal_tool', arguments: '{}' },
+            }],
+            stopReason: 'tool_use',
+          };
+        }
+        return { text: 'done', stopReason: 'stop' };
+      },
+      getModel: () => 'gpt-4o',
+    };
+
+    const registry = new PluginRegistry();
+    registry.register({
+      name: 'normal',
+      getTools: () => [{
+        type: 'function',
+        function: { name: 'normal_tool', description: 'test', parameters: { type: 'object', properties: {} } },
+      }],
+      execute: async () => ({ status: 'success' as const, data: 'normal result' }),
+    });
+
+    const agent = new NanoCodeAgent(registry, mock as any);
+    await agent.runTask('normal task');
+
+    const history = agent.getHistory();
+    // user + assistant(tc) + tool(result) + assistant(done)
+    assert.equal(history.length, 4);
+    assert.equal(history[2].role, 'tool');
+    assert.equal(history[2].content?.includes('normal result'), true);
+  });
+
+});

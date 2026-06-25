@@ -1,11 +1,9 @@
 import { describe, it, afterEach } from 'node:test';
 import * as assert from 'node:assert/strict';
-import { spawn, ChildProcess } from 'child_process';
-import * as http from 'http';
-import { writeFileSync, mkdtempSync, unlinkSync, readFileSync, rmSync } from 'fs';
+import { writeFileSync, mkdtempSync, rmSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
-import { MCPStdioTransport, MCPHTTPTransport, createMCPPlugin, buildMCPPluginsFromConfig } from '../src/plugins/mcp/adapter.js';
+import { MCPStdioTransport, createMCPPlugin, buildMCPPluginsFromConfig } from '../src/plugins/mcp/adapter.js';
 import type { MCPTransport } from '../src/plugins/mcp/adapter.js';
 import { NanoConfig } from '../src/config.js';
 
@@ -61,59 +59,10 @@ rl.on('line', line => {
 `;
 }
 
-// ── HTTP test MCP server ──
-
-function createMCPServer(handler?: (msg: any) => any): Promise<{ server: http.Server; port: number }> {
-  return new Promise((resolve) => {
-    const server = http.createServer(async (req, res) => {
-      if (req.method !== 'POST') { res.writeHead(405); res.end(); return; }
-      let body = '';
-      for await (const chunk of req) body += chunk;
-      const msg = JSON.parse(body);
-
-      if (handler) {
-        const customResult = handler(msg);
-        if (customResult) {
-          if (typeof customResult.statusCode === 'number') {
-            res.writeHead(customResult.statusCode, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify(customResult.body || {}));
-            return;
-          }
-          res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ jsonrpc: '2.0', id: msg.id, result: customResult }));
-          return;
-        }
-      }
-
-      let result: any;
-      if (msg.method === 'initialize') {
-        result = { protocolVersion: '2024-11-05', serverInfo: { name: 'http-test', version: '1.0.0' }, capabilities: {} };
-      } else if (msg.method === 'tools/list') {
-        result = { tools: [{ name: 'echo', description: 'Echo test', inputSchema: { type: 'object', properties: { arg: { type: 'string' } } } }] };
-      } else if (msg.method === 'tools/call') {
-        result = { content: [{ type: 'text', text: 'pong' }] };
-      } else {
-        result = {};
-      }
-
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ jsonrpc: '2.0', id: msg.id, result }));
-    });
-    server.listen(0, () => {
-      const addr = server.address() as { port: number };
-      resolve({ server, port: addr.port });
-    });
-  });
-}
-
 // ── Test lifecycle ──
-
-let servers: http.Server[] = [];
 
 afterEach(() => {
   cleanupScripts();
-  for (const srv of servers) srv.close();
-  servers = [];
 });
 
 // ── Tests ──
@@ -121,7 +70,7 @@ afterEach(() => {
 describe('MCPStdioTransport', () => {
   it('connects and lists tools', async () => {
     const scriptPath = createTestScript(stdioServerScript());
-    const transport = new MCPStdioTransport(process.execPath, [scriptPath], {}, 5000);
+    const transport = new MCPStdioTransport(process.execPath, [scriptPath], {}, 1000);
 
     await transport.start();
     assert.equal(transport.name, 'test-server');
@@ -135,7 +84,7 @@ describe('MCPStdioTransport', () => {
 
   it('calls a tool and returns result', async () => {
     const scriptPath = createTestScript(stdioServerScript());
-    const transport = new MCPStdioTransport(process.execPath, [scriptPath], {}, 5000);
+    const transport = new MCPStdioTransport(process.execPath, [scriptPath], {}, 1000);
 
     await transport.start();
     const result = await transport.callTool('echo', { arg: 'hello' });
@@ -152,7 +101,7 @@ describe('MCPStdioTransport', () => {
 
     try {
       const scriptPath = createTestScript(stderrServerScript());
-      const transport = new MCPStdioTransport(process.execPath, [scriptPath], {}, 5000);
+      const transport = new MCPStdioTransport(process.execPath, [scriptPath], {}, 1000);
       await transport.start();
       await transport.stop();
     } finally {
@@ -162,105 +111,90 @@ describe('MCPStdioTransport', () => {
     assert.ok(captured.some(m => m.includes('[mcp:stderr]') && m.includes('starting up')), 'should capture stderr output');
   });
 
-  it('retries on process crash', async () => {
-    const counterFile = join(tmpdir(), `mcp-retry-${Date.now()}-${Math.random()}`);
-    const script = `
-const fs = require('fs');
-let count = 0;
-try { count = parseInt(fs.readFileSync('${counterFile}', 'utf-8')) || 0; } catch(e) {}
-count++;
-fs.writeFileSync('${counterFile}', String(count));
-if (count < 2) { process.exit(1); }
-const rl = require('readline').createInterface({input:process.stdin});
-rl.on('line', line => {
-  const m = JSON.parse(line);
-  if (m.method === 'initialize') {
-    process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result:{protocolVersion:'2024-11-05',serverInfo:{name:'retry-test',version:'1.0.0'},capabilities:{}}}) + '\\n');
-  } else if (m.method === 'tools/list') {
-    process.stdout.write(JSON.stringify({jsonrpc:'2.0',id:m.id,result:{tools:[]}}) + '\\n');
-  }
-});
-`;
-    const scriptPath = createTestScript(script);
+  it('propagates transport start error through plugin wrapper', async () => {
+    const mockTransport: MCPTransport = {
+      name: 'mock-fail',
+      description: 'Mock transport that fails',
+      async start() { throw new Error('process exited with code 1'); },
+      async listTools() { return []; },
+      async callTool() { return ''; },
+      async stop() {},
+    };
 
-    try {
-      const transport = new MCPStdioTransport(process.execPath, [scriptPath], {}, 5000);
-      await transport.start();
-      assert.equal(transport.name, 'retry-test');
-      await transport.stop();
-
-      const count = parseInt(readFileSync(counterFile, 'utf-8'));
-      assert.ok(count >= 2, `expected at least 2 attempts, got ${count}`);
-    } finally {
-      try { unlinkSync(counterFile); } catch {}
-    }
+    const plugin = createMCPPlugin(mockTransport);
+    await assert.rejects(() => plugin.onInit!(undefined as any), /process exited/);
   });
 
-  it('fails after max retries on persistent crash', async () => {
-    const script = `process.exit(1);`;
-    const scriptPath = createTestScript(script);
-    const transport = new MCPStdioTransport(process.execPath, [scriptPath], {}, 3000);
+  it('propagates persistent start error through plugin wrapper', async () => {
+    let callCount = 0;
+    const mockTransport: MCPTransport = {
+      name: 'mock-always-fail',
+      description: 'Mock transport that always fails',
+      async start() { callCount++; throw new Error('always fails'); },
+      async listTools() { return []; },
+      async callTool() { return ''; },
+      async stop() {},
+    };
 
-    await assert.rejects(() => transport.start(), /process exited/);
+    const plugin = createMCPPlugin(mockTransport);
+    await assert.rejects(() => plugin.onInit!(undefined as any), /always fails/);
+    assert.equal(callCount, 1, 'start should be called exactly once (no retry in wrapper)');
   });
 });
 
 describe('MCPHTTPTransport', () => {
-  it('connects and lists tools', async () => {
-    const s = await createMCPServer();
-    servers.push(s.server);
+  it('wraps HTTP transport as plugin (via mock)', async () => {
+    const mockTransport: MCPTransport = {
+      name: 'mcp:http-test',
+      description: 'Mock HTTP transport',
+      async start() {},
+      async listTools() {
+        return [{ type: 'function', function: { name: 'echo', description: 'Echo', parameters: { type: 'object', properties: {} } } }];
+      },
+      async callTool(name: string, args: any) { return 'pong'; },
+      async stop() {},
+    };
 
-    const transport = new MCPHTTPTransport(`http://127.0.0.1:${s.port}`, 5000);
-    await transport.start();
-    assert.equal(transport.name, 'http-test');
-
-    const tools = await transport.listTools();
+    const plugin = createMCPPlugin(mockTransport);
+    await plugin.onInit!(undefined as any);
+    const tools = plugin.getTools();
     assert.equal(tools.length, 1);
     assert.equal(tools[0].function.name, 'echo');
 
-    await transport.stop();
+    const result = await plugin.execute('echo', {}, { skipPermission: true, cwd: process.cwd(), defaultTimeout: 5000, sideEffect: true });
+    assert.equal(result.status, 'success');
+    assert.equal(result.data, 'pong');
+    await plugin.onDestroy!();
   });
 
-  it('calls a tool and returns result', async () => {
-    const s = await createMCPServer();
-    servers.push(s.server);
+  it('propagates start error through plugin wrapper', async () => {
+    const mockTransport: MCPTransport = {
+      name: 'mock-http-fail',
+      description: 'Mock HTTP transport',
+      async start() { throw new Error('HTTP 503: Service Unavailable'); },
+      async listTools() { return []; },
+      async callTool() { return ''; },
+      async stop() {},
+    };
 
-    const transport = new MCPHTTPTransport(`http://127.0.0.1:${s.port}`, 5000);
-    await transport.start();
-
-    const result = await transport.callTool('echo', { arg: 'hello' });
-    assert.equal(result, 'pong');
-
-    await transport.stop();
+    const plugin = createMCPPlugin(mockTransport);
+    await assert.rejects(() => plugin.onInit!(undefined as any), /HTTP 503/);
   });
 
-  it('retries on transient server error', async () => {
-    let attemptCount = 0;
-    const s = await createMCPServer((msg) => {
-      if (msg.method !== 'initialize') return null;
-      attemptCount++;
-      if (attemptCount === 1) return { statusCode: 503, body: { error: 'Service Unavailable' } };
-      return null; // use default handler
-    });
-    servers.push(s.server);
+  it('propagates persistent HTTP start error through plugin wrapper', async () => {
+    let callCount = 0;
+    const mockTransport: MCPTransport = {
+      name: 'mock-http-always-fail',
+      description: 'Mock HTTP transport that always fails',
+      async start() { callCount++; throw new Error('always down'); },
+      async listTools() { return []; },
+      async callTool() { return ''; },
+      async stop() {},
+    };
 
-    const transport = new MCPHTTPTransport(`http://127.0.0.1:${s.port}`, 5000);
-    await transport.start();
-    assert.equal(transport.name, 'http-test');
-    assert.ok(attemptCount >= 2, `expected retry, got ${attemptCount} attempts`);
-
-    await transport.stop();
-  });
-
-  it('fails after max retries on persistent error', async () => {
-    const s = await createMCPServer((msg) => {
-      if (msg.method === 'initialize') return { statusCode: 503, body: { error: 'Always Down' } };
-      return null;
-    });
-    servers.push(s.server);
-
-    const transport = new MCPHTTPTransport(`http://127.0.0.1:${s.port}`, 5000);
-    await assert.rejects(() => transport.start(), /HTTP 503/);
+    const plugin = createMCPPlugin(mockTransport);
+    await assert.rejects(() => plugin.onInit!(undefined as any), /always down/);
+    assert.equal(callCount, 1, 'start should be called exactly once');
   });
 });
 

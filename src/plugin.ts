@@ -164,17 +164,19 @@ export class PluginRegistry {
 
     try {
       const timer: { ref: NodeJS.Timeout | null } = { ref: null };
-      const result = await Promise.race([
-        plugin.execute(name, args, fullContext),
-        new Promise<ToolResponse>((_, reject) => {
-          timer.ref = setTimeout(
-            () => reject(new Error(`Tool execution timed out after ${fullContext.defaultTimeout}ms`)),
-            fullContext.defaultTimeout,
-          );
-        }),
-      ]);
-      if (timer.ref) clearTimeout(timer.ref);
-      return result;
+      try {
+        return await Promise.race([
+          plugin.execute(name, args, fullContext),
+          new Promise<ToolResponse>((_, reject) => {
+            timer.ref = setTimeout(
+              () => reject(new Error(`Tool execution timed out after ${fullContext.defaultTimeout}ms`)),
+              fullContext.defaultTimeout,
+            );
+          }),
+        ]);
+      } finally {
+        if (timer.ref) clearTimeout(timer.ref);
+      }
     } catch (error) {
       return {
         status: 'error',
@@ -304,6 +306,7 @@ const BUILTIN_LOADERS: Record<string, (settings?: Record<string, any>) => Promis
   command: async () => (await import('./plugins/tools/command.js')).commandPlugin,
   memory: async (s) => (await import('./plugins/tools/memory.js')).createMemoryPlugin(s || {}),
   'token-budget': async (s) => (await import('./plugins/token-budget.js')).createTokenBudgetPlugin(s || {}),
+  skills: async () => (await import('./plugins/skills/index.js')).createSkillsPlugin(),
 };
 
 /**
