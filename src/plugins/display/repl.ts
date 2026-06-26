@@ -48,7 +48,7 @@ export const replDisplay: DisplayPlugin = {
       console.log(' * 调试模式已开启，将输出 LLM 交互的详细数据');
     }
     if (showThink && !debug) {
-      console.log(' * 思维链显示已开启，将输出 AI 思考过程');
+      console.log(' * 思考过程显示已开启，将输出 AI 思考过程');
     }
     console.log(' [!] 退出：输入 "exit"、"quit" 或直接按下 Ctrl+C 即可。');
     console.log('----------------------------------------------------\n');

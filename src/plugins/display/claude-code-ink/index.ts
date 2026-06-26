@@ -74,6 +74,15 @@ function createPlugin(): DisplayPlugin {
   // Permission confirm state
   let pendingPermission: PermissionPrompt | null = null;
   let permissionResolve: ((value: boolean) => void) | null = null;
+  let registry: PluginRegistry | null = null;
+
+  function cancelExecution(): void {
+    if (registry) {
+      registry.store.set('agent:cancelled', true);
+      const abortCtrl = registry.store.get<AbortController>('agent:abort');
+      if (abortCtrl && !abortCtrl.signal.aborted) abortCtrl.abort();
+    }
+  }
 
   function render(): void {
     if (!inkInstance) return;
@@ -99,6 +108,8 @@ function createPlugin(): DisplayPlugin {
               const r = promptResolve;
               promptResolve = null;
               r(null);
+            } else {
+              cancelExecution();
             }
           },
           pendingPermission,
@@ -123,7 +134,8 @@ function createPlugin(): DisplayPlugin {
     ownsOutput: true,
     rawInput: true,
 
-    async onInit(registry: PluginRegistry): Promise<void> {
+    async onInit(r: PluginRegistry): Promise<void> {
+      registry = r;
       registry.setConfirmCallback(async (req) => {
         return new Promise<boolean>((resolve) => {
           pendingPermission = { toolName: req.toolName, message: req.message, details: req.details, diff: req.diff, filePath: req.filePath };
@@ -182,10 +194,12 @@ function createPlugin(): DisplayPlugin {
                 const r = promptResolve;
                 promptResolve = null;
                 r(null);
+              } else {
+                cancelExecution();
               }
             },
           }),
-          { stdout: process.stdout, stdin: process.stdin, stderr: process.stderr, exitOnCtrlC: true, patchConsole: false },
+          { stdout: process.stdout, stdin: process.stdin, stderr: process.stderr, exitOnCtrlC: false, patchConsole: false },
         );
         initPromise.then(inst => {
           inkInstance = inst;

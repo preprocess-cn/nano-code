@@ -56,6 +56,9 @@
 | 状态 | 功能 | 说明 |
 |------|------|------|
 | ✅ | Glob/Grep 搜索工具 | 文件名模式匹配 + 文件内容搜索，替代暴力递归遍历 |
+| ✅ | Keybinding 系统 | `useKeybinding`/`useKeybindings` hooks，支持修饰键和命名键的匹配 |
+| ✅ | Ctrl+C 取消执行 | 执行中 Ctrl+C 中断 LLM 流 + 停止 agent，返回提示状态 |
+| ✅ | LLM AbortSignal | `sendSystemMessage` 支持 `AbortSignal`，立即中断 HTTP 流避免浪费 token |
 | ☐ | WebFetch/WebSearch 工具 | 网络获取与搜索，让 LLM 获取实时信息 |
 | ☐ | 代码审查（review） | 对当前 diff 的正确性/性能/安全审查 |
 

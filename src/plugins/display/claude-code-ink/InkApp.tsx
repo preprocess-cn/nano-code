@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from 'react';
 import { Box, Text, useInput, useStdin, ThemeProvider, stringWidth, RawAnsi } from './ink.js';
+import { useKeybinding } from './stubs/keybindings.js';
 import { AlternateScreen } from './engine/components/AlternateScreen.js';
 import ScrollBox, { type ScrollBoxHandle } from './engine/components/ScrollBox.js';
 import { useDeclaredCursor } from './engine/hooks/use-declared-cursor.js';
@@ -485,6 +486,10 @@ function AppContent(props: InkAppProps): React.ReactElement {
   // Always render a header row (even if empty) to prevent layout shift
   // when scrollHeader appears/disappears.
   const headerRow = scrollHeader ?? React.createElement(Box, { height: 1 });
+
+  // Ctrl+C: exit at prompt, cancel during execution
+  // createPlugin's onExit checks promptResolve to decide behavior
+  useKeybinding('ctrl+c', useCallback(() => onExit(), [onExit]));
 
   useInput((_input: string, key: {
     escape: boolean; ctrl: boolean; return: boolean; backspace: boolean;

@@ -5,8 +5,7 @@ import { LLMClient } from './llm.js';
 import { buildMCPPluginsFromConfig } from './plugins/mcp/adapter.js';
 import { npmLoaderPlugin } from './plugins/npm-loader.js';
 import { loadSession, saveSession } from './session.js';
-import { printPluginList } from './display.js';
-import { handlePluginCommand } from './plugin-cli.js';
+import { handlePluginCommand, printPluginList } from './plugin-cli.js';
 import { loadAgentDefinitions } from './agent-loader.js';
 import { createAgentToolPlugin } from './agent-tool.js';
 import { createSkillsPlugin } from './plugins/skills/index.js';
@@ -41,6 +40,160 @@ function handleExit(display?: DisplayManager): never {
   process.exit(0);
 }
 
+// ── Helper: create and populate the plugin registry ──
+
+async function initializePlugins(
+  config: ReturnType<typeof loadConfig>,
+  registry: PluginRegistry,
+  llmClient: LLMClient,
+  displayMgr: DisplayManager,
+  skipPermission: boolean,
+): Promise<void> {
+  registry.setAgentName('main');
+  registry.setDefaultContext({
+    skipPermission: skipPermission ?? false,
+    defaultTimeout: config.core.defaultTimeout,
+  });
+
+  const npmEntries: Record<string, { spec?: string; enabled?: boolean }> = {};
+  const systemWhitelist = getSystemWhitelist(config);
+
+  // 预注入运行时引用到 token-budget 配置（自动压缩需要 llmClient + displayMgr），
+  // 使其在 onInit 阶段可读。同时适用于 config.plugins 和 systemWhitelist 两个注册路径。
+  const tbSettings = config.plugins['token-budget']?.settings;
+  registry.setPluginConfig('token-budget', { ...(tbSettings ?? {}), llmClient, displayMgr });
+
+  for (const [name, pluginCfg] of Object.entries(config.plugins)) {
+    if (pluginCfg.enabled === false) continue;
+
+    if (pluginCfg.settings && name !== 'token-budget') registry.setPluginConfig(name, pluginCfg.settings);
+
+    if (pluginCfg.type === 'npm') {
+      npmEntries[name] = { spec: pluginCfg.spec, enabled: pluginCfg.enabled };
+    } else if (pluginCfg.type === 'mcp') {
+      continue;
+    } else {
+      await registerBuiltinPlugin(registry, name, pluginCfg.settings);
+    }
+  }
+
+  for (const mcpPlugin of buildMCPPluginsFromConfig(config)) {
+    await registry.register(mcpPlugin);
+  }
+
+  registry.setPluginConfig('npm-loader', npmEntries);
+  await registry.register(npmLoaderPlugin);
+
+  for (const name of systemWhitelist) {
+    if (config.plugins[name]) continue;
+    await registerBuiltinPlugin(registry, name);
+  }
+
+  registerAllDefaultBundledSkills();
+  const disabledSkills = config.skills?.disabled ?? [];
+  for (const name of disabledSkills) unregisterBundledSkill(name);
+
+  await registry.register(createSkillsPlugin(llmClient, displayMgr, {
+    disabled: disabledSkills,
+    disableSkillTool: config.skills?.disableSkillTool ?? false,
+  }));
+
+  for (const def of loadAgentDefinitions()) {
+    if (def.enabled === false) continue;
+    await registry.register(createAgentToolPlugin(def, llmClient, displayMgr));
+  }
+
+  await registry.register(createCommandsPlugin(displayMgr, registry, config));
+  await registry.register(createAgentSlashPlugin(displayMgr));
+  await registry.register(createSkillsSlashPlugin(llmClient, displayMgr));
+  await registry.register(createBangPlugin(displayMgr));
+
+  initCommandSuggestions(disabledSkills);
+  await displayMgr.init(registry);
+}
+
+// ── Helper: restore previous session ──
+
+async function restoreSession(
+  agent: NanoCodeAgent,
+  registry: PluginRegistry,
+  displayMgr: DisplayManager,
+): Promise<void> {
+  const session = loadSession(process.cwd());
+  if (!session) {
+    displayMgr.onStatus({ message: MSG_SESSION_NOT_FOUND, agentName: 'main' });
+    return;
+  }
+
+  agent.loadHistory(session.messages);
+
+  const { countMessagesTokens } = await import('./plugins/token-budget/counter.js');
+  registry.store.set('token-budget:initialAccumulated', countMessagesTokens(session.messages));
+
+  for (const msg of session.messages) {
+    if (msg.role === 'user') {
+      displayMgr.onUserInput(msg.content ?? '', 'system');
+    } else if (msg.role === 'assistant') {
+      const text = msg.content ?? '';
+      if (text) displayMgr.onStreamChunk({ text, agentName: 'main' });
+    }
+  }
+  displayMgr.onStatus({ message: MSG_SESSION_RESTORED(session.messages.length, session.updatedAt), agentName: 'main' });
+}
+
+// ── Main interaction loop ──
+
+async function runMainLoop(
+  agent: NanoCodeAgent,
+  registry: PluginRegistry,
+  llmClient: LLMClient,
+  displayMgr: DisplayManager,
+): Promise<void> {
+  // SIGINT handler: at prompt → exit; during execution → cancel
+  let isPrompting = false;
+  const sigintHandler = () => {
+    if (!isPrompting) {
+      registry.store.set('agent:cancelled', true);
+      const abortCtrl = registry.store.get<AbortController>('agent:abort');
+      if (abortCtrl && !abortCtrl.signal.aborted) abortCtrl.abort();
+    }
+    // At prompt: SIGINT is ignored — clack's text() or Ink's useInput handles \x03 directly
+  };
+  process.on('SIGINT', sigintHandler);
+
+  while (true) {
+    isPrompting = true;
+    const userInput = await displayMgr.prompt();
+    isPrompting = false;
+    if (userInput === null) handleExit(displayMgr);
+
+    const intercept = await registry.execBeforeAgentInput(userInput);
+    if (intercept) {
+      if (intercept.exit) handleExit(displayMgr);
+      if (intercept.message) displayMgr.onStatus({ message: intercept.message, agentName: 'main' });
+      if (intercept.injectMessages) agent.injectMessages(intercept.injectMessages);
+      if (intercept.skipAgent) continue;
+    }
+
+    try {
+      await agent.runTask(intercept?.replaceInput ?? userInput);
+    } catch (error: any) {
+      if (error?.name === 'AbortError' || error?.message === 'CANCELLED') {
+        registry.store.set('agent:cancelled', undefined);
+        continue;
+      }
+      displayMgr.onError({
+        message: MSG_TOP_LEVEL_ERROR(error),
+        agentName: 'main',
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+    } finally {
+      registry.store.set('agent:cancelled', undefined);
+      saveSession(process.cwd(), agent.getHistory());
+    }
+  }
+}
+
 async function startCLI(options: { debug?: boolean; think?: boolean; skipPermission?: boolean; listPlugins?: boolean; continue?: boolean; profile?: string }) {
 
   // ── Load configuration + optional agent profile ──
@@ -48,15 +201,13 @@ async function startCLI(options: { debug?: boolean; think?: boolean; skipPermiss
     ? applyProfile(loadConfig(), options.profile)
     : loadConfig();
 
-  // ── Validate display config ──
-  const dispCfg = config.display;
-  if (dispCfg?.enabled === false && !dispCfg.plugin) {
+  // ── Validate and load display plugin ──
+  if (config.display?.enabled === false && !config.display.plugin) {
     console.error(FATAL_NO_DISPLAY);
     console.error(FATAL_NO_DISPLAY_HINT);
     process.exit(1);
   }
 
-  // ── Load display plugin ──
   const displayMgr = new DisplayManager();
   if (config.display?.plugin) {
     try {
@@ -84,85 +235,9 @@ async function startCLI(options: { debug?: boolean; think?: boolean; skipPermiss
     process.exit(1);
   }
 
-  // ── Plugin registry ──
+  // ── Plugin registry & initialization ──
   const registry = new PluginRegistry();
-  registry.setAgentName('main');
-  registry.setDefaultContext({
-    skipPermission: options.skipPermission ?? false,
-    defaultTimeout: config.core.defaultTimeout,
-  });
-
-  // ── 插件注册：统一遍历 config.plugins ──
-  const npmEntries: Record<string, { spec?: string; enabled?: boolean }> = {};
-  const systemWhitelist = getSystemWhitelist(config);
-
-  for (const [name, pluginCfg] of Object.entries(config.plugins)) {
-    if (pluginCfg.enabled === false) continue;
-
-    // 1) 将 settings 存入 registry（供插件 onInit 读取）
-    if (pluginCfg.settings) {
-      registry.setPluginConfig(name, pluginCfg.settings);
-    }
-
-    // 2) 根据类型分发注册
-    if (pluginCfg.type === 'npm') {
-      npmEntries[name] = { spec: pluginCfg.spec, enabled: pluginCfg.enabled };
-    } else if (pluginCfg.type === 'mcp') {
-      // MCP 插件由 buildMCPPluginsFromConfig 统一处理，此处跳过
-      continue;
-    } else {
-      await registerBuiltinPlugin(registry, name, pluginCfg.settings);
-    }
-  }
-
-  // 注册 MCP 插件（统一批量处理）
-  for (const mcpPlugin of buildMCPPluginsFromConfig(config)) {
-    await registry.register(mcpPlugin);
-  }
-
-  // 注册 npm-loader（收集的 npm 条目作为配置传入）
-  registry.setPluginConfig('npm-loader', npmEntries);
-  await registry.register(npmLoaderPlugin);
-
-  // 自动加载系统插件中未在配置中出现的条目（白名单默认启用）
-  for (const name of systemWhitelist) {
-    if (config.plugins[name]) continue;
-    await registerBuiltinPlugin(registry, name);
-  }
-
-  // ── 注册所有内置技能（按配置禁用指定技能）──
-  registerAllDefaultBundledSkills();
-  const disabledSkills = config.skills?.disabled ?? [];
-  for (const name of disabledSkills) {
-    unregisterBundledSkill(name);
-  }
-  // ── 注册技能系统插件 ──
-  const skillsPlugin = createSkillsPlugin(llmClient, displayMgr, {
-    disabled: disabledSkills,
-    disableSkillTool: config.skills?.disableSkillTool ?? false,
-  });
-  await registry.register(skillsPlugin);
-
-  // ── 自动发现并注册 agent 工具 ──
-  const agentDefs = loadAgentDefinitions();
-  for (const def of agentDefs) {
-    if (def.enabled === false) continue;
-    const plugin = createAgentToolPlugin(def, llmClient, displayMgr);
-    await registry.register(plugin);
-  }
-
-  // ── 注册命令相关插件 ──
-  await registry.register(createCommandsPlugin(displayMgr, registry, config));
-  await registry.register(createAgentSlashPlugin(displayMgr));
-  // agent-slash 在 skills-slash 之前注册，agent 名优先匹配
-  await registry.register(createSkillsSlashPlugin(llmClient, displayMgr));
-  await registry.register(createBangPlugin(displayMgr));
-
-  // ── 初始化 Ink 插件建议列表（依赖技能/命令系统已就绪）──
-  initCommandSuggestions(disabledSkills);
-
-  // ── 初始化 display 插件（注入 confirmCallback 等）──
-  await displayMgr.init(registry);
+  await initializePlugins(config, registry, llmClient, displayMgr, options.skipPermission ?? false);
 
   // ── --list-plugins mode: print and exit ──
   if (options.listPlugins) {
@@ -170,12 +245,9 @@ async function startCLI(options: { debug?: boolean; think?: boolean; skipPermiss
     return;
   }
 
-  // ── Determine agent identity and show greeting ──
+  // ── Determine agent identity and start display ──
   const hasTools = registry.getAllSchemas().length > 0;
-  const defaultGreeting = hasTools
-    ? GREETING_WITH_TOOLS
-    : GREETING_NO_TOOLS;
-  const greeting = config.agent?.greeting || defaultGreeting;
+  const greeting = config.agent?.greeting || (hasTools ? GREETING_WITH_TOOLS : GREETING_NO_TOOLS);
 
   displayMgr.start({
     greeting,
@@ -189,96 +261,19 @@ async function startCLI(options: { debug?: boolean; think?: boolean; skipPermiss
     stdin: process.stdin,
   });
 
-  if(options.debug) {
-    displayMgr.onStatus({ message: MSG_DEBUG_MODE(config.core.model), agentName: 'main' });
-  }
-  if (options.think && !options.debug) {
-    displayMgr.onStatus({ message: MSG_THINK_MODE, agentName: 'main' });
-  }
-  if (options.skipPermission) {
-    displayMgr.onStatus({ message: MSG_SKIP_PERMISSION, agentName: 'main' });
-  }
+  if (options.debug) displayMgr.onStatus({ message: MSG_DEBUG_MODE(config.core.model), agentName: 'main' });
+  else if (options.think) displayMgr.onStatus({ message: MSG_THINK_MODE, agentName: 'main' });
+  if (options.skipPermission) displayMgr.onStatus({ message: MSG_SKIP_PERMISSION, agentName: 'main' });
 
   const agent = new NanoCodeAgent(registry, llmClient, config.agent?.role, config.systemPrompt, 'main', displayMgr);
   setCommandAgent(agent);
   setTargetAgent(agent, displayMgr);
 
-  // ── --continue: restore previous session ──
-  if (options.continue) {
-    const session = loadSession(process.cwd());
-    if (session) {
-      agent.loadHistory(session.messages);
+  // ── Session restore ──
+  if (options.continue) await restoreSession(agent, registry, displayMgr);
 
-      // 初始化 token-budget 累计值，使自动压缩阈值在恢复的会话中也能正常触发
-      const { countMessagesTokens } = await import('./plugins/token-budget/counter.js');
-      const initialTokens = countMessagesTokens(session.messages);
-      registry.store.set('token-budget:initialAccumulated', initialTokens);
-
-      // Display restored messages in the UI so the user sees the full context
-      for (const msg of session.messages) {
-        if (msg.role === 'user') {
-          displayMgr.onUserInput(msg.content ?? '', 'system');
-        } else if (msg.role === 'assistant') {
-          const text = msg.content ?? '';
-          if (text) displayMgr.onStreamChunk({ text, agentName: 'main' });
-        }
-      }
-      displayMgr.onStatus({ message: MSG_SESSION_RESTORED(session.messages.length, session.updatedAt), agentName: 'main' });
-    } else {
-      displayMgr.onStatus({ message: MSG_SESSION_NOT_FOUND, agentName: 'main' });
-    }
-  }
-
-  // 3. 进入无限交互循环
-  while (true) {
-    const userInput = await displayMgr.prompt();
-    if (userInput === null) {
-      handleExit(displayMgr);
-    }
-
-    // 插件拦截用户输入（斜杠命令、! bash 等）
-    const intercept = await registry.execBeforeAgentInput(userInput);
-    if (intercept) {
-      if (intercept.exit) handleExit(displayMgr);
-      if (intercept.message) {
-        displayMgr.onStatus({ message: intercept.message, agentName: 'main' });
-      }
-      if (intercept.injectMessages) {
-        agent.injectMessages(intercept.injectMessages);
-      }
-      if (intercept.skipAgent) continue;
-      // handled && !skipAgent → fall through to runTask（可能用 replaceInput 替换原始输入）
-    }
-
-    try {
-      await agent.runTask(intercept?.replaceInput ?? userInput);
-    } catch (error) {
-      displayMgr.onError({ message: MSG_TOP_LEVEL_ERROR(error), agentName: 'main', stack: error instanceof Error ? error.stack : undefined });
-    } finally {
-      saveSession(process.cwd(), agent.getHistory());
-    }
-
-    // 自动压缩检查（在 saveSession 之后）
-    const compactSignal = registry.store.get<boolean>('compact:signal');
-    if (compactSignal) {
-      registry.store.set('compact:signal', false);
-      try {
-        const { CompactService } = await import('./plugins/compact/service.js');
-        const service = new CompactService(llmClient, registry, displayMgr);
-        const result = await service.compact(agent, { preserveCount: 2 });
-        agent.loadHistory(result.messages);
-        saveSession(process.cwd(), agent.getHistory());
-        registry.store.set('compact:completed', true);
-        displayMgr.onStatus({
-          message: `自动压缩: ${result.originalMessageCount} → ${result.compactedMessageCount} 条消息, 节省 ~${(result.savedTokens / 1000).toFixed(1)}K tokens`,
-          agentName: 'main',
-        });
-      } catch {
-        // 失败时通知 token-budget 重置 autoCompacted 以允许重试
-        registry.store.set('compact:retry', true);
-      }
-    }
-  }
+  // ── Main loop ──
+  await runMainLoop(agent, registry, llmClient, displayMgr);
 }
 
 // ==========================================
@@ -287,7 +282,7 @@ async function startCLI(options: { debug?: boolean; think?: boolean; skipPermiss
 const cli = cac('nano-code');
 
 cli.option('-d, --debug', '开启调试模式，输出大模型交互的原始数据包');
-cli.option('-t, --think', '显示大模型的思考过程（思维链）');
+cli.option('-t, --think', '显示大模型的思考过程');
 cli.option('--skip-permission', '跳过工具调用的用户确认提示，系统底层安全拦截仍然生效');
 cli.option('--list-plugins', '列出所有已注册的插件及其提供的工具');
 cli.option('-c, --continue', '接续最近一次在当前项目中的会话继续对话');

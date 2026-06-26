@@ -29,7 +29,7 @@ npm start
 | 选项 | 说明 |
 |------|------|
 | `-d, --debug` | 开启调试模式，打印与 LLM 交互的完整数据包 |
-| `-t, --think` | 显示 LLM 的思考过程（思维链） |
+| `-t, --think` | 显示 LLM 的思考过程 |
 | `--skip-permission` | 跳过工具调用的用户确认提示 |
 | `--list-plugins` | 列出所有已注册的插件及其提供的工具（含 agent 工具） |
 | `-c, --continue` | 接续最近一次在当前项目的会话继续对话 |
@@ -76,9 +76,23 @@ display:
 | 插件 | 说明 |
 |------|------|
 | `repl` | 默认，基于 `@clack/prompts` + `console` 的简单 REPL 交互 |
-| `claude-code-ink` | 基于 React + Ink 的全屏终端 UI，支持 ScrollBox 滚动、`--think` 思考内容灰色斜体区分、agent 前缀等 |
+| `claude-code-ink` | 基于 React + Ink 的全屏终端 UI，支持 ScrollBox 滚动、`--think` 思考内容灰色斜体区分、agent 前缀、keybinding 系统等 |
 
-`claude-code-ink` 模式下 `--think` 输出的思考内容会以灰色斜体渲染，与正常输出形成视觉区分。
+### 快捷键
+
+`claude-code-ink` 模式下内置 keybinding 系统：
+
+| 快捷键 | 等待输入时 | 执行中 |
+|--------|-----------|--------|
+| `Ctrl+C` | 退出程序 | 取消当前操作（中断 LLM + 停止 agent） |
+| `Escape` | 退出程序 | 取消当前操作 |
+| `↑`/`↓` | 历史命令浏览 | — |
+| `PageUp`/`PageDown` | 滚动浏览历史消息 | 滚动浏览历史消息 |
+| `Tab` | 命令名补全 / 补全建议切换 | — |
+
+`repl` 模式下 `Ctrl+C` 在等待输入时由 `@clack/prompts` 处理（退出程序），执行中通过 SIGINT 处理器取消当前操作。
+
+`--think` 模式下思考内容以灰色斜体渲染，与正常输出形成视觉区分。
 
 展示层插件不通过 `plugin-cli` 管理，独立于 PluginRegistry。未配置时默认使用 `repl`。
 

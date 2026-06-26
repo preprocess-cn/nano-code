@@ -86,24 +86,25 @@ export class LLMClient {
     onChunk?: (text: string) => void,
     extraParams?: Record<string, unknown>,
     onMeta?: (meta: Record<string, unknown>) => void,
+    signal?: AbortSignal,
   ) {
     // ── Retry loop with exponential backoff ──
     let lastError: any;
 
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       try {
+        if (signal?.aborted) throw new Error('CANCELLED');
+
         // 请求 OpenAI 的流式接口
-        const stream = await this.openai.chat.completions.create({
-          // 核心参数优先，extraParams 在后以支持选择性覆盖（如 --model 覆写总结模型）
+                const stream = await this.openai.chat.completions.create({
           model: this.model,
           ...extraParams,
           messages: messages as any,
           stream: true,
           stream_options: { include_usage: true },
-          // 只有当有工具传入时，才把 tools 参数加上
           tools: tools && tools.length > 0 ? tools : undefined,
           temperature: this.temperature,
-        });
+        }, { signal });
 
         let fullText = '';
         let finalToolCalls: any[] = [];
@@ -165,7 +166,12 @@ export class LLMClient {
           stopReason: validToolCalls.length > 0 ? 'tool_use' : 'stop',
         };
 
-      } catch (error) {
+      } catch (error: any) {
+        // 用户取消操作 —— 静默透传，不重试不日志
+        if (error?.name === 'AbortError' || error?.message === 'CANCELLED') {
+          throw error;
+        }
+
         lastError = error;
 
         if (attempt < MAX_RETRIES && isTransientError(error)) {

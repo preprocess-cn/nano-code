@@ -16,7 +16,7 @@ export const FATAL_NO_DISPLAY_HINT = '        请在配置中设置 display.plug
 export const MSG_DEBUG_MODE = (model: string | undefined) =>
   `#  当前已开启 [DEBUG 调试模式]，模型: ${model}`;
 
-export const MSG_THINK_MODE = ' <-> 当前已开启 [思维链显示]，将输出 AI 思考过程。';
+export const MSG_THINK_MODE = ' <-> 当前已开启 [思考过程显示]，将输出 AI 思考过程。';
 
 export const MSG_SKIP_PERMISSION = ' [!] 当前已开启 [免确认模式]，系统底层安全拦截仍然生效。';
 

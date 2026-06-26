@@ -65,6 +65,13 @@ export class NanoCodeAgent {
   async runTask(userPrompt: string): Promise<string | undefined> {
     this.display?.onAgentTurnStart({ agentName: this.name });
 
+    // 检查插件是否已执行自动压缩（如 token-budget），加载结果
+    const compacted = this.registry.store.get<ChatMessage[]>('compact:result');
+    if (compacted) {
+      this.loadHistory(compacted);
+      this.registry.store.set('compact:result', undefined);
+    }
+
     this.messageHistory.push({
       role: 'user',
       content: userPrompt,
@@ -73,6 +80,11 @@ export class NanoCodeAgent {
     this.registry.store.set('agent', { agentName: this.name, status: 'running', messageCount: this.messageHistory.length });
 
     while (true) {
+      if (this.registry.store.get<boolean>('agent:cancelled')) {
+        this.display?.onStatus({ message: 'end', agentName: this.name });
+        this.registry.store.set('agent:cancelled', undefined);
+        break;
+      }
       this.display?.onStatus({ message: 'thinking', agentName: this.name });
 
       const systemMessage = buildSystemPrompt(this.registry, this.promptConfig, this.agentRole);
@@ -91,13 +103,38 @@ export class NanoCodeAgent {
       const extraParams = this.registry.collectExtraParams();
       let responseMeta: Record<string, unknown> | undefined;
 
-      const response = await this.llmClient.sendSystemMessage(
-        messagesWithSystem,
-        this.registry.getAllSchemas(),
-        onChunk,
-        extraParams,
-        (meta) => { responseMeta = meta; },
-      );
+      // Set up cancellation: AbortController for LLM stream, flag for checkpoints
+      const abortController = new AbortController();
+      this.registry.store.set('agent:abort', abortController);
+      const isCancelled = () => this.registry.store.get<boolean>('agent:cancelled') === true;
+
+      let response;
+      try {
+        response = await this.llmClient.sendSystemMessage(
+          messagesWithSystem,
+          this.registry.getAllSchemas(),
+          onChunk,
+          extraParams,
+          (meta) => { responseMeta = meta; },
+          abortController.signal,
+        );
+      } catch (err: any) {
+        if (err?.name === 'AbortError' || err?.message === 'CANCELLED' || isCancelled()) {
+          this.registry.store.set('agent:abort', undefined);
+          this.display?.onStatus({ message: 'end', agentName: this.name });
+          this.display?.onAgentTurnEnd({ agentName: this.name });
+          break;
+        }
+        throw err;
+      }
+
+      this.registry.store.set('agent:abort', undefined);
+
+      if (isCancelled()) {
+        this.display?.onStatus({ message: 'end', agentName: this.name });
+        this.display?.onAgentTurnEnd({ agentName: this.name });
+        break;
+      }
 
       this.registry.execAfterRequest(response, responseMeta);
 
@@ -123,7 +160,10 @@ export class NanoCodeAgent {
       }
 
       for (const rawToolCall of response.toolCalls) {
-        if (await this.executeToolCall(rawToolCall) === 'rejected') break;
+        if (isCancelled()) break;
+        const tcResult = await this.executeToolCall(rawToolCall);
+        for (const msg of tcResult.toolMessages) this.messageHistory.push(msg);
+        if (tcResult.status === 'rejected') break;
       }
 
       this.display?.onStateSnapshot({ agentName: this.name, messageCount: this.messageHistory.length });
@@ -131,6 +171,7 @@ export class NanoCodeAgent {
     }
 
     this.registry.store.set('agent', { agentName: this.name, status: 'idle', messageCount: this.messageHistory.length });
+    this.registry.store.set('agent:messages', this.getHistory());
 
     const lastMsg = this.messageHistory[this.messageHistory.length - 1];
     if (lastMsg?.role === 'assistant') {
@@ -139,20 +180,19 @@ export class NanoCodeAgent {
     return undefined;
   }
 
-  private async executeToolCall(rawToolCall: any): Promise<'rejected' | 'ok'> {
+  private async executeToolCall(rawToolCall: any): Promise<{ status: 'rejected' | 'ok'; toolMessages: ChatMessage[] }> {
     const toolName = rawToolCall.function.name;
+    const toolMessages: ChatMessage[] = [];
+
     let toolArgs: any;
     try {
       toolArgs = JSON.parse(rawToolCall.function.arguments);
     } catch {
-      const msg = `工具调用 "${toolName}" 的参数不是合法的 JSON 格式：${rawToolCall.function.arguments}。请修正参数格式后重试。`;
-      this.messageHistory.push({
-        role: 'tool',
-        tool_call_id: rawToolCall.id,
-        name: toolName,
-        content: JSON.stringify({ status: 'error', message: msg }),
+      toolMessages.push({
+        role: 'tool', tool_call_id: rawToolCall.id, name: toolName,
+        content: JSON.stringify({ status: 'error', message: `工具调用 "${toolName}" 的参数不是合法的 JSON 格式：${rawToolCall.function.arguments}。请修正参数格式后重试。` }),
       });
-      return 'ok';
+      return { status: 'ok', toolMessages };
     }
 
     const toolCall: ToolCall = {
@@ -163,13 +203,11 @@ export class NanoCodeAgent {
     const allowedCall = this.registry.execBeforeToolCall(toolCall);
     if (allowedCall === null) {
       this.display?.onStatus({ message: `tool_blocked:${toolName}`, agentName: this.name });
-      this.messageHistory.push({
-        role: 'tool',
-        tool_call_id: toolCall.id,
-        name: toolName,
+      toolMessages.push({
+        role: 'tool', tool_call_id: toolCall.id, name: toolName,
         content: JSON.stringify({ status: 'error', message: 'Tool call blocked by plugin policy.' }),
       });
-      return 'ok';
+      return { status: 'ok', toolMessages };
     }
 
     this.display?.onToolCall({ toolName, args: toolArgs, agentName: this.name });
@@ -182,25 +220,21 @@ export class NanoCodeAgent {
     }
     this.registry.execAfterToolCall(toolResult);
 
-    // Inline skill 展开：将 newMessages 注入消息历史（在 tool_result 之前）
+    // Inline skill 展开：newMessages 以 user 消息形式在 tool_result 之前注入
     if (toolResult.newMessages) {
       for (const msg of toolResult.newMessages) {
-        this.messageHistory.push({
-          role: 'user',
-          content: msg.content,
-        });
+        toolMessages.push({ role: 'user', content: msg.content });
       }
     }
 
     this.display?.onToolResult({ status: toolResult.status, message: toolResult.message, agentName: this.name });
 
-    this.messageHistory.push({
-      role: 'tool',
-      tool_call_id: rawToolCall.id,
-      name: toolName,
+    toolMessages.push({
+      role: 'tool', tool_call_id: rawToolCall.id, name: toolName,
       content: formatToolResponse(toolResult),
     });
 
-    return toolResult.status === 'rejected_by_user' ? 'rejected' : 'ok';
+    const status = toolResult.status === 'rejected_by_user' ? 'rejected' : 'ok';
+    return { status, toolMessages };
   }
 }

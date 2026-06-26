@@ -432,3 +432,56 @@ describe('NanoCodeAgent — newMessages injection', () => {
   });
 
 });
+
+describe('NanoCodeAgent — cancellation', () => {
+
+  it('breaks immediately when cancelled before runTask', async () => {
+    const registry = new PluginRegistry();
+    registry.store.set('agent:cancelled', true);
+    let llmCalled = false;
+    const mock = {
+      sendSystemMessage: async (..._args: any[]) => {
+        llmCalled = true;
+        return { text: 'should not happen', stopReason: 'stop' };
+      },
+      getModel: () => 'gpt-4o',
+    };
+
+    const agent = new NanoCodeAgent(registry, mock as any);
+    const result = await agent.runTask('hello');
+
+    assert.equal(llmCalled, false, 'LLM should not be called when cancelled');
+    assert.equal(result, undefined);
+  });
+
+  it('handles AbortError from LLM gracefully', async () => {
+    const registry = new PluginRegistry();
+    const mock = {
+      sendSystemMessage: async (_msgs: any, _tools: any, _onChunk?: any, _extra?: any, _onMeta?: any, signal?: AbortSignal) => {
+        signal?.addEventListener('abort', () => {});
+        const err = new Error('The operation was aborted');
+        err.name = 'AbortError';
+        throw err;
+      },
+      getModel: () => 'gpt-4o',
+    };
+
+    const agent = new NanoCodeAgent(registry, mock as any);
+    registry.store.set('agent:abort', new AbortController());
+    registry.store.set('agent:cancelled', true);
+
+    const result = await agent.runTask('hello');
+    assert.equal(result, undefined);
+  });
+
+  it('clears cancel flag from store after handling', async () => {
+    const registry = new PluginRegistry();
+    registry.store.set('agent:cancelled', true);
+
+    const agent = new NanoCodeAgent(registry, mockLLM());
+    await agent.runTask('hello');
+
+    assert.equal(registry.store.get('agent:cancelled'), undefined);
+  });
+
+});
