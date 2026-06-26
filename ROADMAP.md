@@ -45,11 +45,27 @@
 | ✅ | 上下文裁剪与压缩 | `/compact` 内建命令 + 基于 LLM 摘要的智能压缩，保留最近对话、移植 Claude Code 9 段总结模板 |
 | ✅ | **Ink 上下文可视化** | `InkApp.tsx` 内联 `ContextVis` 组件渲染色块网格，数据源为 `analyzer.ts` 的 7 维度分析 |
 | ✅ | 多轮摘要记忆 | 自动压缩（token-budget 阈值触发 + 主循环处理），压缩前全量备份至 `.nano-code-session.pre-compact.json` |
-| ☐ | 角色模式 & 斜杠命令 | profiles/ 斜杠命令 `/treehole` 等运行时切换 |
+| ☐ | 角色模式 & 斜杠命令 | profiles/ 仅通过 `--profile` 启动时加载，主 agent 中不支持运行时切换 |
 | ✅ | 内置 Skill 系统 | 10 个对齐 Claude Code 的内置技能：simplify/verify/batch/debug/lorem-ipsum/update-config/remember/stuck/skillify/keybindings |
 | ☐ | ToolUseContext | 工具执行的共享运行时上下文（模型覆盖、effort、权限绑定等），贯穿 ReAct 循环 |
 | ☐ | contextModifier | 工具可通过 ToolResponse 返回上下文修改器，作用于后续工具调用的执行环境 |
 | ✅ | Skill 系统 | 10 个内置 TypeScript 技能（bundled），skills_list / skill_view / skill 工具，inline（newMessages 注入）+ fork（子 agent）双模式，skills 配置禁用开关 |
+
+## P0 — 搜索与审查（新）
+
+| 状态 | 功能 | 说明 |
+|------|------|------|
+| ✅ | Glob/Grep 搜索工具 | 文件名模式匹配 + 文件内容搜索，替代暴力递归遍历 |
+| ☐ | WebFetch/WebSearch 工具 | 网络获取与搜索，让 LLM 获取实时信息 |
+| ☐ | 代码审查（review） | 对当前 diff 的正确性/性能/安全审查 |
+
+## P1 — 规划、任务与记忆（新）
+
+| 状态 | 功能 | 说明 |
+|------|------|------|
+| ☐ | Plan Mode | 实现前先展示方案并确认，防止盲目修改 |
+| ☐ | 任务/清单系统 | TaskCreate/List/Update/Stop，支持多步骤任务分解与后台追踪 |
+| ☐ | 会话语义记忆 | 跨会话的语义级记忆检索，自动提取与摘要关键信息 |
 
 ## 展示层插件（已实现）
 

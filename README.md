@@ -297,6 +297,7 @@ plugins:
 | 插件 | 启用方式 | 提供工具 |
 |------|---------|---------|
 | **fs** | `"fs": {}` | 文件列表、读取、写入、精准修改；文件读取缓存（最近 5 个文件，5 分钟 TTL）供 `/compact` 后恢复上下文 |
+| **search** | 系统白名单自动启用 | 文件搜索（glob）+ 内容搜索（grep），支持正则和 glob 限定范围 |
 | **command** | `"command": {}` | Bash 命令执行（含危险命令黑名单） |
 | **memory** | `"memory": {}` | 记忆存储与检索，支持多会话持久化和标签查询 |
 | **skills** | 系统白名单自动启用 | 10 个内置 TypeScript 技能 + 文件系统 SKILL.md 技能，`skill`/`skills_list`/`skill_view`/`run_agent` 工具 |

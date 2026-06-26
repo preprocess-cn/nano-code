@@ -48,6 +48,7 @@ export function createSkillsSlashPlugin(llmClient?: LLMClient, display?: Display
         await registerBuiltinPlugin(subRegistry, 'command');
         await registerBuiltinPlugin(subRegistry, 'memory');
         await registerBuiltinPlugin(subRegistry, 'token-budget');
+        await registerBuiltinPlugin(subRegistry, 'search');
 
         const subAgent = new NanoCodeAgent(subRegistry, llmClient, `技能: ${skill.name}`, undefined, skill.name, display);
 

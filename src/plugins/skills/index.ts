@@ -297,6 +297,7 @@ async function executeForkedSkill(
   await registerBuiltinPlugin(subRegistry, 'command');
   await registerBuiltinPlugin(subRegistry, 'memory');
   await registerBuiltinPlugin(subRegistry, 'token-budget');
+  await registerBuiltinPlugin(subRegistry, 'search');
 
   const subAgent = new NanoCodeAgent(
     subRegistry,
@@ -338,6 +339,7 @@ async function handleRunAgent(
   await registerBuiltinPlugin(subRegistry, 'command');
   await registerBuiltinPlugin(subRegistry, 'memory');
   await registerBuiltinPlugin(subRegistry, 'token-budget');
+  await registerBuiltinPlugin(subRegistry, 'search');
 
   const subAgent = new NanoCodeAgent(
     subRegistry,

@@ -338,10 +338,11 @@ const BUILTIN_LOADERS: Record<string, (settings?: Record<string, any>) => Promis
   memory: async (s) => (await import('./plugins/tools/memory.js')).createMemoryPlugin(s || {}),
   'token-budget': async (s) => (await import('./plugins/token-budget/index.js')).createTokenBudgetPlugin(s || {}),
   skills: async () => (await import('./plugins/skills/index.js')).createSkillsPlugin(),
+  search: async () => (await import('./plugins/tools/search.js')).searchPlugin,
 };
 
 /**
- * 按内置名注册一个插件。处理 fs / command / memory / token-budget。
+ * 按内置名注册一个插件。处理 fs / command / memory / token-budget / skills / search。
  * @returns true 表示已注册，false 表示名称未识别（调用方应忽略或警告）。
  */
 export async function registerBuiltinPlugin(
