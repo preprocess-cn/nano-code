@@ -2,9 +2,40 @@ import * as fs from 'fs/promises';
 import * as fsSync from 'fs';
 import * as path from 'path';
 import { confirm } from '@clack/prompts';
-import { NanoPlugin } from '../../plugin.js';
+import { NanoPlugin, PluginRegistry } from '../../plugin.js';
 import { ToolDefinition, ToolResponse, ToolContext } from '../../contract.js';
 import { getPatchForDisplay, newFileHunk } from '../../utils/diff.js';
+
+// ── 文件读取缓存（用于压缩后恢复上下文）──
+// 模块级缓存，但写入时校验 ctx.skipPermission 以避免子 agent 污染主 agent 缓存
+
+interface ReadCacheEntry {
+  path: string;
+  content: string;
+  timestamp: number;
+}
+
+const readCache: ReadCacheEntry[] = [];
+const READ_CACHE_MAX = 5;
+const READ_CACHE_TTL = 5 * 60 * 1000; // 5 分钟
+
+export function addToReadCache(filePath: string, content: string): void {
+  const now = Date.now();
+  // 清理过期条目
+  const valid = readCache.filter(e => now - e.timestamp < READ_CACHE_TTL);
+  // 去重（新内容覆盖旧）
+  const existing = valid.findIndex(e => e.path === filePath);
+  if (existing >= 0) valid.splice(existing, 1);
+  valid.push({ path: filePath, content, timestamp: now });
+  // 超限则淘汰最旧
+  while (valid.length > READ_CACHE_MAX) valid.shift();
+  readCache.length = 0;
+  readCache.push(...valid);
+}
+
+export function getReadCache(): ReadCacheEntry[] {
+  return [...readCache];
+}
 
 function safeResolvePath(relativeTarget: string): string {
   const cwd = process.cwd();
@@ -122,6 +153,10 @@ export const fsPlugin: NanoPlugin = {
     ];
   },
 
+  async onInit(_registry: PluginRegistry): Promise<void> {
+    _registry.store.set('fs:readCache', () => getReadCache());
+  },
+
   async execute(name: string, args: any, ctx: ToolContext): Promise<ToolResponse> {
     switch (name) {
       case 'list_project_files': {
@@ -141,6 +176,8 @@ export const fsPlugin: NanoPlugin = {
           if (!args.path) return toolError("args.path missing, please provide");
           const finalPath = safeResolvePath(args.path);
           const content = await fs.readFile(finalPath, 'utf-8');
+          // 仅主 agent 缓存（子 agent 使用 skipPermission: true）
+          if (!ctx.skipPermission) addToReadCache(args.path, content);
           return { status: "success", data: `--- 文件内容 开始: ${args.path} ---\n${content}\n--- 文件内容 结束 ---` };
         } catch (err: any) {
           return toolError(`read file [${args.path}] failed: ${err.message}`);

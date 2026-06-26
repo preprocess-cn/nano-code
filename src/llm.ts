@@ -94,15 +94,15 @@ export class LLMClient {
       try {
         // 请求 OpenAI 的流式接口
         const stream = await this.openai.chat.completions.create({
-          // extraParams 最先 spread，确保核心参数不会被覆盖
-          ...extraParams,
+          // 核心参数优先，extraParams 在后以支持选择性覆盖（如 --model 覆写总结模型）
           model: this.model,
+          ...extraParams,
           messages: messages as any,
           stream: true,
           stream_options: { include_usage: true },
-          temperature: this.temperature,
           // 只有当有工具传入时，才把 tools 参数加上
           tools: tools && tools.length > 0 ? tools : undefined,
+          temperature: this.temperature,
         });
 
         let fullText = '';

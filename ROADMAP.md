@@ -42,9 +42,9 @@
 | ☐ | 发布准备 | package.json 补全、README 更新、npm publish |
 | ☐ | 插件权限系统 | npm 插件的安全沙箱 + 权限声明机制 |
 | ☐ | 插件热加载 | 运行时开关插件无需重启 |
-| ☐ | 上下文裁剪与压缩 | 基于 analyzer 数据的智能摘要/裁剪 |
+| ✅ | 上下文裁剪与压缩 | `/compact` 内建命令 + 基于 LLM 摘要的智能压缩，保留最近对话、移植 Claude Code 9 段总结模板 |
 | ✅ | **Ink 上下文可视化** | `InkApp.tsx` 内联 `ContextVis` 组件渲染色块网格，数据源为 `analyzer.ts` 的 7 维度分析 |
-| ☐ | 多轮摘要记忆 | 超出窗口时自动压缩历史 |
+| ✅ | 多轮摘要记忆 | 自动压缩（token-budget 阈值触发 + 主循环处理），压缩前全量备份至 `.nano-code-session.pre-compact.json` |
 | ☐ | 角色模式 & 斜杠命令 | profiles/ 斜杠命令 `/treehole` 等运行时切换 |
 | ✅ | 内置 Skill 系统 | 10 个对齐 Claude Code 的内置技能：simplify/verify/batch/debug/lorem-ipsum/update-config/remember/stuck/skillify/keybindings |
 | ☐ | ToolUseContext | 工具执行的共享运行时上下文（模型覆盖、effort、权限绑定等），贯穿 ReAct 循环 |

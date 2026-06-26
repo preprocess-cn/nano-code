@@ -208,6 +208,12 @@ async function startCLI(options: { debug?: boolean; think?: boolean; skipPermiss
     const session = loadSession(process.cwd());
     if (session) {
       agent.loadHistory(session.messages);
+
+      // 初始化 token-budget 累计值，使自动压缩阈值在恢复的会话中也能正常触发
+      const { countMessagesTokens } = await import('./plugins/token-budget/counter.js');
+      const initialTokens = countMessagesTokens(session.messages);
+      registry.store.set('token-budget:initialAccumulated', initialTokens);
+
       // Display restored messages in the UI so the user sees the full context
       for (const msg of session.messages) {
         if (msg.role === 'user') {
@@ -250,6 +256,27 @@ async function startCLI(options: { debug?: boolean; think?: boolean; skipPermiss
       displayMgr.onError({ message: MSG_TOP_LEVEL_ERROR(error), agentName: 'main', stack: error instanceof Error ? error.stack : undefined });
     } finally {
       saveSession(process.cwd(), agent.getHistory());
+    }
+
+    // 自动压缩检查（在 saveSession 之后）
+    const compactSignal = registry.store.get<boolean>('compact:signal');
+    if (compactSignal) {
+      registry.store.set('compact:signal', false);
+      try {
+        const { CompactService } = await import('./plugins/compact/service.js');
+        const service = new CompactService(llmClient, registry, displayMgr);
+        const result = await service.compact(agent, { preserveCount: 2 });
+        agent.loadHistory(result.messages);
+        saveSession(process.cwd(), agent.getHistory());
+        registry.store.set('compact:completed', true);
+        displayMgr.onStatus({
+          message: `自动压缩: ${result.originalMessageCount} → ${result.compactedMessageCount} 条消息, 节省 ~${(result.savedTokens / 1000).toFixed(1)}K tokens`,
+          agentName: 'main',
+        });
+      } catch {
+        // 失败时通知 token-budget 重置 autoCompacted 以允许重试
+        registry.store.set('compact:retry', true);
+      }
     }
   }
 }

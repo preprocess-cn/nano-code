@@ -27,6 +27,11 @@ export class NanoCodeAgent {
     return this.name;
   }
 
+  /** 暴露 LLMClient 供 CompactService 等使用 */
+  getLLMClient(): LLMClient {
+    return this.llmClient;
+  }
+
   getHistory(): ChatMessage[] {
     return [...this.messageHistory];
   }

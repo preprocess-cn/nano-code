@@ -23,7 +23,14 @@ export function setTargetAgent(agent: NanoCodeAgent, display?: DisplayManager): 
   _display = display ?? null;
 }
 
-export function createAgentSlashPlugin(display?: DisplayManager): NanoPlugin {
+/** 测试用：重置模块级状态 */
+export function _resetState(): void {
+  _agent = null;
+  _display = null;
+  _currentAgentMode = null;
+}
+
+export function createAgentSlashPlugin(display?: DisplayManager, agentDir?: string): NanoPlugin {
   _display = display ?? null;
 
   return {
@@ -49,7 +56,7 @@ export function createAgentSlashPlugin(display?: DisplayManager): NanoPlugin {
         return { handled: true, skipAgent: true };
       }
 
-      const agents = loadAgentDefinitions();
+      const agents = loadAgentDefinitions(agentDir);
       const def = agents.find(a => a.name === cmdName);
       if (!def) return null; // fall through to skills-slash / commands
 

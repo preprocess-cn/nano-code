@@ -80,6 +80,47 @@ describe('NanoCodeAgent — getHistory / loadHistory', () => {
     assert.deepEqual(agent.getHistory(), []);
   });
 
+  it('getAgentRole returns the role passed to constructor', () => {
+    const agent = new NanoCodeAgent(new PluginRegistry(), mockLLM(), 'test-role');
+    assert.equal(agent.getAgentRole(), 'test-role');
+  });
+
+  it('getAgentRole returns undefined when no role was set', () => {
+    const agent = new NanoCodeAgent(new PluginRegistry(), mockLLM());
+    assert.equal(agent.getAgentRole(), undefined);
+  });
+
+});
+
+describe('NanoCodeAgent — setRole', () => {
+
+  it('setRole updates the agent role', () => {
+    const agent = new NanoCodeAgent(new PluginRegistry(), mockLLM());
+    agent.setRole('new-role');
+    assert.equal(agent.getAgentRole(), 'new-role');
+  });
+
+  it('setRole with role and promptConfig', () => {
+    const agent = new NanoCodeAgent(new PluginRegistry(), mockLLM());
+    const config = { withTools: 'custom {tool_list} tools', noTools: 'custom no tools' };
+    agent.setRole('expert', config);
+    assert.equal(agent.getAgentRole(), 'expert');
+  });
+
+  it('setRole with undefined clears the role', () => {
+    const agent = new NanoCodeAgent(new PluginRegistry(), mockLLM(), 'old-role');
+    assert.equal(agent.getAgentRole(), 'old-role');
+    agent.setRole(undefined, undefined);
+    assert.equal(agent.getAgentRole(), undefined);
+  });
+
+  it('setRole replaces previous role', () => {
+    const agent = new NanoCodeAgent(new PluginRegistry(), mockLLM());
+    agent.setRole('first');
+    agent.setRole('second');
+    assert.equal(agent.getAgentRole(), 'second');
+  });
+
 });
 
 describe('NanoCodeAgent — lifecycle hooks', () => {

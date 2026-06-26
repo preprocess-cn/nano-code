@@ -37,6 +37,18 @@ npm start
 | `--version` | 显示版本号 |
 | `--help` | 显示帮助信息 |
 
+### 内建斜杠命令
+
+| 命令 | 说明 |
+|------|------|
+| `/exit`, `/quit` | 退出程序 |
+| `/clear` | 清除对话历史，重新开始 |
+| `/help` | 显示帮助信息 |
+| `/compact`, `/compress` | 压缩对话历史 — 摘要旧消息以节省上下文空间 |
+| `/context` | 查看上下文分布及用量（7 维度 + ContextVis 色块图） |
+
+`/compact` 支持参数：`/compact --dry-run`（预览）、`/compact --preserve 3`（保留最近 3 组对话）、`/compact --model gpt-4o-mini`（指定总结模型），剩余参数作为自定义总结侧重指令。
+
 ### 插件管理命令
 
 ```bash
@@ -143,6 +155,8 @@ plugins:
   token-budget:
     settings:
       maxTokensPerSession: 100000
+      autoCompactEnabled: true      # 超出阈值时自动压缩（默认 false）
+      autoCompactThreshold: 90000   # 可选，默认 maxTokensPerSession * 0.9
 
 skills:
   disabled:
@@ -282,7 +296,7 @@ plugins:
 
 | 插件 | 启用方式 | 提供工具 |
 |------|---------|---------|
-| **fs** | `"fs": {}` | 文件列表、读取、写入、精准修改 |
+| **fs** | `"fs": {}` | 文件列表、读取、写入、精准修改；文件读取缓存（最近 5 个文件，5 分钟 TTL）供 `/compact` 后恢复上下文 |
 | **command** | `"command": {}` | Bash 命令执行（含危险命令黑名单） |
 | **memory** | `"memory": {}` | 记忆存储与检索，支持多会话持久化和标签查询 |
 | **skills** | 系统白名单自动启用 | 10 个内置 TypeScript 技能 + 文件系统 SKILL.md 技能，`skill`/`skills_list`/`skill_view`/`run_agent` 工具 |
@@ -296,7 +310,7 @@ plugins:
 |------|---------|
 | **npm** | 配置 `type: "npm"` 和 `spec`，`import()` 加载 NanoPlugin |
 | **MCP** | 配置 `type: "mcp"` 条目，自动加载外部 MCP Server |
-| **Token Budget** | 配置 `plugins.token-budget.settings`，使用 API 精确 token 统计 |
+| **Token Budget** | 配置 `plugins.token-budget.settings`，使用 API 精确 token 统计；支持自动压缩阈值 `autoCompactEnabled`/`autoCompactThreshold` |
 | **npm-loader** | 内置默认插件，自动处理 `type: "npm"` 插件的注册 |
 
 ## MCP 集成

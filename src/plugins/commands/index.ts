@@ -47,6 +47,7 @@ export function createCommandsPlugin(display?: DisplayManager, registry?: Plugin
         registry: _registry!,
         config: _config!,
         display: _display,
+        args: parsed.args,
       };
 
       // /clear — 清空历史

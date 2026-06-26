@@ -11,6 +11,10 @@ export interface TokenBudgetConfig {
   maxTokensPerRequest?: number;    // Default: 8000
   compressionThreshold?: number;   // Default: 80000 — start warning at this level
   warnAtTokens?: number;           // Default: 50000 — first warning level
+  /** 自动压缩阈值（默认 maxTokensPerSession * 0.9），超出后在 onAfterRequest 设置 compact:signal */
+  autoCompactThreshold?: number;
+  /** 是否启用自动压缩（默认 false，opt-in） */
+  autoCompactEnabled?: boolean;
 }
 
 export function createTokenBudgetPlugin(config?: TokenBudgetConfig): NanoPlugin {
@@ -19,6 +23,8 @@ export function createTokenBudgetPlugin(config?: TokenBudgetConfig): NanoPlugin 
     maxTokensPerRequest: config?.maxTokensPerRequest ?? 8000,
     compressionThreshold: config?.compressionThreshold ?? 80000,
     warnAtTokens: config?.warnAtTokens ?? 50000,
+    autoCompactThreshold: config?.autoCompactThreshold ?? 0,
+    autoCompactEnabled: config?.autoCompactEnabled ?? false,
   };
 
   let inputTokens = 0;
@@ -26,6 +32,8 @@ export function createTokenBudgetPlugin(config?: TokenBudgetConfig): NanoPlugin 
   let totalTokensAccumulated = 0;
   let warned = false;
   let compressed = false;
+  let autoCompacted = false;
+  let _registryRef: PluginRegistry | null = null;
 
   return {
     name: 'token-budget',
@@ -43,18 +51,29 @@ export function createTokenBudgetPlugin(config?: TokenBudgetConfig): NanoPlugin 
       // Warm up tokenizer
       await initTokenizer();
 
+      _registryRef = _registry;
+
       // Load config from registry if available
       const registryConfig = _registry.getPluginConfig('token-budget') as TokenBudgetConfig;
       if (registryConfig.maxTokensPerSession) cfg.maxTokensPerSession = registryConfig.maxTokensPerSession;
       if (registryConfig.maxTokensPerRequest) cfg.maxTokensPerRequest = registryConfig.maxTokensPerRequest;
       if (registryConfig.compressionThreshold) cfg.compressionThreshold = registryConfig.compressionThreshold;
       if (registryConfig.warnAtTokens) cfg.warnAtTokens = registryConfig.warnAtTokens;
+      if (registryConfig.autoCompactThreshold !== undefined) cfg.autoCompactThreshold = registryConfig.autoCompactThreshold;
+      if (registryConfig.autoCompactEnabled !== undefined) cfg.autoCompactEnabled = registryConfig.autoCompactEnabled;
 
       inputTokens = 0;
       outputTokens = 0;
       totalTokensAccumulated = 0;
       warned = false;
       compressed = false;
+      autoCompacted = false;
+
+      // 从 store 读取初始累计值（--continue 恢复的会话）
+      const initialAccumulated = _registry.store.get<number>('token-budget:initialAccumulated');
+      if (initialAccumulated) {
+        totalTokensAccumulated += initialAccumulated;
+      }
 
       // Expose getApiUsage via shared store for other plugins (e.g. /context)
       _registry.store.set('token-budget:getApiUsage', () => ({
@@ -62,6 +81,11 @@ export function createTokenBudgetPlugin(config?: TokenBudgetConfig): NanoPlugin 
         outputTokens,
         totalTokens: totalTokensAccumulated,
       }));
+
+      // Initialize auto-compact signals
+      _registry.store.set('compact:signal', false);
+      _registry.store.set('compact:completed', false);
+      _registry.store.set('compact:retry', false);
     },
 
     onBeforeRequest(messages: ChatMessage[]): ChatMessage[] {
@@ -128,6 +152,26 @@ export function createTokenBudgetPlugin(config?: TokenBudgetConfig): NanoPlugin 
         const estOutput = Math.ceil(responseText.length / 3);
         outputTokens += estOutput;
         totalTokensAccumulated = inputTokens + outputTokens;
+      }
+
+      // 失败重试：主循环 catch 块设置 compact:retry，此处重置 autoCompacted
+      if (_registryRef?.store.get('compact:retry')) {
+        autoCompacted = false;
+        _registryRef.store.set('compact:retry', false);
+      }
+
+      // Auto-compact signal
+      if (cfg.autoCompactEnabled && !autoCompacted) {
+        const alreadyCompleted = _registryRef?.store.get('compact:completed');
+        if (!alreadyCompleted) {
+          const threshold = cfg.autoCompactThreshold > 0
+            ? cfg.autoCompactThreshold
+            : cfg.maxTokensPerSession * 0.9;
+          if (totalTokensAccumulated > threshold) {
+            autoCompacted = true;
+            _registryRef?.store.set('compact:signal', true);
+          }
+        }
       }
     },
 
