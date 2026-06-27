@@ -711,9 +711,8 @@ function AppContent(props: InkAppProps): React.ReactElement {
   }
 
   // Normal conversation view
-  // Three-sibling layout (ref: Claude Code FullscreenLayout):
-  // - Scroll container: flexGrow=1, overflow=hidden — constrains ScrollBox
-  // - Permission dialog: flexShrink=0 — between scroll and input, outside ScrollBox
+  // Two-sibling layout (ref: Claude Code FullscreenLayout):
+  // - Scroll container: flexGrow=1 — ScrollBox wraps messages + PermissionDialog (unified scroll)
   // - Bottom area: flexShrink=0 — always visible, never compressed
   return React.createElement(
     AlternateScreen,
@@ -729,19 +728,14 @@ function AppContent(props: InkAppProps): React.ReactElement {
         ...messages.map((msg, i) =>
           React.createElement(MessageItem, { key: i, msg }),
         ),
+        pendingPermission && onPermissionResponse
+          ? React.createElement(PermissionDialog, {
+              ...pendingPermission,
+              onResponse: onPermissionResponse,
+            })
+          : null,
       ),
     ),
-    // Permission dialog — between scroll area and input, outside ScrollBox so borderStyle renders
-    pendingPermission && onPermissionResponse
-      ? React.createElement(
-          Box,
-          { flexShrink: 0, paddingLeft: 1, paddingRight: 1 },
-          React.createElement(PermissionDialog, {
-            ...pendingPermission,
-            onResponse: onPermissionResponse,
-          }),
-        )
-      : null,
     // Agent header — shown when user has switched to an agent
     activeAgentName
       ? React.createElement(AgentHeader, { name: activeAgentName })
