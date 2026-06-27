@@ -1,0 +1,7 @@
+display:
+  plugin: claude-code-ink
+  enabled: true
+
+plugins:
+  web:
+    enabled: true

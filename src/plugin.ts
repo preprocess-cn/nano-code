@@ -193,56 +193,55 @@ export class PluginRegistry {
     }
   }
 
-  execSystemPrompt(prompt: string): string {
-    let result = prompt;
-    for (const plugin of this.plugins.values()) {
-      if (plugin.onSystemPrompt) {
-        try {
-          result = plugin.onSystemPrompt(result);
-        } catch (err) {
-          console.error(`[plugin] onSystemPrompt failed for "${plugin.name}":`, err);
-        }
-      }
+  /**
+   * Chain: call each plugin's transform hook passing previous result.
+   * Skips plugins that don't implement the hook or throw.
+   */
+  private execPipe<T>(getHook: (p: NanoPlugin) => ((v: T) => T) | undefined, initial: T, label: string): T {
+    let v = initial;
+    for (const p of this.plugins.values()) {
+      const fn = getHook(p);
+      if (!fn) continue;
+      try { v = fn(v); }
+      catch (err) { console.error(`[plugin] ${label} failed for "${p.name}":`, err); }
     }
-    return result;
+    return v;
+  }
+
+  /**
+   * Broadcast: call each plugin's void hook with args.
+   */
+  private execBroadcast(getHook: (p: NanoPlugin) => ((...args: any[]) => void) | undefined, label: string, ...args: any[]): void {
+    for (const p of this.plugins.values()) {
+      const fn = getHook(p);
+      if (!fn) continue;
+      try { fn(...args); }
+      catch (err) { console.error(`[plugin] ${label} failed for "${p.name}":`, err); }
+    }
+  }
+
+  execSystemPrompt(prompt: string): string {
+    return this.execPipe(p => p.onSystemPrompt, prompt, 'onSystemPrompt');
   }
 
   execBeforeRequest(messages: ChatMessage[]): ChatMessage[] {
-    let result = messages;
-    for (const plugin of this.plugins.values()) {
-      if (plugin.onBeforeRequest) {
-        try {
-          result = plugin.onBeforeRequest(result);
-        } catch (err) {
-          console.error(`[plugin] onBeforeRequest failed for "${plugin.name}":`, err);
-        }
-      }
-    }
-    return result;
+    return this.execPipe(p => p.onBeforeRequest, messages, 'onBeforeRequest');
   }
 
   execAfterRequest(response: LLMResponse, rawMeta?: Record<string, unknown>): void {
-    for (const plugin of this.plugins.values()) {
-      if (plugin.onAfterRequest) {
-        try {
-          plugin.onAfterRequest(response, rawMeta);
-        } catch (err) {
-          console.error(`[plugin] onAfterRequest failed for "${plugin.name}":`, err);
-        }
-      }
-    }
+    this.execBroadcast(p => p.onAfterRequest, 'onAfterRequest', response, rawMeta);
   }
 
   collectExtraParams(): Record<string, unknown> {
     let params: Record<string, unknown> = {};
-    for (const plugin of this.plugins.values()) {
-      if (plugin.onExtraParams) {
-        try {
-          const result = plugin.onExtraParams();
-          if (result) params = { ...params, ...result };
-        } catch (err) {
-          console.error(`[plugin] onExtraParams failed for "${plugin.name}":`, err);
-        }
+    for (const p of this.plugins.values()) {
+      const fn = p.onExtraParams;
+      if (!fn) continue;
+      try {
+        const result = fn();
+        if (result) params = { ...params, ...result };
+      } catch (err) {
+        console.error(`[plugin] onExtraParams failed for "${p.name}":`, err);
       }
     }
     return params;
@@ -250,34 +249,22 @@ export class PluginRegistry {
 
   execBeforeToolCall(toolCall: ToolCall): ToolCall | null {
     let current: ToolCall | null = toolCall;
-    for (const plugin of this.plugins.values()) {
-      if (plugin.onBeforeToolCall && current) {
-        try {
-          current = plugin.onBeforeToolCall(current);
-        } catch (err) {
-          console.error(`[plugin] onBeforeToolCall failed for "${plugin.name}":`, err);
-          continue;
-        }
-        if (current === null) {
-          return null;
-        }
+    for (const p of this.plugins.values()) {
+      const fn = p.onBeforeToolCall;
+      if (!fn || !current) continue;
+      try {
+        current = fn(current);
+      } catch (err) {
+        console.error(`[plugin] onBeforeToolCall failed for "${p.name}":`, err);
+        continue;
       }
+      if (current === null) return null;
     }
     return current;
   }
 
   execAfterToolCall(result: ToolResponse): ToolResponse {
-    let current = result;
-    for (const plugin of this.plugins.values()) {
-      if (plugin.onAfterToolCall) {
-        try {
-          current = plugin.onAfterToolCall(current);
-        } catch (err) {
-          console.error(`[plugin] onAfterToolCall failed for "${plugin.name}":`, err);
-        }
-      }
-    }
-    return current;
+    return this.execPipe(p => p.onAfterToolCall, result, 'onAfterToolCall');
   }
 
   /**
@@ -339,6 +326,7 @@ const BUILTIN_LOADERS: Record<string, (settings?: Record<string, any>) => Promis
   'token-budget': async (s) => (await import('./plugins/token-budget/index.js')).createTokenBudgetPlugin(s || {}),
   skills: async () => (await import('./plugins/skills/index.js')).createSkillsPlugin(),
   search: async () => (await import('./plugins/tools/search.js')).searchPlugin,
+  web: async () => (await import('./plugins/tools/web.js')).webPlugin,
 };
 
 /**
