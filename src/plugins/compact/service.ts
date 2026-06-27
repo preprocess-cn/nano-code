@@ -33,10 +33,24 @@ export class CompactService {
   ) {}
 
   /**
-   * 执行压缩，返回可用于替换 messageHistory 的新消息数组。
+   * 执行压缩（基于 agent 实例）。
    */
   async compact(agent: NanoCodeAgent, options?: CompactOptions): Promise<CompactionResult> {
     const history = agent.getHistory();
+    return this.compactMessages(history, options);
+  }
+
+  /**
+   * 执行压缩（基于原始消息数组，无需 agent 引用）。
+   */
+  async compactRaw(messages: ChatMessage[], options?: CompactOptions): Promise<CompactionResult> {
+    return this.compactMessages(messages, options);
+  }
+
+  /**
+   * 执行压缩，返回可用于替换 messageHistory 的新消息数组。
+   */
+  private async compactMessages(history: ChatMessage[], options?: CompactOptions): Promise<CompactionResult> {
     if (history.length === 0) {
       throw new Error('没有可压缩的消息');
     }

@@ -16,8 +16,17 @@ export async function resolveDisplayPlugin(spec: string): Promise<DisplayPlugin 
 
   // Built-in ink display plugin
   if (spec === 'claude-code-ink') {
-    const { inkDisplayPlugin } = await import('./claude-code-ink/index.js');
-    return inkDisplayPlugin;
+    try {
+      const { inkDisplayPlugin } = await import('./claude-code-ink/index.js');
+      return inkDisplayPlugin;
+    } catch (err: any) {
+      if (err?.code === 'ERR_MODULE_NOT_FOUND' || err?.message?.includes('Cannot find package')) {
+        throw new Error(
+          'Ink 展示插件加载失败：缺少可选依赖。请运行 "npm install"（缺省安装）或 "npm run install:default" 来安装 TUI 依赖。'
+        );
+      }
+      throw new Error(`加载 Ink 展示插件失败: ${err.message}`);
+    }
   }
 
   let resolvedPath: string | null = null;

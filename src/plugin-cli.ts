@@ -229,6 +229,37 @@ async function setEnabled(name: string, enabled: boolean): Promise<void> {
   console.log(`插件 "${name}" 已${enabled ? '启用' : '禁用'}。`);
 }
 
+/**
+ * 打印运行中注册表的所有插件及其工具（--list-plugins 模式使用）。
+ * 与上方 listPlugins() 不同，此函数操作运行时的 PluginRegistry 实例。
+ */
+export function printPluginList(registry: import('./plugin.js').PluginRegistry): void {
+  const plugins = registry.listPlugins();
+  if (plugins.length === 0) {
+    console.log('\n  当前没有注册任何插件。\n');
+    return;
+  }
+
+  console.log(`\n  已注册插件 (${plugins.length}):\n`);
+  for (const p of plugins) {
+    const tag = p.name.startsWith('mcp:') ? 'MCP' : p.name.startsWith('agent:') ? 'agent' : '内置';
+    console.log(`  ${p.name} [${tag}]`);
+    if (p.description) {
+      console.log(`   〉${p.description}`);
+    }
+    const tools = p.tools;
+    if (tools.length > 0) {
+      for (const t of tools) {
+        const desc = t.function.description.replace(/\n.*/s, '').slice(0, 80);
+        console.log(`    • ${t.function.name.padEnd(22)} ${desc}`);
+      }
+    } else {
+      console.log(`    (无工具 — 仅挂载钩子)`);
+    }
+    console.log('');
+  }
+}
+
 function updateAgentEnabled(filePath: string, enabled: boolean, agentName: string): void {
   try {
     const raw = fs.readFileSync(filePath, 'utf-8');

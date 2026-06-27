@@ -55,12 +55,13 @@ export function buildSystemPrompt(
 }
 
 function getEnvironmentSnapshot(): string {
-  return [
+  const lines = [
     '\n\n[System Environment Snapshot]',
     `- Operating System: ${os.platform()} (${os.release()})`,
     `- Current Working Directory (CWD): ${process.cwd()}`,
-    `- Shell Env: CI=true`,
-  ].join('\n');
+  ];
+  if (process.env.CI) lines.push(`- CI: ${process.env.CI}`);
+  return lines.join('\n');
 }
 
 /**
@@ -68,31 +69,13 @@ function getEnvironmentSnapshot(): string {
  * 输出直接嵌入对话消息供 LLM 消费。
  */
 export function formatToolResponse(response: ToolResponse): string {
-  if (response.status === 'rejected_by_user') {
-    return JSON.stringify({
-      status: 'rejected_by_user',
-      message: [
-        "CRITICAL ERROR: The human user has EXPLICITLY DENIED permission for this action.",
-        "DO NOT attempt to retry this tool or any alternative tool execution in this turn.",
-        "DO NOT generate any more tool calls.",
-        "Your current operation pipeline must be HALTED immediately.",
-        "Next Action Required:",
-        "1. Politely acknowledge that the user cancelled the operation.",
-        "2. Explain to the user why this specific operation was necessary for their request.",
-        "3. Propose alternative, non-invasive or safer solutions (e.g., printing code to screen for manual copy, manual command advice) and wait for the user's feedback."
-      ].join(' ') + getEnvironmentSnapshot()
-    });
-  }
-
-  // 只序列化 LLM 需要看到的字段，剥离控制面数据
   const llmVisible: Record<string, unknown> = {
     status: response.status,
     data: response.data,
-    message: response.message,
+    message: response.status !== 'success'
+      ? (response.message || '') + getEnvironmentSnapshot()
+      : response.message,
   };
-  if (response.status !== 'success') {
-    llmVisible.message = (response.message || '') + getEnvironmentSnapshot();
-  }
 
   return JSON.stringify(llmVisible);
 }

@@ -14,7 +14,6 @@ import { createCommandsPlugin, setCommandAgent } from './plugins/commands/index.
 import { createSkillsSlashPlugin } from './plugins/commands/skills-slash.js';
 import { createAgentSlashPlugin, setTargetAgent } from './plugins/commands/agent-slash.js';
 import { createBangPlugin } from './plugins/commands/bang.js';
-import { initCommandSuggestions } from './plugins/display/claude-code-ink/skills-bridge.js';
 import { DisplayManager } from './display.js';
 import { replDisplay } from './plugins/display/repl.js';
 import { resolveDisplayPlugin } from './plugins/display/loader.js';
@@ -108,7 +107,13 @@ async function initializePlugins(
   await registry.register(createSkillsSlashPlugin(llmClient, displayMgr));
   await registry.register(createBangPlugin(displayMgr));
 
-  initCommandSuggestions(disabledSkills);
+  // 懒加载 skills-bridge（位于 Ink 目录下，其依赖为可选）
+  try {
+    const { initCommandSuggestions } = await import('./plugins/display/claude-code-ink/skills-bridge.js');
+    initCommandSuggestions(disabledSkills);
+  } catch {
+    // Ink 可选依赖未安装时静默跳过
+  }
   await displayMgr.init(registry);
 }
 

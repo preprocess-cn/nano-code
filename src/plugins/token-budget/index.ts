@@ -3,6 +3,8 @@ import { ToolResponse, ToolContext, ToolDefinition } from '../../contract.js';
 import { ChatMessage } from '../../llm.js';
 import { countMessagesTokens } from './counter.js';
 import { initTokenizer } from './counter.js';
+import type { LLMClient } from '../../llm.js';
+import type { DisplayManager } from '../../display.js';
 
 // ── Plugin ──
 
@@ -15,16 +17,22 @@ export interface TokenBudgetConfig {
   autoCompactThreshold?: number;
   /** 是否启用自动压缩（默认 false，opt-in） */
   autoCompactEnabled?: boolean;
+  /** LLM 客户端引用（自动压缩需要） */
+  llmClient?: LLMClient;
+  /** 展示管理器引用（自动压缩需要） */
+  displayMgr?: DisplayManager;
 }
 
 export function createTokenBudgetPlugin(config?: TokenBudgetConfig): NanoPlugin {
-  const cfg: Required<TokenBudgetConfig> = {
+  const cfg = {
     maxTokensPerSession: config?.maxTokensPerSession ?? 100000,
     maxTokensPerRequest: config?.maxTokensPerRequest ?? 8000,
     compressionThreshold: config?.compressionThreshold ?? 80000,
     warnAtTokens: config?.warnAtTokens ?? 50000,
     autoCompactThreshold: config?.autoCompactThreshold ?? 0,
     autoCompactEnabled: config?.autoCompactEnabled ?? false,
+    llmClient: config?.llmClient,
+    displayMgr: config?.displayMgr,
   };
 
   let inputTokens = 0;
@@ -34,6 +42,27 @@ export function createTokenBudgetPlugin(config?: TokenBudgetConfig): NanoPlugin 
   let compressed = false;
   let autoCompacted = false;
   let _registryRef: PluginRegistry | null = null;
+
+  // ── Auto-compact helper (fire-and-forget, runs outside the request lifecycle) ──
+  const runCompact = async (llm: LLMClient, display: DisplayManager, reg: PluginRegistry | null) => {
+    if (!reg) return;
+    const messages = reg.store.get<ChatMessage[]>('agent:messages');
+    if (!messages || messages.length === 0) return;
+    try {
+      const { CompactService } = await import('../../plugins/compact/service.js');
+      const service = new CompactService(llm, reg, display);
+      const result = await service.compactRaw(messages, { preserveCount: 2 });
+      reg.store.set('compact:result', result.messages);
+      reg.store.set('compact:completed', true);
+      display.onStatus({
+        message: `自动压缩: ${result.originalMessageCount} → ${result.compactedMessageCount} 条消息, 节省 ~${(result.savedTokens / 1000).toFixed(1)}K tokens`,
+        agentName: 'main',
+      });
+    } catch {
+      reg.store.set('compact:retry', true);
+      autoCompacted = false;
+    }
+  };
 
   return {
     name: 'token-budget',
@@ -160,17 +189,14 @@ export function createTokenBudgetPlugin(config?: TokenBudgetConfig): NanoPlugin 
         _registryRef.store.set('compact:retry', false);
       }
 
-      // Auto-compact signal
-      if (cfg.autoCompactEnabled && !autoCompacted) {
-        const alreadyCompleted = _registryRef?.store.get('compact:completed');
-        if (!alreadyCompleted) {
-          const threshold = cfg.autoCompactThreshold > 0
-            ? cfg.autoCompactThreshold
-            : cfg.maxTokensPerSession * 0.9;
-          if (totalTokensAccumulated > threshold) {
-            autoCompacted = true;
-            _registryRef?.store.set('compact:signal', true);
-          }
+      // Auto-compact: run compact directly from the plugin
+      if (cfg.autoCompactEnabled && !autoCompacted && cfg.llmClient && cfg.displayMgr) {
+        const threshold = cfg.autoCompactThreshold > 0
+          ? cfg.autoCompactThreshold
+          : cfg.maxTokensPerSession * 0.9;
+        if (totalTokensAccumulated > threshold) {
+          autoCompacted = true;
+          runCompact(cfg.llmClient, cfg.displayMgr, _registryRef);
         }
       }
     },
