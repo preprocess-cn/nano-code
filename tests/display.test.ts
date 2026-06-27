@@ -6,6 +6,7 @@ import * as os from 'os';
 import { DisplayManager } from '../src/display.js';
 import { replDisplay } from '../src/plugins/display/repl.js';
 import { resolveDisplayPlugin } from '../src/plugins/display/loader.js';
+import { getToolArgsPreview, formatToolCall } from '../src/plugins/display/claude-code-ink/index.js';
 
 describe('DisplayPlugin — repl', () => {
 
@@ -256,6 +257,69 @@ describe('DisplayManager — multi-plugin', () => {
     assert.equal(config.stdout, process.stdout);
     assert.equal(config.stderr, process.stderr);
     assert.equal(config.stdin, process.stdin);
+  });
+
+});
+
+describe('formatToolCall / getToolArgsPreview', () => {
+
+  it('Write — shows only file_path, skips content', () => {
+    const args = { file_path: '/project/src/main.ts', content: 'export const x = 1;\n' };
+    assert.equal(getToolArgsPreview(args), '/project/src/main.ts');
+    assert.equal(formatToolCall('Write', args), '🔧 Write(/project/src/main.ts)');
+  });
+
+  it('Write — skips known large fields (old_string, new_string, etc.)', () => {
+    const args = { file_path: '/a.ts', old_string: 'old content', new_string: 'new content', mode: 'replace' };
+    assert.equal(getToolArgsPreview(args), '/a.ts, mode=replace');
+  });
+
+  it('Write — long file_path truncated', () => {
+    const longPath = '/a/' + 'very/'.repeat(20) + 'file.ts';
+    const preview = getToolArgsPreview({ file_path: longPath, content: 'x' });
+    assert.ok(preview!.length < longPath.length);
+    assert.ok(preview!.length <= 83);
+  });
+
+  it('Read/Glob — shows file_path or pattern', () => {
+    assert.equal(getToolArgsPreview({ file_path: '/a/b.ts' }), '/a/b.ts');
+    assert.equal(getToolArgsPreview({ pattern: '*.ts', path: '/src' }), '*.ts, /src');
+  });
+
+  it('Bash — shows truncated command', () => {
+    assert.equal(getToolArgsPreview({ command: 'npm run build' }), 'command: npm run build');
+
+    const longCmd = 'echo ' + 'a'.repeat(200);
+    const long = getToolArgsPreview({ command: longCmd });
+    assert.ok(long!.length < longCmd.length + 20);
+  });
+
+  it('URL tool — shows url', () => {
+    assert.equal(getToolArgsPreview({ url: 'https://example.com' }), 'https://example.com');
+  });
+
+  it('content-only (no file_path) — skips content, shows other keys', () => {
+    const args = { content: 'big content here', language: 'ts', model: 'gpt-4' };
+    assert.equal(getToolArgsPreview(args), 'language=ts, model=gpt-4');
+  });
+
+  it('unknown tool — falls back to JSON truncation', () => {
+    const big: Record<string, string> = {};
+    for (let i = 0; i < 50; i++) big[`k${i}`] = 'x'.repeat(20);
+    assert.equal(getToolArgsPreview(big), null);
+    const formatted = formatToolCall('Foo', big);
+    assert.ok(formatted.length < 300);
+    assert.ok(formatted.includes('…'));
+  });
+
+  it('null / non-object args', () => {
+    assert.equal(formatToolCall('Foo', null), '🔧 Foo(null)');
+    assert.equal(formatToolCall('Foo', 'str'), '🔧 Foo("str")');
+    assert.equal(formatToolCall('Foo', 42), '🔧 Foo(42)');
+  });
+
+  it('empty args', () => {
+    assert.equal(formatToolCall('Foo', {}), '🔧 Foo({})');
   });
 
 });

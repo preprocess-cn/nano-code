@@ -8,10 +8,85 @@ import { formatStatusText } from '../../../display-strings.js';
 import { getCurrentAgentMode } from '../../commands/agent-slash.js';
 import React from 'react';
 
+/** 为常用工具生成简洁的参数预览，避免大 JSON 刷屏 */
+export function getToolArgsPreview(args: any): string | null {
+  if (!args || typeof args !== 'object') return null;
+
+  // 工具函数：截断过长的字符串值
+  const truncVal = (v: string, max = 80): string =>
+    v.length > max ? v.slice(0, max) + '…' : v;
+
+  // 工具函数：只保留关键的几个字段
+  const pickKeys = (keys: string[]): string | null => {
+    const parts: string[] = [];
+    for (const k of keys) {
+      const v = args[k];
+      if (v !== undefined && v !== null) {
+        parts.push(typeof v === 'string' ? truncVal(v) : String(v));
+      }
+    }
+    return parts.length > 0 ? parts.join(', ') : null;
+  };
+
+  // 已知的大段内容字段名，始终跳过
+  const BIG_FIELDS = new Set(['content', 'old_string', 'new_string', 'fileContent', 'fileContents', 'originalFile']);
+
+  // 根据工具名称启发式选择展示字段
+  // file_path 系工具（Read / Write / Edit / etc.）
+  if (args.file_path) {
+    const rest: string[] = [];
+    for (const k of Object.keys(args)) {
+      if (k === 'file_path' || BIG_FIELDS.has(k)) continue;
+      const v = args[k];
+      if (typeof v === 'string') rest.push(`${k}=${v}`);
+      else rest.push(`${k}=${JSON.stringify(v)}`);
+    }
+    const pathPart = truncVal(args.file_path);
+    return rest.length > 0 ? `${pathPart}, ${rest.join(', ')}` : pathPart;
+  }
+
+  // content/fileContent 类（没有 file_path 的）
+  if (args.content !== undefined) {
+    const parts: string[] = [];
+    for (const k of Object.keys(args)) {
+      if (k === 'content') continue;
+      parts.push(`${k}=${typeof args[k] === 'string' ? args[k] : JSON.stringify(args[k])}`);
+    }
+    return parts.length > 0 ? parts.join(', ') : pickKeys(['content']);
+  }
+
+  // pattern/glob 类搜索工具
+  if (args.pattern) return pickKeys(['pattern', 'path']);
+  if (args.glob) return pickKeys(['glob', 'path']);
+
+  // command/bash
+  if (args.command) return `command: ${truncVal(args.command)}`;
+  if (args.url) return pickKeys(['url']);
+
+  return null; // 交给兜底的 JSON 截断
+}
+
 export interface CommandSuggestion {
   name: string;
   description: string;
   type: 'builtin' | 'skill' | 'agent';
+}
+
+/** 格式化工具调用：智能提取关键参数，避免大 JSON 刷屏 */
+export function formatToolCall(toolName: string, args: any): string {
+  if (!args || typeof args !== 'object') {
+    return `🔧 ${toolName}(${JSON.stringify(args)})`;
+  }
+  const preview = getToolArgsPreview(args);
+  if (preview) {
+    return `🔧 ${toolName}(${preview})`;
+  }
+  const str = JSON.stringify(args);
+  const MAX_LEN = 200;
+  if (str.length > MAX_LEN) {
+    return `🔧 ${toolName}(${str.slice(0, MAX_LEN)}…)`;
+  }
+  return `🔧 ${toolName}(${str})`;
 }
 
 function parseThinkSegments(text: string): TextSegment[] {
@@ -308,7 +383,7 @@ function createPlugin(): DisplayPlugin {
       lastThinkTarget = null;
       messages.push({
         agentName: event.agentName,
-        text: `🔧 ${event.toolName}(${JSON.stringify(event.args)})`,
+        text: formatToolCall(event.toolName, event.args),
         kind: 'toolCall',
       });
       render();
