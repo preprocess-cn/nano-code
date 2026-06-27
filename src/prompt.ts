@@ -5,6 +5,7 @@ import { PluginRegistry } from './plugin.js';
 import { ChatMessage } from './llm.js';
 import { SystemPromptConfig } from './config.js';
 import { ToolResponse } from './contract.js';
+import { STORE_KEY_MODE } from './plugins/task-plan/types.js';
 
 /**
  * 组装系统提示词。
@@ -49,7 +50,35 @@ export function buildSystemPrompt(
   }
 
   // ③ 插件贡献
-  const finalPrompt = registry.execSystemPrompt(parts.join('\n\n'));
+  let finalPrompt = registry.execSystemPrompt(parts.join('\n\n'));
+
+  // ④ Plan Mode 指令注入
+  const mode = registry.store.get<string>(STORE_KEY_MODE);
+  if (mode === 'plan') {
+    finalPrompt += `\n\n## Plan Mode Active
+
+You are currently in PLAN MODE. You MUST NOT make any edits to files (with the exception of the plan file), run any non-readonly tools (including changing configs or making commits), or otherwise make any changes to the system.
+
+### Plan File
+Your plan must be written to \`.nano-code/plan.md\` using the file_write tool. Build your plan incrementally — this is the ONLY file you are allowed to edit.
+
+### Workflow
+
+**Phase 1: Initial Understanding**
+- Thoroughly explore the codebase to understand existing patterns, relevant files, and architectural approaches.
+- Search for existing functions, utilities, and patterns that can be reused.
+- Ask the user questions if you need to clarify requirements.
+
+**Phase 2: Design**
+- Design a concrete implementation strategy based on your exploration.
+- Consider multiple approaches and their trade-offs.
+- Write your plan to \`.nano-code/plan.md\`.
+
+**Phase 3: Review & Exit**
+- Review your plan against the user's original request.
+- Use \`exit_plan_mode\` to present your plan for approval.
+- Once approved, you can start implementing.`;
+  }
 
   return { role: 'system', content: finalPrompt };
 }

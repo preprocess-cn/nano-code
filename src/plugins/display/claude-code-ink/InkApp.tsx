@@ -47,11 +47,28 @@ export interface InkAppProps {
   activeAgentName?: string;
   pendingPermission?: PermissionPrompt | null;
   onPermissionResponse?: (allowed: boolean) => void;
+  mode?: 'normal' | 'plan';
+  taskCount?: number;
 }
 
 function AgentLabel({ agentName }: { agentName: string }): React.ReactElement | null {
   if (agentName === 'main') return null;
   return React.createElement(Text, { dimColor: true }, `[${agentName}] `);
+}
+
+function ModeIndicator({ mode, taskCount }: { mode?: string; taskCount?: number }): React.ReactElement | null {
+  const parts: React.ReactElement[] = [];
+  if (mode === 'plan') {
+    parts.push(React.createElement(Text, { key: 'mode', color: '#f59e0b' }, '● plan on'));
+  }
+  if (taskCount && taskCount > 0) {
+    if (parts.length > 0) {
+      parts.push(React.createElement(Text, { key: 'sep', dimColor: true }, ' · '));
+    }
+    parts.push(React.createElement(Text, { key: 'tasks', dimColor: true }, `${taskCount} task${taskCount > 1 ? 's' : ''}`));
+  }
+  if (parts.length === 0) return null;
+  return React.createElement(Box, { height: 1, paddingLeft: 1, paddingBottom: 1 }, ...parts);
 }
 
 const DIM_COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#06b6d4', '#f97316', '#ef4444'];
@@ -745,6 +762,8 @@ function AppContent(props: InkAppProps): React.ReactElement {
     React.createElement(
       Box,
       { flexDirection: 'column', flexShrink: 0, paddingLeft: 1, paddingRight: 1, paddingBottom: 1, marginTop: 1 },
+      // Mode indicator bar (plan mode badge + task count)
+      React.createElement(ModeIndicator, { mode: props.mode, taskCount: props.taskCount }),
       React.createElement(
         Box,
         {

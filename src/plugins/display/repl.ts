@@ -5,6 +5,7 @@ import { formatStatusText } from '../../display-strings.js';
 import { ThinkStream } from './think-stream.js';
 import type { PluginRegistry } from '../../plugin.js';
 import { getCurrentAgentMode } from '../commands/agent-slash.js';
+import { STORE_KEY_MODE, STORE_KEY_TASK_COUNT } from '../task-plan/types.js';
 
 /** 非主 agent 的消息加 [name] 前缀 */
 function p(agentName: string, msg: string): string {
@@ -14,11 +15,23 @@ function p(agentName: string, msg: string): string {
 let showThink = false;
 let debug = false;
 const thinkFilter = new ThinkStream();
+let _store: { get<T>(key: string): T | undefined } | null = null;
+
+function getModeLabel(): string {
+  if (!_store) return '';
+  const mode = _store.get<string>(STORE_KEY_MODE);
+  const taskCount = _store.get<number>(STORE_KEY_TASK_COUNT) ?? 0;
+  const parts: string[] = [];
+  if (mode === 'plan') parts.push('\x1b[33mplan mode\x1b[0m');
+  if (taskCount > 0) parts.push(`${taskCount} tasks`);
+  return parts.length > 0 ? ` [${parts.join(' · ')}]` : '';
+}
 
 export const replDisplay: DisplayPlugin = {
   name: 'repl',
 
   async onInit(registry: PluginRegistry): Promise<void> {
+    _store = registry.store;
     registry.setConfirmCallback(async (req) => {
       console.log(`\n[!]  AI 正在申请执行：${req.toolName}`);
       if (req.details) console.log(`-> \x1b[33m${req.details}\x1b[0m`);
@@ -60,7 +73,10 @@ export const replDisplay: DisplayPlugin = {
 
   async prompt(): Promise<string | null> {
     const agentMode = getCurrentAgentMode();
-    const promptMsg = agentMode ? `[${agentMode.name}] >>  请输入开发任务或指令：` : '>>  请输入开发任务或指令：';
+    const suffix = getModeLabel();
+    const promptMsg = agentMode
+      ? `[${agentMode.name}${suffix}] >>  请输入开发任务或指令：`
+      : `>>${suffix}  请输入开发任务或指令：`;
     const result = await text({
       message: promptMsg,
       placeholder: '例如："帮我看看这个项目的文件结构" 或 "创建一个 utils.ts 并在里面写一个冒泡排序"',

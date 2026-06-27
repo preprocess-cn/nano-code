@@ -10,6 +10,8 @@ import { saveSession } from '../../session.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import type { BuiltinCommand } from './types.js';
+import { STORE_KEY_MODE, STORE_KEY_TASK_COUNT } from '../task-plan/types.js';
+import { readAllTasks, getPlanFilePath } from '../tools/task-plan.js';
 
 export interface BuiltinContext {
   agent: NanoCodeAgent;
@@ -45,6 +47,8 @@ const BUILTIN_COMMANDS: BuiltinCommand[] = [
       lines.push('  /help             显示此帮助信息');
       lines.push('  /compact          压缩对话历史，节省上下文空间');
       lines.push('  /context          查看上下文分布及用量');
+      lines.push('  /plan             查看/管理 Plan Mode');
+      lines.push('  /task, /tasks     查看任务列表');
       lines.push('');
 
       const skills = loadAllSkills();
@@ -157,6 +161,88 @@ const BUILTIN_COMMANDS: BuiltinCommand[] = [
         const msg = err instanceof Error ? err.message : String(err);
         return { handled: true, skipAgent: true, message: `压缩失败: ${msg}` };
       }
+    },
+  },
+  {
+    name: 'plan',
+    description: '查看/管理 Plan Mode — /plan [open|exit]',
+    handler: async (ctx?: BuiltinContext) => {
+      if (!ctx?.registry) {
+        return { handled: true, skipAgent: true, message: '无法获取上下文信息' };
+      }
+      const args = (ctx.args || '').trim();
+      const store = ctx.registry.store;
+      const mode = store.get<string>(STORE_KEY_MODE) || 'normal';
+
+      if (args === 'open') {
+        const planPath = getPlanFilePath();
+        return { handled: true, skipAgent: true, message: `计划文件路径: ${planPath}` };
+      }
+
+      if (args === 'exit') {
+        store.set(STORE_KEY_MODE, 'normal');
+        return { handled: true, skipAgent: true, message: '已退出 Plan Mode，恢复为常规模式。' };
+      }
+
+      // Show plan content
+      const planPath = getPlanFilePath();
+      let planContent = '';
+      try {
+        planContent = fs.readFileSync(planPath, 'utf-8');
+      } catch { /* no plan yet */ }
+
+      const lines: string[] = [];
+      lines.push('');
+      const modeLabel = mode === 'plan' ? '\x1b[33m● plan mode\x1b[0m' : 'normal';
+      lines.push(`  当前模式: ${modeLabel}`);
+      lines.push(`  计划文件: ${planPath}`);
+      if (planContent) {
+        lines.push('');
+        lines.push(`  当前计划内容:`);
+        lines.push(`  ${planContent.split('\n').join('\n  ')}`);
+      }
+      lines.push('');
+      lines.push('  /plan open    打开计划文件');
+      lines.push('  /plan exit    退出 plan mode');
+      lines.push('');
+      return { handled: true, skipAgent: true, message: lines.join('\n') };
+    },
+  },
+  {
+    name: 'task',
+    aliases: ['tasks'],
+    description: '查看/管理任务列表 — /task list',
+    handler: async (ctx?: BuiltinContext) => {
+      if (!ctx?.registry) {
+        return { handled: true, skipAgent: true, message: '无法获取上下文信息' };
+      }
+      const args = (ctx.args || '').trim();
+
+      if (args === 'list' || !args) {
+        const tasks = await readAllTasks();
+        if (tasks.length === 0) {
+          return { handled: true, skipAgent: true, message: '任务列表为空。' };
+        }
+        const lines = tasks.map(t =>
+          `  #${t.id} [${t.status}] ${t.subject}${t.owner ? ` (${t.owner})` : ''}`,
+        );
+        return { handled: true, skipAgent: true, message: ['', `  共 ${tasks.length} 个任务:`, ...lines, ''].join('\n') };
+      }
+
+      // Show a single task
+      const tasks = await readAllTasks();
+      const task = tasks.find(t => t.id === args);
+      if (!task) {
+        return { handled: true, skipAgent: true, message: `任务 #${args} 未找到。` };
+      }
+      const lines: string[] = [];
+      lines.push(`  任务 #${task.id}: ${task.subject}`);
+      lines.push(`  状态: ${task.status}`);
+      if (task.owner) lines.push(`  负责人: ${task.owner}`);
+      lines.push(`  描述: ${task.description}`);
+      if (task.blockedBy.length > 0) lines.push(`  阻塞于: ${task.blockedBy.map(id => `#${id}`).join(', ')}`);
+      if (task.blocks.length > 0) lines.push(`  阻塞: ${task.blocks.map(id => `#${id}`).join(', ')}`);
+      return { handled: true, skipAgent: true, message: ['', ...lines, ''].join('\n') };
     },
   },
   {

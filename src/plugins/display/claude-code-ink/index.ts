@@ -6,6 +6,7 @@ import { ThinkStream } from '../think-stream.js';
 import type { PluginRegistry } from '../../../plugin.js';
 import { formatStatusText } from '../../../display-strings.js';
 import { getCurrentAgentMode } from '../../commands/agent-slash.js';
+import { STORE_KEY_MODE, STORE_KEY_TASK_COUNT } from '../../task-plan/types.js';
 import React from 'react';
 
 /** 为常用工具生成简洁的参数预览，避免大 JSON 刷屏 */
@@ -163,6 +164,8 @@ function createPlugin(): DisplayPlugin {
     if (!inkInstance) return;
     const suggestions = _suggestionProvider?.() ?? [];
     try {
+      const currentMode = (registry?.store?.get<string>(STORE_KEY_MODE)) ?? 'normal';
+      const currentTaskCount = (registry?.store?.get<number>(STORE_KEY_TASK_COUNT)) ?? 0;
       inkInstance.rerender(
         React.createElement(InkApp, {
           greeting,
@@ -170,6 +173,8 @@ function createPlugin(): DisplayPlugin {
           inputBuffer: '',
           suggestions,
           activeAgentName: getCurrentAgentMode()?.name,
+          mode: currentMode as 'normal' | 'plan',
+          taskCount: currentTaskCount,
           onInputChange: () => {},
           onInputSubmit: (text: string) => {
             if (promptResolve) {

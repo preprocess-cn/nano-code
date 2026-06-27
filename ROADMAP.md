@@ -59,15 +59,15 @@
 | ✅ | Keybinding 系统 | `useKeybinding`/`useKeybindings` hooks，支持修饰键和命名键的匹配 |
 | ✅ | Ctrl+C 取消执行 | 执行中 Ctrl+C 中断 LLM 流 + 停止 agent，返回提示状态 |
 | ✅ | LLM AbortSignal | `sendSystemMessage` 支持 `AbortSignal`，立即中断 HTTP 流避免浪费 token |
-| ☐ | WebFetch/WebSearch 工具 | 网络获取与搜索，让 LLM 获取实时信息 |
+| ✅ | WebFetch/WebSearch 工具 | 网络获取与搜索，让 LLM 获取实时信息 |
 | ☐ | 代码审查（review） | 对当前 diff 的正确性/性能/安全审查 |
 
 ## P1 — 规划、任务与记忆（新）
 
 | 状态 | 功能 | 说明 |
 |------|------|------|
-| ☐ | Plan Mode | 实现前先展示方案并确认，防止盲目修改 |
-| ☐ | 任务/清单系统 | TaskCreate/List/Update/Stop，支持多步骤任务分解与后台追踪 |
+| ✅ | Plan Mode | `enter_plan_mode`/`exit_plan_mode` 工具 + 3 阶段工作流系统提示注入 |
+| ✅ | 任务/清单系统 | `task_create`/`task_list`/`task_update`/`task_stop` 工具，文件持久化 |
 | ☐ | 会话语义记忆 | 跨会话的语义级记忆检索，自动提取与摘要关键信息 |
 
 ## 展示层插件（已实现）
@@ -82,11 +82,12 @@
 | **`--think` 思考内容视觉区分**（灰色斜体） | ✅ 已实现 |
 | **斜杠命令建议弹出**（`/` 开头弹出技能列表 + 实时过滤 + Tab 补全） | ✅ 已实现 |
 | **输入框模式变色**（`!` → 粉框 / `/` → 紫框） | ✅ 已实现 |
+| **Plan Mode 状态指示器**（底栏 plan badge + 任务数量） | ✅ 已实现 |
 | **极简模式**（`readline` 裸输入） | ☐ 未实现 |
 | **CLI one-shot 模式**（stdin/stdout 管道） | ☐ 未实现 |
 | **Web UI**（HTTP/WebSocket） | ☐ 未实现 |
 
-Ink 展示层（`claude-code-ink`）基于 React + 自研 Ink 引擎（fork 自 Claude Code），支持 ScrollBox 滚动、全屏 terminal UI、`--think` 思考内容灰色斜体视觉区分、`/` 斜杠命令建议弹出与实时过滤、`!`/`/` 输入框模式边框变色等功能。
+Ink 展示层（`claude-code-ink`）基于 React + 自研 Ink 引擎（fork 自 Claude Code），支持 ScrollBox 滚动、全屏 terminal UI、`--think` 思考内容灰色斜体视觉区分、`/` 斜杠命令建议弹出与实时过滤、`!`/`/` 输入框模式边框变色、Plan Mode 状态指示器（底栏黄色 `● plan on` 徽标 + 任务数量）等功能。
 
 ## Agent 架构
 
@@ -154,4 +155,7 @@ MCP 和 agent 工具都是"主 agent 委托能力给外部"，区别在：
 - **插件间共享状态（IStore）**：`IStore` 接口（`get/set/subscribe`），默认 `InMemoryStore` 实现，位于 `src/plugins/store/`，可替换为任何后端存储
 - **Ink 斜杠命令建议弹出**：输入 `/` 开头时自动弹出技能/命令列表，实时过滤，键盘导航 ↑↓ Tab Enter Esc，Tab 补全命令名
 - **Ink 输入框模式变色**：`!` 开头边框变粉色（`#ff0087`）、`/` 开头变紫色（`#7c3aed`），正常灰色（`#6b7280`）
+- **Ink Plan Mode 状态指示器**：底栏黄色 `● plan on` 徽标 + 任务数量显示
+- **Plan Mode 系统**：`enter_plan_mode`/`exit_plan_mode` 工具 + 3 阶段工作流系统提示注入 + 用户确认弹窗
+- **任务/清单系统**：`task_create`/`task_list`/`task_update`/`task_stop` 工具，`.nano-code/tasks/` JSON 文件持久化
 - **技能/命令桥接层**（`skills-bridge.ts`）：独立文件管理跨插件依赖（skills + commands），通过 provider 模式注入 Ink 显示层

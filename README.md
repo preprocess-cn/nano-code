@@ -46,6 +46,8 @@ npm start
 | `/help` | 显示帮助信息 |
 | `/compact`, `/compress` | 压缩对话历史 — 摘要旧消息以节省上下文空间 |
 | `/context` | 查看上下文分布及用量（7 维度 + ContextVis 色块图） |
+| `/plan` | 查看 Plan Mode 状态、当前计划内容 |
+| `/task`, `/tasks` | 查看任务列表 |
 
 `/compact` 支持参数：`/compact --dry-run`（预览）、`/compact --preserve 3`（保留最近 3 组对话）、`/compact --model gpt-4o-mini`（指定总结模型），剩余参数作为自定义总结侧重指令。
 
@@ -317,6 +319,7 @@ plugins:
 | **skills** | 系统白名单自动启用 | 10 个内置 TypeScript 技能 + 文件系统 SKILL.md 技能，`skill`/`skills_list`/`skill_view`/`run_agent` 工具 |
 | **store** | 内建默认 `InMemoryStore` | 插件间共享状态通道，`IStore` 接口可替换实现 |
 | **agent** | 自动发现 `~/.nano-code/agents/*.yaml` | `agent-<name>` 子 agent 调用工具 |
+| **task-plan** | 内建默认注册 | Plan Mode（`enter_plan_mode`/`exit_plan_mode`） + 任务系统（`task_create`/`task_list`/`task_update`/`task_stop`） |
 | **display** | 通过 `display.plugin` 配置 | 展示层插件，支持生命周期事件（独立于 PluginRegistry） |
 
 ### 可选插件
@@ -327,6 +330,63 @@ plugins:
 | **MCP** | 配置 `type: "mcp"` 条目，自动加载外部 MCP Server |
 | **Token Budget** | 配置 `plugins.token-budget.settings`，使用 API 精确 token 统计；支持自动压缩阈值 `autoCompactEnabled`/`autoCompactThreshold` |
 | **npm-loader** | 内置默认插件，自动处理 `type: "npm"` 插件的注册 |
+
+## Plan Mode
+
+Plan Mode 允许 LLM 在实施前先探索代码库并设计方案，经用户确认后再开始编码。适用于复杂任务。
+
+### 工作流程
+
+1. LLM 调用 `enter_plan_mode` 进入规划模式
+2. 系统提示注入 3 阶段工作流（探索 → 设计 → 审查）
+3. LLM 写入 `.nano-code/plan.md` 计划文件
+4. LLM 调用 `exit_plan_mode` 弹出用户确认
+5. 用户确认后恢复常规模式，开始实施
+
+### UI 指示
+
+- **Ink 模式**: 底栏显示黄色 `● plan on` 徽标
+- **REPL 模式**: 提示符前缀显示 `[plan mode]`
+
+### 斜杠命令
+
+| 命令 | 说明 |
+|------|------|
+| `/plan` | 查看当前模式与计划文件 |
+| `/plan open` | 查看计划文件路径 |
+| `/plan exit` | 退出 plan mode |
+
+## 任务/清单系统
+
+通过 `task_create`/`task_list`/`task_update`/`task_stop` 工具管理任务清单，文件持久化于 `.nano-code/tasks/` 目录。
+
+### 数据模型
+
+```typescript
+interface Task {
+  id: string;          // 递增数字 ID
+  subject: string;     // 标题
+  description: string; // 描述
+  activeForm?: string; // spinner 显示文本（如 "Running tests"）
+  owner?: string;      // 负责人
+  status: 'pending' | 'in_progress' | 'completed';
+  blocks: string[];    // 阻塞的其他任务 ID
+  blockedBy: string[]; // 被哪些任务 ID 阻塞
+}
+```
+
+### 任务依赖
+
+- `blockedBy`: 此任务被哪些任务阻塞（前置依赖）
+- `blocks`: 此任务阻塞哪些任务（后置依赖）
+- 通过 `task_update` 的 `addBlocks`/`addBlockedBy` 参数设置
+
+### 斜杠命令
+
+| 命令 | 说明 |
+|------|------|
+| `/task list` | 列出所有任务 |
+| `/task <id>` | 查看单个任务详情 |
 
 ## MCP 集成
 
