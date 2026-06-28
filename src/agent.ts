@@ -223,6 +223,11 @@ export class NanoCodeAgent {
       return { status: 'ok', toolMessages };
     }
 
+    // ── 先展示工具调用信息，再检查权限 ──
+    // 顺序：onToolCall → permission gate → execute
+    // 用户拒绝时也会显示被拒绝的工具调用及结果
+    this.display?.onToolCall({ toolName, args: toolArgs, agentName: this.name });
+
     // ── Permission gate ──
     // sideEffect=true 且不在 allowlist 中的工具需要用户确认
     let agentConfirmed = false;
@@ -250,8 +255,6 @@ export class NanoCodeAgent {
         }
       }
     }
-
-    this.display?.onToolCall({ toolName, args: toolArgs, agentName: this.name });
 
     let toolResult: ToolResponse;
     try {
