@@ -2,6 +2,7 @@ import { ToolDefinition, ToolResponse, ToolContext, CommandInterceptResult, type
 import { ChatMessage } from './llm.js';
 import { IStore } from './store.js';
 import { InMemoryStore } from './plugins/store/in-memory.js';
+import { Logger } from './logger.js';
 
 // ── Companion types for hooks ──
 
@@ -65,6 +66,8 @@ export class PluginRegistry {
 
   /** 插件间共享状态通道。核心只做透传，不知晓任何 key 的业务含义 */
   store: IStore = new InMemoryStore();
+  /** 结构化日志实例 */
+  log: Logger = new Logger('registry', { level: 'info' });
 
   setDefaultContext(ctx: Partial<ToolContext>): void {
     this.defaultCtx = ctx;
@@ -123,14 +126,14 @@ export class PluginRegistry {
 
   async register(plugin: NanoPlugin): Promise<void> {
     if (this.plugins.has(plugin.name)) {
-      console.warn(`[plugin] Warning: Plugin "${plugin.name}" is already registered, overwriting.`);
+      this.log.warn(`Plugin "${plugin.name}" is already registered, overwriting.`);
       await this.unregister(plugin.name);
     }
 
     this.plugins.set(plugin.name, plugin);
     for (const tool of plugin.getTools()) {
       if (this.toolIndex.has(tool.function.name)) {
-        console.warn(`[plugin] Warning: Tool "${tool.function.name}" already registered by plugin "${this.toolIndex.get(tool.function.name)}", overwritten by "${plugin.name}".`);
+        this.log.warn(`Tool "${tool.function.name}" already registered by plugin "${this.toolIndex.get(tool.function.name)}", overwritten by "${plugin.name}".`);
       }
       this.toolIndex.set(tool.function.name, plugin.name);
       this.toolSideEffects.set(tool.function.name, tool.function.sideEffect ?? true);
@@ -141,8 +144,24 @@ export class PluginRegistry {
         await plugin.onInit(this);
       }
     } catch (err) {
-      console.error(`[plugin] onInit failed for "${plugin.name}":`, err);
+      this.log.error(`onInit failed for "${plugin.name}"`, err);
     }
+  }
+
+  /** 销毁全部插件并清空注册表。用于进程退出时的全局清理。 */
+  async destroy(): Promise<void> {
+    const names = Array.from(this.plugins.keys());
+    for (const name of names) {
+      const plugin = this.plugins.get(name);
+      if (!plugin) continue;
+      try { await plugin.onDestroy?.(); }
+      catch (err) { this.log.error(`onDestroy failed for "${name}"`, err); }
+    }
+    this.plugins.clear();
+    this.toolIndex.clear();
+    this.toolSideEffects.clear();
+    this.configs.clear();
+    this._allowlist.clear();
   }
 
   async unregister(name: string): Promise<void> {
@@ -154,7 +173,7 @@ export class PluginRegistry {
         await plugin.onDestroy();
       }
     } catch (err) {
-      console.error(`[plugin] onDestroy failed for "${name}":`, err);
+      this.log.error(`onDestroy failed for "${name}"`, err);
     }
 
     for (const [toolName, pluginName] of this.toolIndex.entries()) {
@@ -180,7 +199,7 @@ export class PluginRegistry {
     if (!pluginName) {
       return {
         status: 'error',
-        message: `Unknown tool: ${name}`,
+        message: `未知工具 "${name}"。该工具不可用，可能是因为对应插件未启用。可通过 /doctor 检查插件状态。`,
       };
     }
 
@@ -188,7 +207,7 @@ export class PluginRegistry {
     if (!plugin) {
       return {
         status: 'error',
-        message: `Plugin not found: ${pluginName}`,
+        message: `插件 "${pluginName}" 未找到。工具 "${name}" 所属的插件可能已被卸载或禁用。`,
       };
     }
 
@@ -219,7 +238,7 @@ export class PluginRegistry {
     } catch (error) {
       return {
         status: 'error',
-        message: `Tool execution failed: ${error instanceof Error ? error.message : String(error)}`,
+        message: `工具 "${name}" 执行超时或失败：${error instanceof Error ? error.message : String(error)}。可尝试增加 defaultTimeout 或检查插件是否正常工作。`,
       };
     }
   }
@@ -233,7 +252,7 @@ export class PluginRegistry {
       const fn = getHook(p);
       if (!fn) continue;
       try { v = fn(v); }
-      catch (err) { console.error(`[plugin] ${label} failed for "${p.name}":`, err); }
+      catch (err) { this.log.error(`${label} failed for "${p.name}"`, err); }
     }
     return v;
   }
@@ -246,7 +265,7 @@ export class PluginRegistry {
       const fn = getHook(p);
       if (!fn) continue;
       try { fn(...args); }
-      catch (err) { console.error(`[plugin] ${label} failed for "${p.name}":`, err); }
+      catch (err) { this.log.error(`${label} failed for "${p.name}"`, err); }
     }
   }
 
@@ -271,7 +290,7 @@ export class PluginRegistry {
         const result = fn();
         if (result) params = { ...params, ...result };
       } catch (err) {
-        console.error(`[plugin] onExtraParams failed for "${p.name}":`, err);
+        this.log.error(`onExtraParams failed for "${p.name}"`, err);
       }
     }
     return params;
@@ -285,7 +304,7 @@ export class PluginRegistry {
       try {
         current = fn(current);
       } catch (err) {
-        console.error(`[plugin] onBeforeToolCall failed for "${p.name}":`, err);
+        this.log.error(`onBeforeToolCall failed for "${p.name}"`, err);
         continue;
       }
       if (current === null) return null;
@@ -304,7 +323,7 @@ export class PluginRegistry {
           const result = await plugin.onBeforeAgentInput(input);
           if (result?.handled) return result;
         } catch (err) {
-          console.error(`[plugin] onBeforeAgentInput failed for "${plugin.name}":`, err);
+          this.log.error(`onBeforeAgentInput failed for "${plugin.name}"`, err);
         }
       }
     }

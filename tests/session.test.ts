@@ -75,7 +75,7 @@ describe('Session — save / load', () => {
         {
           role: 'assistant' as const,
           content: null,
-          tool_calls: [{ id: 'call_1', type: 'function', function: { name: 'test', arguments: '{}' } }],
+          tool_calls: [{ id: 'call_1', type: 'function' as const, function: { name: 'test', arguments: '{}' as const } }] as any,
         },
         { role: 'tool' as const, tool_call_id: 'call_1', name: 'test', content: 'done' },
       ];

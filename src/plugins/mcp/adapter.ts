@@ -186,7 +186,21 @@ export class MCPStdioTransport implements MCPTransport {
     this.clearPending(new Error('MCP client stopped'));
     if (this.rl) { this.rl.close(); this.rl = null; }
     if (this.process) {
-      this.process.kill();
+      this.process.kill('SIGTERM');
+      // 等待进程退出，3 秒后强制 SIGKILL
+      const proc = this.process;
+      const pid = proc.pid;
+      if (pid != null) {
+        const exited = new Promise<void>(resolve => {
+          proc.once('close', () => resolve());
+          proc.once('error', () => resolve());
+        });
+        const timeout = setTimeout(() => {
+          try { process.kill(pid, 'SIGKILL'); } catch { /* already dead */ }
+        }, 3000);
+        await Promise.race([exited, new Promise(r => setTimeout(r, 3000))]);
+        clearTimeout(timeout);
+      }
       this.process = null;
     }
   }

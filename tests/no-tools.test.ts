@@ -34,11 +34,11 @@ describe('No tools configured — pure chat mode', () => {
 
     const result1 = await registry.execute('view_file_content', { path: 'x.ts' });
     assert.equal(result1.status, 'error');
-    assert.ok(result1.message!.includes('Unknown tool'));
+    assert.ok(result1.message!.includes('未知工具'));
 
     const result2 = await registry.execute('run_bash_command', { command: 'ls' });
     assert.equal(result2.status, 'error');
-    assert.ok(result2.message!.includes('Unknown tool'));
+    assert.ok(result2.message!.includes('未知工具'));
   });
 
   it('uses custom agentRole in chat mode when provided', () => {

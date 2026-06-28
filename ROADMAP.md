@@ -40,18 +40,18 @@
 |---|------|------|
 | ☐ | CI/CD | GitHub Actions + 自动测试 |
 | ☐ | 发布准备 | package.json 补全、README 更新、npm publish |
-| ☐ | 插件权限系统 | npm 插件的安全沙箱 + 权限声明机制 |
+| ✅ | **轻量权限系统** | PluginRegistry allowlist + agent 层 permission gate + fs/command 加固，Ink 权限弹窗三选项（批准/始终允许/拒绝），`/permissions` 查看/管理已允许工具 |
 | ☐ | 插件热加载 | 运行时开关插件无需重启 |
 | ✅ | 上下文裁剪与压缩 | `/compact` 内建命令 + 基于 LLM 摘要的智能压缩，保留最近对话、移植 Claude Code 9 段总结模板 |
 | ✅ | **Ink 上下文可视化** | `InkApp.tsx` 内联 `ContextVis` 组件渲染色块网格，数据源为 `analyzer.ts` 的 7 维度分析 |
-| ✅ | 多轮摘要记忆 | 自动压缩（token-budget 阈值触发 + 主循环处理），压缩前全量备份至 `.nano-code-session.pre-compact.json` |
+| ✅ | 多轮摘要记忆 | 自动压缩默认启用（`autoCompactEnabled: true`），触发策略改为基于当前消息大小 + slide window 多次压缩，压缩前全量备份至 `.nano-code-session.pre-compact.json` |
 | ☐ | 角色模式 & 斜杠命令 | profiles/ 仅通过 `--profile` 启动时加载，主 agent 中不支持运行时切换 |
-| ✅ | 内置 Skill 系统 | 10 个对齐 Claude Code 的内置技能：simplify/verify/batch/debug/lorem-ipsum/update-config/remember/stuck/skillify/keybindings |
+| ✅ | 内置 Skill 系统 | 11 个对齐 Claude Code 的内置技能：simplify/verify/batch/debug/lorem-ipsum/update-config/remember/stuck/skillify/keybindings/review |
 | ☐ | ToolUseContext | 工具执行的共享运行时上下文（模型覆盖、effort、权限绑定等），贯穿 ReAct 循环 |
 | ☐ | contextModifier | 工具可通过 ToolResponse 返回上下文修改器，作用于后续工具调用的执行环境 |
-| ✅ | Skill 系统 | 10 个内置 TypeScript 技能（bundled），skills_list / skill_view / skill 工具，inline（newMessages 注入）+ fork（子 agent）双模式，skills 配置禁用开关 |
+| ✅ | Skill 系统 | 11 个内置 TypeScript 技能（bundled），skills_list / skill_view / skill 工具，inline（newMessages 注入）+ fork（子 agent）双模式，skills 配置禁用开关 |
 
-## P0 — 搜索与审查（新）
+## P0 — 搜索与审查
 
 | 状态 | 功能 | 说明 |
 |------|------|------|
@@ -60,15 +60,60 @@
 | ✅ | Ctrl+C 取消执行 | 执行中 Ctrl+C 中断 LLM 流 + 停止 agent，返回提示状态 |
 | ✅ | LLM AbortSignal | `sendSystemMessage` 支持 `AbortSignal`，立即中断 HTTP 流避免浪费 token |
 | ✅ | WebFetch/WebSearch 工具 | 网络获取与搜索，让 LLM 获取实时信息 |
-| ☐ | 代码审查（review） | 对当前 diff 的正确性/性能/安全审查 |
+| ✅ | 代码审查 `/review` | Review 内置 skill，审查 git diff 的正确性/性能/安全，输出 CRITICAL/WARNING/SUGGESTION 三级报告 |
 
-## P1 — 规划、任务与记忆（新）
+## P1 — 规划、任务与记忆
 
 | 状态 | 功能 | 说明 |
 |------|------|------|
 | ✅ | Plan Mode | `enter_plan_mode`/`exit_plan_mode` 工具 + 3 阶段工作流系统提示注入 |
 | ✅ | 任务/清单系统 | `task_create`/`task_list`/`task_update`/`task_stop` 工具，文件持久化 |
 | ☐ | 会话语义记忆 | 跨会话的语义级记忆检索，自动提取与摘要关键信息 |
+| ✅ | 权限系统 | 轻量权限框架：PluginRegistry allowlist、agent permission gate、/permissions 命令、Ink 三选项弹窗 |
+
+---
+
+# 生产级就绪
+
+## P0 — 崩溃与可靠性
+
+| # | 状态 | 功能 | 说明 |
+|---|------|------|------|
+| 1 | ☐ | 全局错误边界 | 注册 `unhandledRejection`/`uncaughtException` 全局处理器，捕获后展示友好错误而非直接 crash |
+| 2 | ☐ | 优雅退出 | `process.exit()` 前清理 MCP 子进程、恢复终端状态、保存会话，避免终端残留 |
+| 3 | ☐ | MCP 子进程生命周期管理 | 主进程异常退出时自动 kill MCP 子进程，防止孤儿进程泄漏 |
+| 4 | ☐ | 减少 `any` 类型 | `rawToolCall`、`args`、`err` 等 30+ 处 `: any` 改为具体类型，提升编译期安全性 |
+| 5 | ☐ | package.json 补全 | 补充 `repository`、`bugs`、`homepage`、`engines`、`files`、`keywords` 字段，使 `npm publish` 可用 |
+
+## P1 — 用户可诊断
+
+| # | 状态 | 功能 | 说明 |
+|---|------|------|------|
+| 1 | ☐ | 结构化日志 | 替代 `console.log`/`console.error`，支持日志级别（debug/info/warn/error）、文件输出、`--verbose` 开关 |
+| 2 | ☐ | 诊断命令 `nano-code doctor` | 一键验证：配置文件解析、API 连通性、插件加载、环境变量，输出诊断报告 |
+| 3 | ☐ | 升级机制 | `nano-code upgrade` 检查 npm registry 最新版本并升级，启动时可选做版本检查 |
+| 4 | ☐ | 配置版本化与迁移 | 配置文件添加 `configVersion` 字段，向后不兼容变更时自动迁移 |
+| 5 | ☐ | 错误信息改进 | 替换 `"工具物理执行失败"` 等半中半英的笼统错误为用户可理解的描述 + 解决指引 |
+
+## P2 — 开发者体验
+
+| # | 状态 | 功能 | 说明 |
+|---|------|------|------|
+| 1 | ☐ | CI/CD | GitHub Actions：push/PR 自动跑测试 + tsc 类型检查，release tag 自动 npm publish |
+| 2 | ☐ | CONTRIBUTING.md | 贡献指南：开发环境搭建、代码规范、PR 流程、测试要求 |
+| 3 | ☐ | 依赖锁定 | `package-lock.json` 入版本库，`npm install` 的行为跨机器可复现 |
+| 4 | ☐ | npm publish 产出物 | 配置 `files` 字段或 `.npmignore`，只发布 `dist/` + `README.md` + `LICENSE`，不发布源码和测试 |
+| 5 | ☐ | E2E 测试 | 端到端 agent 循环测试：模拟 LLM 响应，验证工具调用 → 结果回注 → 下一轮循环的全链路 |
+
+## P3 — 锦上添花
+
+| # | 状态 | 功能 | 说明 |
+|---|------|------|------|
+| 1 | ☐ | 一键安装脚本 | `curl -fsSL https://nano-code.dev/install.sh` 自动检测系统、安装 Node.js、配置 API key |
+| 2 | ☐ | 可选 Telemetry | 用户可选的匿名使用统计（启动次数、常用命令、错误率），帮助开发者诊断问题；默认关闭，首次使用询问 |
+| 3 | ☐ | 配置校验增强 | 运行时对 YAML 配置做完整 JSON Schema 校验，报错时精确定位到具体字段 |
+| 4 | ☐ | LLM 速率限制处理 | 429 响应时读取 `Retry-After` 头，智能等待而非固定指数退避 |
+| 5 | ☐ | 并发工具执行 | 多个无副作用的工具调用（如 read_file）并行执行，减少总等待时间 |
 
 ## 展示层插件（已实现）
 

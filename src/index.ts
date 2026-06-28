@@ -21,6 +21,8 @@ import { resolveDisplayPlugin } from './plugins/display/loader.js';
 import { SK } from './store-keys.js';
 import { cac } from 'cac';
 import { getPackageVersion } from './version.js';
+import { Logger } from './logger.js';
+import { runDoctor, formatDoctorResults } from './doctor.js';
 import {
   EXIT_MESSAGE,
   FATAL_NO_DISPLAY,
@@ -36,8 +38,34 @@ import {
   GREETING_NO_TOOLS,
 } from './display-strings.js';
 
-function handleExit(display?: DisplayManager): never {
-  display?.stop(EXIT_MESSAGE);
+const log = new Logger('main');
+
+// ── Global error boundaries ──
+
+function setupGlobalErrorHandlers(displayMgr?: DisplayManager, registry?: PluginRegistry): void {
+  process.on('unhandledRejection', (reason) => {
+    const message = reason instanceof Error ? reason.message : String(reason);
+    log.error('Unhandled Promise rejection', reason instanceof Error ? reason : new Error(message));
+    displayMgr?.onError({ message: `未处理的 Promise 拒绝：${message}`, agentName: 'system', stack: reason instanceof Error ? reason.stack : undefined });
+  });
+
+  process.on('uncaughtException', (error) => {
+    log.error('Uncaught exception', error);
+    displayMgr?.onError({ message: `未捕获的异常：${error.message}`, agentName: 'system', stack: error.stack });
+    registry?.destroy().finally(() => {
+      displayMgr?.stop(EXIT_MESSAGE);
+      process.exit(1);
+    });
+  });
+}
+
+function handleExit(displayMgr?: DisplayManager, registry?: PluginRegistry): never {
+  registry?.destroy().finally(() => {
+    displayMgr?.stop(EXIT_MESSAGE);
+    process.exit(0);
+  });
+  // 同步 fallback：destroy 涉及异步等待，但 process.exit 会截断事件循环
+  // 在等待 destroy 完成的同时，先同步退出（终端恢复由 signal-exit 处理）
   process.exit(0);
 }
 
@@ -157,9 +185,9 @@ async function runMainLoop(
   llmClient: LLMClient,
   displayMgr: DisplayManager,
 ): Promise<void> {
-  // SIGINT handler: at prompt → exit; during execution → cancel
+  // Signal handlers: at prompt → exit; during execution → cancel
   let isPrompting = false;
-  const sigintHandler = () => {
+  const cancelHandler = () => {
     if (!isPrompting) {
       registry.store.set(SK.AgentCancelled, true);
       const abortCtrl = registry.store.get<AbortController>(SK.AgentAbort);
@@ -167,17 +195,18 @@ async function runMainLoop(
     }
     // At prompt: SIGINT is ignored — clack's text() or Ink's useInput handles \x03 directly
   };
-  process.on('SIGINT', sigintHandler);
+  process.on('SIGINT', cancelHandler);
+  process.on('SIGTERM', cancelHandler);
 
   while (true) {
     isPrompting = true;
     const userInput = await displayMgr.prompt();
     isPrompting = false;
-    if (userInput === null) handleExit(displayMgr);
+    if (userInput === null) handleExit(displayMgr, registry);
 
     const intercept = await registry.execBeforeAgentInput(userInput);
     if (intercept) {
-      if (intercept.exit) handleExit(displayMgr);
+      if (intercept.exit) handleExit(displayMgr, registry);
       if (intercept.message) displayMgr.onStatus({ message: intercept.message, agentName: 'main' });
       if (intercept.injectMessages) agent.injectMessages(intercept.injectMessages);
       if (intercept.skipAgent) continue;
@@ -247,6 +276,9 @@ async function startCLI(options: { debug?: boolean; think?: boolean; skipPermiss
   const registry = new PluginRegistry();
   await initializePlugins(config, registry, llmClient, displayMgr, options.skipPermission ?? false);
 
+  // 全局错误边界（registry + display 就绪后注册）
+  setupGlobalErrorHandlers(displayMgr, registry);
+
   // ── --list-plugins mode: print and exit ──
   if (options.listPlugins) {
     printPluginList(registry);
@@ -285,6 +317,8 @@ async function startCLI(options: { debug?: boolean; think?: boolean; skipPermiss
 }
 
 // ==========================================
+
+// ==========================================
 // 使用 cac 构建参数解析
 // ==========================================
 const cli = cac('nano-code');
@@ -303,6 +337,20 @@ const parsed = cli.parse();
 
 if (parsed.args[0] === 'plugin') {
   await handlePluginCommand(parsed.args.slice(1), parsed.options);
+  process.exit(0);
+}
+
+if (parsed.args[0] === 'doctor') {
+  const cfg = loadConfig();
+  let doctorLlm: LLMClient | undefined;
+  try {
+    doctorLlm = new LLMClient({
+      model: cfg.core.model, temperature: cfg.core.temperature,
+      apiKey: cfg.core.apiKey, baseURL: cfg.core.baseURL,
+    });
+  } catch { /* API Key 未配置时跳过连通性检查 */ }
+  const results = await runDoctor(cfg, undefined, doctorLlm);
+  process.stdout.write(formatDoctorResults(results));
   process.exit(0);
 }
 

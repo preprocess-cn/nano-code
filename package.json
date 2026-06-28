@@ -7,6 +7,27 @@
   "bin": {
     "nano-code": "./dist/index.js"
   },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": ""
+  },
+  "bugs": {
+    "url": ""
+  },
+  "homepage": "",
+  "author": "Feng Gao",
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "build": "tsc && node -e \"fs.writeFileSync('dist/index.js','#!/usr/bin/env node\\n'+fs.readFileSync('dist/index.js','utf8'))\"",
     "start": "node dist/index.js",
@@ -25,8 +46,6 @@
     "nano-code",
     "typescript"
   ],
-  "author": "",
-  "license": "MIT",
   "dependencies": {
     "@clack/prompts": "^0.9.1",
     "cac": "^7.0.0",

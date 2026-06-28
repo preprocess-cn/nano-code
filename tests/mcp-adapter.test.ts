@@ -254,6 +254,7 @@ describe('createMCPPlugin', () => {
 describe('buildMCPPluginsFromConfig', () => {
   it('builds stdio plugin from config', () => {
     const config: NanoConfig = {
+      configVersion: 1,
       core: { model: 'gpt-4o', temperature: 0, maxTokens: 4096, defaultTimeout: 120000 },
       plugins: {
         'my-server': { type: 'mcp', command: 'echo', enabled: true },
@@ -267,6 +268,7 @@ describe('buildMCPPluginsFromConfig', () => {
 
   it('builds HTTP plugin from config', () => {
     const config: NanoConfig = {
+      configVersion: 1,
       core: { model: 'gpt-4o', temperature: 0, maxTokens: 4096, defaultTimeout: 120000 },
       plugins: {
         'http-server': { type: 'mcp', transport: 'http', url: 'http://127.0.0.1:8080', enabled: true },
@@ -280,6 +282,7 @@ describe('buildMCPPluginsFromConfig', () => {
 
   it('skips disabled plugins', () => {
     const config: NanoConfig = {
+      configVersion: 1,
       core: { model: 'gpt-4o', temperature: 0, maxTokens: 4096, defaultTimeout: 120000 },
       plugins: {
         'disabled-server': { type: 'mcp', command: 'echo', enabled: false },
@@ -292,6 +295,7 @@ describe('buildMCPPluginsFromConfig', () => {
 
   it('skips HTTP plugin without url', () => {
     const config: NanoConfig = {
+      configVersion: 1,
       core: { model: 'gpt-4o', temperature: 0, maxTokens: 4096, defaultTimeout: 120000 },
       plugins: {
         'bad-http': { type: 'mcp', transport: 'http', enabled: true },

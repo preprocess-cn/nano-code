@@ -3,6 +3,7 @@ import * as dotenv from 'dotenv';
 import * as path from 'path';
 import * as os from 'os';
 import { MSG_API_RETRY, MSG_API_ERROR } from './display-strings.js';
+import type { ToolDefinition } from './contract.js';
 
 // 加载环境变量：项目 .env 优先于全局 ~/.nano-code/.env，shell 环境变量优先于两者
 dotenv.config();                                                                  // $CWD/.env
@@ -19,10 +20,24 @@ export interface LLMConfig {
 /**
  * 格式化后的标准消息历史接口（兼容 OpenAI 的标准格式）
  */
+/** OpenAI 流式返回的 tool_calls delta 片段（含 index 用于拼合） */
+export interface ToolCallDelta {
+  index: number;
+  id?: string;
+  function: { name?: string; arguments?: string };
+}
+
+/** 拼合后的完整 tool call（用于消息历史） */
+export interface AssembledToolCall {
+  id: string;
+  type: 'function';
+  function: { name: string; arguments: string };
+}
+
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'system' | 'tool';
   content: string | null;
-  tool_calls?: any[];
+  tool_calls?: AssembledToolCall[];
   tool_call_id?: string;
   name?: string;
 }
@@ -36,12 +51,14 @@ const RETRY_DELAYS_MS = [1000, 2000, 4000];
  * Determine whether an error is transient and worth retrying.
  * Covers rate limits, server errors, and common network glitches.
  */
-function isTransientError(error: any): boolean {
-  if (error?.status === 429) return true;                          // rate limit
-  if (error?.status && error.status >= 500) return true;           // server error
-  if (['ECONNRESET', 'ETIMEDOUT', 'ECONNREFUSED', 'EPIPE'].includes(error?.code)) return true;
-  if (error?.message) {
-    const msg = error.message.toLowerCase();
+function isTransientError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const err = error as Record<string, unknown>;
+  if (err.status === 429) return true;                          // rate limit
+  if (typeof err.status === 'number' && err.status >= 500) return true; // server error
+  if (typeof err.code === 'string' && ['ECONNRESET', 'ETIMEDOUT', 'ECONNREFUSED', 'EPIPE'].includes(err.code)) return true;
+  if (typeof err.message === 'string') {
+    const msg = err.message.toLowerCase();
     if (msg.includes('rate limit') || msg.includes('timeout') || msg.includes('network')) return true;
   }
   return false;
@@ -82,32 +99,32 @@ export class LLMClient {
    */
   async sendSystemMessage(
     messages: ChatMessage[],
-    tools: any[],
+    tools: ToolDefinition[],
     onChunk?: (text: string) => void,
     extraParams?: Record<string, unknown>,
     onMeta?: (meta: Record<string, unknown>) => void,
     signal?: AbortSignal,
   ) {
     // ── Retry loop with exponential backoff ──
-    let lastError: any;
+    let lastError: unknown;
 
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       try {
         if (signal?.aborted) throw new Error('CANCELLED');
 
         // 请求 OpenAI 的流式接口
-                const stream = await this.openai.chat.completions.create({
+        const stream = await this.openai.chat.completions.create({
           model: this.model,
           ...extraParams,
           messages: messages as any,
           stream: true,
           stream_options: { include_usage: true },
-          tools: tools && tools.length > 0 ? tools : undefined,
+          tools: tools && tools.length > 0 ? (tools as any) : undefined,
           temperature: this.temperature,
         }, { signal });
 
         let fullText = '';
-        let finalToolCalls: any[] = [];
+        const finalToolCalls: AssembledToolCall[] = [];
         let finalMeta: Record<string, unknown> | undefined;
 
         for await (const chunk of stream) {

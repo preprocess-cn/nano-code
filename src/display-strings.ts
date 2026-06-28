@@ -49,13 +49,13 @@ export function formatStatusText(code: string): string {
 export const MSG_API_RETRY = (attempt: number, maxRetries: number, delaySec: number) =>
   `\n! API 请求失败（尝试 ${attempt + 1}/${maxRetries + 1}），${delaySec}秒后重试...`;
 
-export const MSG_API_ERROR = '\nX 调用 OpenAI 兼容 API 时发生错误:';
+export const MSG_API_ERROR = '\nX 调用 AI API 时发生错误，请检查网络连接和 API Key 是否正确。';
 
-export const MSG_LLM_INIT_ERROR = 'X 错误:';
+export const MSG_LLM_INIT_ERROR = 'X 错误: 无法初始化 AI 客户端。请检查 API Key 和 API 地址配置。';
 
 // ── 顶层循环 ──
 export const MSG_TOP_LEVEL_ERROR = (error: unknown) =>
-  `X 顶层循环捕获到未处理的致命异常: ${error}`;
+  `nano-code 遇到意外错误：${error instanceof Error ? error.message : String(error)}。可运行 /doctor 诊断。`;
 
 // ── 默认欢迎语 ──
 export const GREETING_WITH_TOOLS = '我可以帮您查看项目结构、读取代码并直接修改。';

@@ -3,7 +3,7 @@ import * as path from 'path';
 import * as os from 'os';
 import * as yaml from 'js-yaml';
 
-const CONFIG_TOP_KEYS = new Set(['core', 'plugins', 'agent', 'display']);
+const CONFIG_TOP_KEYS = new Set(['core', 'plugins', 'agent', 'display', 'configVersion']);
 
 // ── Typed config interface ──
 
@@ -38,6 +38,8 @@ export interface PluginConfigEntry {
 }
 
 export interface NanoConfig {
+  /** 配置格式版本，用于未来向后不兼容迁移。当前为 1。 */
+  configVersion: number;
   core: {
     model?: string;
     temperature?: number;
@@ -71,6 +73,7 @@ export interface NanoConfig {
 // ── Defaults ──
 
 const DEFAULT_CONFIG: NanoConfig = {
+  configVersion: 1,
   core: {
     maxTokens: 128000,
     defaultTimeout: 120000,
@@ -503,9 +506,18 @@ function mergeConfigs(
   project: Record<string, unknown> | null,
 ): NanoConfig {
   const result: NanoConfig = {
+    configVersion: 1,
     core: { ...DEFAULT_CONFIG.core },
     plugins: { ...DEFAULT_CONFIG.plugins },
   };
+
+  // configVersion 从项目配置取（如果存在）
+  for (const src of [global, project]) {
+    if (src && typeof src.configVersion === 'number') {
+      result.configVersion = src.configVersion;
+      break;
+    }
+  }
 
   const sources = [
     { label: 'global', data: global },

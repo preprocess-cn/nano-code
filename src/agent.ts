@@ -262,7 +262,7 @@ export class NanoCodeAgent {
       if (agentConfirmed) execCtx.skipPermission = true;
       toolResult = await this.registry.execute(toolName, toolArgs, execCtx);
     } catch (err: any) {
-      toolResult = { status: 'error', message: `工具物理执行失败: ${err.message}` };
+      toolResult = { status: 'error', message: `工具 "${toolName}" 执行失败：${err.message}` };
     }
     this.registry.execAfterToolCall(toolResult);
 

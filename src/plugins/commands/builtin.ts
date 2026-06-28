@@ -12,6 +12,7 @@ import * as path from 'path';
 import type { BuiltinCommand } from './types.js';
 import { readAllTasks, getPlanFilePath } from '../tools/task-plan.js';
 import { SK } from '../../store-keys.js';
+import { runDoctor, formatDoctorResults } from '../../doctor.js';
 
 export interface BuiltinContext {
   agent: NanoCodeAgent;
@@ -49,6 +50,7 @@ const BUILTIN_COMMANDS: BuiltinCommand[] = [
       lines.push('  /context          查看上下文分布及用量');
       lines.push('  /plan             查看/管理 Plan Mode');
       lines.push('  /task, /tasks     查看任务列表');
+      lines.push('  /doctor           诊断系统健康状态');
       lines.push('');
 
       const skills = loadAllSkills();
@@ -288,6 +290,21 @@ const BUILTIN_COMMANDS: BuiltinCommand[] = [
 
       const output = formatContextOutput(analysis);
       return { handled: true, skipAgent: true, message: output };
+    },
+  },
+  {
+    name: 'doctor',
+    description: '诊断系统健康状态 — 检查配置、API 连通性、插件加载',
+    handler: async (ctx?: BuiltinContext) => {
+      let results;
+      if (ctx?.registry) {
+        const llmClient = ctx.agent?.getLLMClient();
+        results = await runDoctor(ctx.config || { configVersion: 1, core: { maxTokens: 128000, defaultTimeout: 120000 }, plugins: {} }, ctx.registry, llmClient);
+      } else {
+        const { loadConfig } = await import('../../config.js');
+        results = await runDoctor(loadConfig(), undefined, undefined);
+      }
+      return { handled: true, skipAgent: true, message: formatDoctorResults(results) };
     },
   },
 ];
