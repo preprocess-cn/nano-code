@@ -82,7 +82,7 @@ export class CompactService {
     }
 
     // ── 生成摘要 ──
-    this.display?.onStatus({ message: '正在生成对话摘要...', agentName: 'main' });
+    this.display?.onStatus({ message: '正在生成对话摘要...', agentName: 'main', level: 'info' });
 
     const summary = await this.generateSummary(toSummarize, options?.summaryModel, options?.customInstructions);
 

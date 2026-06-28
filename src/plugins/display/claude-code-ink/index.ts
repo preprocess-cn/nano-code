@@ -1,11 +1,11 @@
-import type { DisplayPlugin, StartConfig, StatusEvent, StreamEvent, ToolCallEvent, ToolResultEvent, ErrorEvent, AgentEvent, StateSnapshot } from '../../../display.js';
+import type { DisplayPlugin, StartConfig, StatusEvent, StreamEvent, ToolCallEvent, ToolResultEvent, ErrorEvent, AgentEvent, StateSnapshot, MessageLevel } from '../../../display.js';
 import type { ContextAnalysis } from '../../token-budget/analyzer.js';
 import { inkRender, type Instance } from './ink.js';
 import { InkApp, type UIMessage, type TextSegment, type PermissionPrompt, type PermissionResponse } from './InkApp.js';
 import { ThinkStream } from '../think-stream.js';
 import type { PluginRegistry } from '../../../plugin.js';
-import { formatStatusText } from '../../../display-strings.js';
 import type { AgentModeInfo } from '../../../store-keys.js';
+
 import { SK } from '../../../store-keys.js';
 import React from 'react';
 
@@ -305,9 +305,17 @@ function createPlugin(): DisplayPlugin {
     },
 
     onStatus(event: StatusEvent): void {
-      const text = formatStatusText(event.message);
-      if (!text) { render(); return; }
-      messages.push({ agentName: event.agentName, text, kind: 'status' });
+      if (event.level === 'status') {
+        if (event.message === 'thinking') {
+          messages.push({ agentName: event.agentName, text: '? 正在思考并请求大模型...', kind: 'thinking' });
+        }
+        // 'end' — no message push, just re-render
+        render();
+        return;
+      }
+      if (!event.message) { render(); return; }
+      const kind = event.level === 'warn' ? 'warn' : event.level === 'error' ? 'error' : event.level === 'success' ? 'success' : 'status';
+      messages.push({ agentName: event.agentName, text: event.message, kind });
       render();
     },
 

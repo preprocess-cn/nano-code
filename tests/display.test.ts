@@ -151,7 +151,7 @@ describe('DisplayManager — multi-plugin', () => {
     const mgr = new DisplayManager();
     mgr.addPlugin(pluginA);
     mgr.addPlugin(pluginB);
-    mgr.onStatus({ message: 'hello', agentName: 'test' });
+    mgr.onStatus({ message: 'hello', agentName: 'test', level: 'info' });
     assert.equal(calls.length, 2);
     assert.equal(calls[0], 'A:hello');
     assert.equal(calls[1], 'B:hello');

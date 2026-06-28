@@ -17,40 +17,38 @@ import { createBangPlugin } from './plugins/commands/bang.js';
 import { taskPlanPlugin } from './plugins/tools/task-plan.js';
 import { DisplayManager } from './display.js';
 import { replDisplay } from './plugins/display/repl.js';
+import { cliDisplay } from './plugins/display/cli.js';
 import { resolveDisplayPlugin } from './plugins/display/loader.js';
 import { SK } from './store-keys.js';
 import { cac } from 'cac';
 import { getPackageVersion } from './version.js';
-import { Logger } from './logger.js';
+import { logManager } from './logger.js';
 import { runDoctor, formatDoctorResults } from './doctor.js';
-import {
-  EXIT_MESSAGE,
-  FATAL_NO_DISPLAY,
-  FATAL_NO_DISPLAY_HINT,
-  MSG_DEBUG_MODE,
-  MSG_THINK_MODE,
-  MSG_SKIP_PERMISSION,
-  MSG_SESSION_RESTORED,
-  MSG_SESSION_NOT_FOUND,
-  MSG_TOP_LEVEL_ERROR,
-  MSG_LLM_INIT_ERROR,
-  GREETING_WITH_TOOLS,
-  GREETING_NO_TOOLS,
-} from './display-strings.js';
 
-const log = new Logger('main');
+// ── CLI messages ──
+
+const EXIT_MESSAGE = '** 感谢使用 nano-code，祝您编码愉快！';
+const MSG_DEBUG_MODE = (model: string | undefined) => `#  当前已开启 [DEBUG 调试模式]，模型: ${model}`;
+const MSG_THINK_MODE = ' <-> 当前已开启 [思考过程显示]，将输出 AI 思考过程。';
+const MSG_SKIP_PERMISSION = ' [!] 当前已开启 [免确认模式]，系统底层安全拦截仍然生效。';
+const MSG_SESSION_RESTORED = (count: number, updatedAt: string) => `   ↻ 已恢复上次会话 (${count} 条消息，最后更新 ${updatedAt})\n`;
+const MSG_SESSION_NOT_FOUND = '   - 未找到之前保存的会话，开始新的对话。\n';
+const MSG_TOP_LEVEL_ERROR = (error: unknown) => `nano-code 遇到意外错误：${error instanceof Error ? error.message : String(error)}。可运行 /doctor 诊断。`;
+const MSG_LLM_INIT_ERROR = 'X 错误: 无法初始化 AI 客户端。请检查 API Key 和 API 地址配置。';
+const GREETING_WITH_TOOLS = '我可以帮您查看项目结构、读取代码并直接修改。';
+const GREETING_NO_TOOLS = '我可以帮您解答编程问题，提供代码示例和建议。';
 
 // ── Global error boundaries ──
 
 function setupGlobalErrorHandlers(displayMgr?: DisplayManager, registry?: PluginRegistry): void {
   process.on('unhandledRejection', (reason) => {
     const message = reason instanceof Error ? reason.message : String(reason);
-    log.error('Unhandled Promise rejection', reason instanceof Error ? reason : new Error(message));
+    logManager.error('main', 'Unhandled Promise rejection', reason instanceof Error ? reason : new Error(message));
     displayMgr?.onError({ message: `未处理的 Promise 拒绝：${message}`, agentName: 'system', stack: reason instanceof Error ? reason.stack : undefined });
   });
 
   process.on('uncaughtException', (error) => {
-    log.error('Uncaught exception', error);
+    logManager.error('main', 'Uncaught exception', error);
     displayMgr?.onError({ message: `未捕获的异常：${error.message}`, agentName: 'system', stack: error.stack });
     registry?.destroy().finally(() => {
       displayMgr?.stop(EXIT_MESSAGE);
@@ -59,13 +57,9 @@ function setupGlobalErrorHandlers(displayMgr?: DisplayManager, registry?: Plugin
   });
 }
 
-function handleExit(displayMgr?: DisplayManager, registry?: PluginRegistry): never {
-  registry?.destroy().finally(() => {
-    displayMgr?.stop(EXIT_MESSAGE);
-    process.exit(0);
-  });
-  // 同步 fallback：destroy 涉及异步等待，但 process.exit 会截断事件循环
-  // 在等待 destroy 完成的同时，先同步退出（终端恢复由 signal-exit 处理）
+async function handleExit(displayMgr?: DisplayManager, registry?: PluginRegistry): Promise<void> {
+  await registry?.destroy();
+  displayMgr?.stop(EXIT_MESSAGE);
   process.exit(0);
 }
 
@@ -157,7 +151,7 @@ async function restoreSession(
 ): Promise<void> {
   const session = loadSession(process.cwd());
   if (!session) {
-    displayMgr.onStatus({ message: MSG_SESSION_NOT_FOUND, agentName: 'main' });
+    displayMgr.onStatus({ message: MSG_SESSION_NOT_FOUND, agentName: 'main', level: 'info' });
     return;
   }
 
@@ -174,7 +168,7 @@ async function restoreSession(
       if (text) displayMgr.onStreamChunk({ text, agentName: 'main' });
     }
   }
-  displayMgr.onStatus({ message: MSG_SESSION_RESTORED(session.messages.length, session.updatedAt), agentName: 'main' });
+  displayMgr.onStatus({ message: MSG_SESSION_RESTORED(session.messages.length, session.updatedAt), agentName: 'main', level: 'info' });
 }
 
 // ── Main interaction loop ──
@@ -202,12 +196,18 @@ async function runMainLoop(
     isPrompting = true;
     const userInput = await displayMgr.prompt();
     isPrompting = false;
-    if (userInput === null) handleExit(displayMgr, registry);
+    if (userInput === null) {
+      await handleExit(displayMgr, registry);
+      return;
+    }
 
     const intercept = await registry.execBeforeAgentInput(userInput);
     if (intercept) {
-      if (intercept.exit) handleExit(displayMgr, registry);
-      if (intercept.message) displayMgr.onStatus({ message: intercept.message, agentName: 'main' });
+      if (intercept.exit) {
+        await handleExit(displayMgr, registry);
+        return;
+      }
+      if (intercept.message) displayMgr.onStatus({ message: intercept.message, agentName: 'main', level: 'info' });
       if (intercept.injectMessages) agent.injectMessages(intercept.injectMessages);
       if (intercept.skipAgent) continue;
     }
@@ -238,15 +238,13 @@ async function startCLI(options: { debug?: boolean; think?: boolean; skipPermiss
     ? applyProfile(loadConfig(), options.profile)
     : loadConfig();
 
-  // ── Validate and load display plugin ──
-  if (config.display?.enabled === false && !config.display.plugin) {
-    console.error(FATAL_NO_DISPLAY);
-    console.error(FATAL_NO_DISPLAY_HINT);
-    process.exit(1);
-  }
-
+  // ── Load display plugin ──
   const displayMgr = new DisplayManager();
-  if (config.display?.plugin) {
+  if (config.display?.enabled === false) {
+    displayMgr.addPlugin(config.display.plugin
+      ? (await resolveDisplayPlugin(config.display.plugin)) ?? cliDisplay
+      : cliDisplay);
+  } else if (config.display?.plugin) {
     try {
       const plugin = await resolveDisplayPlugin(config.display.plugin);
       displayMgr.addPlugin(plugin ?? replDisplay);
@@ -279,6 +277,16 @@ async function startCLI(options: { debug?: boolean; think?: boolean; skipPermiss
   // 全局错误边界（registry + display 就绪后注册）
   setupGlobalErrorHandlers(displayMgr, registry);
 
+  // 注册 display bridge LogPlugin：将 Warn/Error 级别日志转发到界面显示
+  logManager.register({
+    name: 'display-bridge',
+    onLog(entry) {
+      if (entry.level === 'error') {
+        displayMgr.onError({ message: `[${entry.module}] ${entry.message}`, agentName: 'system', stack: entry.error?.stack });
+      }
+    },
+  });
+
   // ── --list-plugins mode: print and exit ──
   if (options.listPlugins) {
     printPluginList(registry);
@@ -301,9 +309,9 @@ async function startCLI(options: { debug?: boolean; think?: boolean; skipPermiss
     stdin: process.stdin,
   });
 
-  if (options.debug) displayMgr.onStatus({ message: MSG_DEBUG_MODE(config.core.model), agentName: 'main' });
-  else if (options.think) displayMgr.onStatus({ message: MSG_THINK_MODE, agentName: 'main' });
-  if (options.skipPermission) displayMgr.onStatus({ message: MSG_SKIP_PERMISSION, agentName: 'main' });
+  if (options.debug) displayMgr.onStatus({ message: MSG_DEBUG_MODE(config.core.model), agentName: 'main', level: 'info' });
+  else if (options.think) displayMgr.onStatus({ message: MSG_THINK_MODE, agentName: 'main', level: 'info' });
+  if (options.skipPermission) displayMgr.onStatus({ message: MSG_SKIP_PERMISSION, agentName: 'main', level: 'info' });
 
   const agent = new NanoCodeAgent({ registry, llmClient, agentRole: config.agent?.role, promptConfig: config.systemPrompt, name: 'main', display: displayMgr });
   setCommandAgent(agent);

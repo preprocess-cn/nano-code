@@ -19,7 +19,7 @@ export interface TextSegment {
 export interface UIMessage {
   agentName: string;
   text: string;
-  kind: 'stream' | 'thinking' | 'status' | 'toolCall' | 'toolResult' | 'error' | 'userInput';
+  kind: 'stream' | 'thinking' | 'status' | 'toolCall' | 'toolResult' | 'error' | 'userInput' | 'warn' | 'success';
   segments?: TextSegment[];
   contextAnalysis?: ContextAnalysis;
 }
@@ -194,6 +194,8 @@ function MessageItem({ msg }: { msg: UIMessage }): React.ReactElement {
     toolCall: '#fbbf24',
     toolResult: '#10b981',
     error: '#ef4444',
+    warn: '#fbbf24',
+    success: '#10b981',
     userInput: undefined,
   };
 

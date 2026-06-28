@@ -24,8 +24,11 @@ export interface AgentEvent {
   agentName: string;
 }
 
+export type MessageLevel = 'status' | 'info' | 'warn' | 'error' | 'success';
+
 export interface StatusEvent extends AgentEvent {
   message: string;
+  level: MessageLevel;
 }
 
 export interface StreamEvent extends AgentEvent {

@@ -54,7 +54,7 @@ export function createSkillsSlashPlugin(llmClient?: LLMClient, display?: Display
 
         try {
           const result = await subAgent.runTask(fullPrompt);
-          display?.onStatus({ message: `技能 "${skillName}" 执行完毕`, agentName: 'main' });
+          display?.onStatus({ message: `技能 "${skillName}" 执行完毕`, agentName: 'main', level: 'success' });
           // Fork 结果替换原始输入，反馈给主 LLM
           const resultText = result || '(技能执行完毕)';
           return {

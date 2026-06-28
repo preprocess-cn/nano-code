@@ -1,7 +1,6 @@
 import { describe, it } from 'node:test';
 import * as assert from 'node:assert/strict';
-import { IStore } from '../src/store.js';
-import { InMemoryStore } from '../src/plugins/store/in-memory.js';
+import { IStore, InMemoryStore } from '../src/store.js';
 import { PluginRegistry } from '../src/plugin.js';
 
 describe('InMemoryStore', () => {

@@ -49,7 +49,7 @@ export function createAgentSlashPlugin(display?: DisplayManager, agentDir?: stri
         if (!_agent) return null;
         _agent.setRole(undefined, undefined);
         if (_registry) _registry.store.set(SK.AgentMode, undefined);
-        _display?.onStatus({ message: '已切换回主模式', agentName: 'main' });
+        _display?.onStatus({ message: '已切换回主模式', agentName: 'main', level: 'info' });
         return { handled: true, skipAgent: true };
       }
 
@@ -71,7 +71,7 @@ export function createAgentSlashPlugin(display?: DisplayManager, agentDir?: stri
       const modeInfo: AgentModeInfo = { name: def.name, description: def.description };
       if (_registry) _registry.store.set(SK.AgentMode, modeInfo);
 
-      _display?.onStatus({ message: `已切换到 agent: ${def.name}（${def.description}）`, agentName: 'main' });
+      _display?.onStatus({ message: `已切换到 agent: ${def.name}（${def.description}）`, agentName: 'main', level: 'info' });
 
       return { handled: true, skipAgent: true };
     },

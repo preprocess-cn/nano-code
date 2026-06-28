@@ -30,17 +30,17 @@ export function createBangPlugin(display?: DisplayManager): NanoPlugin {
 
       const command = input.slice(1).trim();
       if (!command) {
-        display?.onStatus({ message: '! 后请键入要执行的命令', agentName: 'main' });
+        display?.onStatus({ message: '! 后请键入要执行的命令', agentName: 'main', level: 'warn' });
         return { handled: true, skipAgent: true };
       }
 
       // 黑名单检查
       if (DANGEROUS_COMMAND_BLACKLIST.some(regex => regex.test(command))) {
-        display?.onStatus({ message: '该命令被系统安全策略禁止', agentName: 'main' });
+        display?.onStatus({ message: '该命令被系统安全策略禁止', agentName: 'main', level: 'warn' });
         return { handled: true, skipAgent: true };
       }
 
-      display?.onStatus({ message: `>> 正在执行: ${command}`, agentName: 'main' });
+      display?.onStatus({ message: `>> 正在执行: ${command}`, agentName: 'main', level: 'info' });
 
       try {
         const result = await new Promise<string>((resolve) => {

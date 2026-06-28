@@ -1,8 +1,8 @@
 import { intro, text, outro, isCancel, confirm } from '@clack/prompts';
-import { DisplayPlugin, StartConfig, StatusEvent, StreamEvent, ToolCallEvent, ToolResultEvent, ErrorEvent, DebugEvent } from '../../display.js';
+import { DisplayPlugin, StartConfig, StatusEvent, StreamEvent, ToolCallEvent, ToolResultEvent, ErrorEvent, DebugEvent, MessageLevel } from '../../display.js';
 import { isMainAgent } from '../../contract.js';
-import { formatStatusText } from '../../display-strings.js';
 import { ThinkStream } from './think-stream.js';
+
 import type { PluginRegistry } from '../../plugin.js';
 import { SK, type AgentModeInfo } from '../../store-keys.js';
 
@@ -96,8 +96,18 @@ export const replDisplay: DisplayPlugin = {
   },
 
   onStatus(event: StatusEvent): void {
-    const text = formatStatusText(event.message);
-    if (text) console.log(p(event.agentName, text));
+    if (event.level === 'status') {
+      if (event.message === 'thinking') {
+        console.log(p(event.agentName, '? 正在思考并请求大模型...'));
+      } else if (event.message === 'end') {
+        // no output for end signal
+      }
+      return;
+    }
+    if (!event.message) return;
+    const prefix = statusLevelPrefix(event.level);
+    const output = event.level === 'error' ? process.stderr : process.stdout;
+    output.write(prefix + p(event.agentName, event.message) + '\n');
   },
 
   onStreamChunk(event: StreamEvent): void {
@@ -145,3 +155,12 @@ export const replDisplay: DisplayPlugin = {
     console.log(p(event.agentName, event.data));
   },
 };
+
+function statusLevelPrefix(level: MessageLevel): string {
+  switch (level) {
+    case 'warn': return '\x1b[33m⚠\x1b[0m ';
+    case 'error': return '\x1b[31m✗\x1b[0m ';
+    case 'success': return '\x1b[32m✓\x1b[0m ';
+    default: return '';
+  }
+}

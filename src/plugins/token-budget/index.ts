@@ -57,6 +57,7 @@ export function createTokenBudgetPlugin(config?: TokenBudgetConfig): NanoPlugin 
       display.onStatus({
         message: `自动压缩: ${result.originalMessageCount} → ${result.compactedMessageCount} 条消息, 节省 ~${(result.savedTokens / 1000).toFixed(1)}K tokens`,
         agentName: 'main',
+        level: 'info',
       });
     } catch {
       reg.store.set(SK.CompactRetry, true);

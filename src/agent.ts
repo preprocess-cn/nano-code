@@ -91,11 +91,11 @@ export class NanoCodeAgent {
 
     while (true) {
       if (this.registry.store.get(SK.AgentCancelled)) {
-        this.display?.onStatus({ message: 'end', agentName: this.name });
+        this.display?.onStatus({ message: 'end', agentName: this.name, level: 'status' });
         this.registry.store.set(SK.AgentCancelled, undefined);
         break;
       }
-      this.display?.onStatus({ message: 'thinking', agentName: this.name });
+      this.display?.onStatus({ message: 'thinking', agentName: this.name, level: 'status' });
 
       const systemMessage = buildSystemPrompt(this.registry, this.promptConfig, this.agentRole);
       let messagesWithSystem: ChatMessage[] = [systemMessage, ...this.messageHistory];
@@ -131,7 +131,7 @@ export class NanoCodeAgent {
       } catch (err: any) {
         if (err?.name === 'AbortError' || err?.message === 'CANCELLED' || isCancelled()) {
           this.registry.store.set(SK.AgentAbort, undefined);
-          this.display?.onStatus({ message: 'end', agentName: this.name });
+          this.display?.onStatus({ message: 'end', agentName: this.name, level: 'status' });
           this.display?.onAgentTurnEnd({ agentName: this.name });
           break;
         }
@@ -141,7 +141,7 @@ export class NanoCodeAgent {
       this.registry.store.set(SK.AgentAbort, undefined);
 
       if (isCancelled()) {
-        this.display?.onStatus({ message: 'end', agentName: this.name });
+        this.display?.onStatus({ message: 'end', agentName: this.name, level: 'status' });
         this.display?.onAgentTurnEnd({ agentName: this.name });
         break;
       }
@@ -163,7 +163,7 @@ export class NanoCodeAgent {
       this.messageHistory.push(assistantMessage);
 
       if (response.stopReason !== 'tool_use' || !response.toolCalls) {
-        this.display?.onStatus({ message: 'end', agentName: this.name });
+        this.display?.onStatus({ message: 'end', agentName: this.name, level: 'status' });
         this.display?.onStateSnapshot({ agentName: this.name, messageCount: this.messageHistory.length });
         this.display?.onAgentTurnEnd({ agentName: this.name });
         break;
@@ -215,7 +215,7 @@ export class NanoCodeAgent {
 
     const allowedCall = this.registry.execBeforeToolCall(toolCall);
     if (allowedCall === null) {
-      this.display?.onStatus({ message: `tool_blocked:${toolName}`, agentName: this.name });
+      this.display?.onStatus({ message: `工具调用已被插件策略拦截: ${toolName}`, agentName: this.name, level: 'warn' });
       toolMessages.push({
         role: 'tool', tool_call_id: toolCall.id, name: toolName,
         content: JSON.stringify({ status: 'error', message: 'Tool call blocked by plugin policy.' }),

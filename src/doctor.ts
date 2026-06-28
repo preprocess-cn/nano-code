@@ -106,6 +106,12 @@ export async function runDoctor(
         message: mp.tools.length > 0 ? `${mp.tools.length} 个工具` : '已注册但无工具（可能初始化失败）',
       });
     }
+  } else {
+    results.push({
+      name: '插件',
+      status: 'warn',
+      message: 'CLI 模式下跳过插件检查，请在交互式会话中运行 /doctor 查看完整诊断',
+    });
   }
 
   return results;

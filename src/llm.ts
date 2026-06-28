@@ -2,7 +2,6 @@ import OpenAI from 'openai';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
 import * as os from 'os';
-import { MSG_API_RETRY, MSG_API_ERROR } from './display-strings.js';
 import type { ToolDefinition } from './contract.js';
 
 // 加载环境变量：项目 .env 优先于全局 ~/.nano-code/.env，shell 环境变量优先于两者
@@ -193,13 +192,13 @@ export class LLMClient {
 
         if (attempt < MAX_RETRIES && isTransientError(error)) {
           const delay = RETRY_DELAYS_MS[attempt];
-          console.error(MSG_API_RETRY(attempt, MAX_RETRIES, delay / 1000));
+          console.error(`[llm] retry ${attempt + 1}/${MAX_RETRIES + 1} (delay ${delay / 1000}s)`);
           await new Promise(resolve => setTimeout(resolve, delay));
           continue; // retry
         }
 
         // Non-transient or out of retries — give up
-        console.error(MSG_API_ERROR, error);
+        console.error('[llm] API request failed:', error);
         throw error;
       }
     }
