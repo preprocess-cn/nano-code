@@ -176,6 +176,9 @@ export class NanoCodeAgent {
         if (tcResult.status === 'rejected') break;
       }
 
+      // 更新存储中的消息快照，供 token-budget 等插件在下轮循环中做准确的大小判断
+      this.registry.store.set(SK.AgentMessages, this.getHistory());
+
       this.display?.onStateSnapshot({ agentName: this.name, messageCount: this.messageHistory.length });
 	      this.registry.store.set(SK.AgentStatus, { agentName: this.name, status: "running", messageCount: this.messageHistory.length });
     }
