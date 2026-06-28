@@ -330,11 +330,11 @@ function PermissionDialog({
     React.createElement(
       Box,
       { flexDirection: 'column', paddingX: 1 },
-      React.createElement(Select, {
-        options,
-        onChange: (value: unknown) => onResponse(value as PermissionResponse),
-        onCancel: () => onResponse('deny'),
-      }),
+      <Select<PermissionResponse>
+        options={options}
+        onChange={(value) => onResponse(value)}
+        onCancel={() => onResponse('deny')}
+      />,
       React.createElement(Box, { marginTop: 1 },
         React.createElement(Text, { dimColor: true }, 'Esc to cancel'),
       ),
