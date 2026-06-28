@@ -5,7 +5,7 @@ import * as path from 'path';
 import os from 'os';
 import { taskPlanPlugin } from '../src/plugins/tools/task-plan.js';
 import { ToolContext } from '../src/contract.js';
-import { STORE_KEY_MODE, STORE_KEY_TASKS, STORE_KEY_TASK_COUNT } from '../src/plugins/task-plan/types.js';
+import { SK } from '../src/store-keys.js';
 
 // ── Helpers ──
 
@@ -70,11 +70,11 @@ describe('task-plan 插件 — enter_plan_mode', () => {
   test('enter_plan_mode 切换到 plan 模式', async () => {
     const res = await taskPlanPlugin.execute('enter_plan_mode', {}, CTX);
     assert.equal(res.status, 'success');
-    assert.equal(store.get(STORE_KEY_MODE), 'plan');
+    assert.equal(store.get(SK.Mode), 'plan');
   });
 
   test('enter_plan_mode 重复进入返回已有提示', async () => {
-    store.set(STORE_KEY_MODE, 'plan');
+    store.set(SK.Mode, 'plan');
     const res = await taskPlanPlugin.execute('enter_plan_mode', {}, CTX);
     assert.equal(res.status, 'success');
     assert(res.data?.includes('Already in plan mode'));
@@ -97,7 +97,7 @@ describe('task-plan 插件 — exit_plan_mode', () => {
     origCwd = process.cwd;
     (process.cwd as any) = () => tmpDir;
     store = createTestStore();
-    store.set(STORE_KEY_MODE, 'plan');
+    store.set(SK.Mode, 'plan');
     await taskPlanPlugin.onInit!({
       store,
       getPluginConfig: () => ({}),
@@ -136,7 +136,7 @@ describe('task-plan 插件 — exit_plan_mode', () => {
     assert.equal(res.status, 'success');
     assert(confirmCalled, 'confirmCallback should have been called');
     // Mode should be back to normal
-    assert.equal(store.get(STORE_KEY_MODE), 'normal');
+    assert.equal(store.get(SK.Mode), 'normal');
   });
 
   test('exit_plan_mode 用户拒绝后保持 plan 模式', async () => {
@@ -157,7 +157,7 @@ describe('task-plan 插件 — exit_plan_mode', () => {
     assert.equal(res.status, 'rejected_by_user');
     assert(confirmCalled);
     // Mode should remain plan
-    assert.equal(store.get(STORE_KEY_MODE), 'plan');
+    assert.equal(store.get(SK.Mode), 'plan');
   });
 });
 
@@ -438,35 +438,35 @@ describe('task-plan 插件 — store 缓存同步', () => {
     removeTempDir(tmpDir);
   });
 
-  test('task_create 更新 STORE_KEY_TASK_COUNT', async () => {
-    assert.equal(store.get(STORE_KEY_TASK_COUNT), 0);
+  test('task_create 更新 SK.TaskCount', async () => {
+    assert.equal(store.get(SK.TaskCount), 0);
     await taskPlanPlugin.execute('task_create', {
       subject: 'Task 1', description: 'First',
     }, CTX);
-    assert.equal(store.get(STORE_KEY_TASK_COUNT), 1);
+    assert.equal(store.get(SK.TaskCount), 1);
     await taskPlanPlugin.execute('task_create', {
       subject: 'Task 2', description: 'Second',
     }, CTX);
-    assert.equal(store.get(STORE_KEY_TASK_COUNT), 2);
+    assert.equal(store.get(SK.TaskCount), 2);
   });
 
-  test('task_stop 更新 STORE_KEY_TASK_COUNT', async () => {
+  test('task_stop 更新 SK.TaskCount', async () => {
     await taskPlanPlugin.execute('task_create', {
       subject: 'Task', description: 'To delete',
     }, CTX);
-    assert.equal(store.get(STORE_KEY_TASK_COUNT), 1);
+    assert.equal(store.get(SK.TaskCount), 1);
     await taskPlanPlugin.execute('task_stop', { taskId: '1' }, CTX);
-    assert.equal(store.get(STORE_KEY_TASK_COUNT), 0);
+    assert.equal(store.get(SK.TaskCount), 0);
   });
 
-  test('task_update 更新 STORE_KEY_TASKS', async () => {
+  test('task_update 更新 SK.Tasks', async () => {
     await taskPlanPlugin.execute('task_create', {
       subject: 'My Task', description: 'Test',
     }, CTX);
     await taskPlanPlugin.execute('task_update', {
       taskId: '1', status: 'completed',
     }, CTX);
-    const tasks = store.get<any[]>(STORE_KEY_TASKS) ?? [];
+    const tasks = store.get<any[]>(SK.Tasks) ?? [];
     assert.equal(tasks.length, 1);
     assert.equal(tasks[0].status, 'completed');
   });

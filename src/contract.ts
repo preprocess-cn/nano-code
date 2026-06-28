@@ -67,7 +67,7 @@ export interface PermissionConfirmRequest {
   filePath?: string;
 }
 
-export type PermissionConfirmResponse = boolean;
+export type PermissionConfirmResponse = boolean | 'always_allow';
 
 /** Display-layer output handler for command stdout/stderr streaming. */
 export interface CommandOutputHandler {

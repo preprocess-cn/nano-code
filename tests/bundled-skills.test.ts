@@ -113,15 +113,15 @@ describe('Bundled Skills Registry', () => {
     assert.ok(section.includes('use it'));
   });
 
-  it('registerAllDefaultBundledSkills registers all 10 skills', () => {
+  it('registerAllDefaultBundledSkills registers all 11 skills', () => {
     registry.clearBundledSkills();
     registry.registerAllDefaultBundledSkills();
     const all = registry.getBundledSkills();
-    assert.equal(all.length, 10);
+    assert.equal(all.length, 11);
     const names = all.map(s => s.name).sort();
     assert.deepEqual(names, [
       'batch', 'debug', 'keybindings', 'lorem-ipsum',
-      'remember', 'simplify', 'skillify', 'stuck',
+      'remember', 'review', 'simplify', 'skillify', 'stuck',
       'update-config', 'verify',
     ]);
   });

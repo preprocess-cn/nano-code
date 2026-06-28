@@ -18,6 +18,7 @@ import { taskPlanPlugin } from './plugins/tools/task-plan.js';
 import { DisplayManager } from './display.js';
 import { replDisplay } from './plugins/display/repl.js';
 import { resolveDisplayPlugin } from './plugins/display/loader.js';
+import { SK } from './store-keys.js';
 import { cac } from 'cac';
 import { getPackageVersion } from './version.js';
 import {
@@ -135,7 +136,7 @@ async function restoreSession(
   agent.loadHistory(session.messages);
 
   const { countMessagesTokens } = await import('./plugins/token-budget/counter.js');
-  registry.store.set('token-budget:initialAccumulated', countMessagesTokens(session.messages));
+  registry.store.set(SK.TokenBudgetInitialAccumulated, countMessagesTokens(session.messages));
 
   for (const msg of session.messages) {
     if (msg.role === 'user') {
@@ -160,8 +161,8 @@ async function runMainLoop(
   let isPrompting = false;
   const sigintHandler = () => {
     if (!isPrompting) {
-      registry.store.set('agent:cancelled', true);
-      const abortCtrl = registry.store.get<AbortController>('agent:abort');
+      registry.store.set(SK.AgentCancelled, true);
+      const abortCtrl = registry.store.get<AbortController>(SK.AgentAbort);
       if (abortCtrl && !abortCtrl.signal.aborted) abortCtrl.abort();
     }
     // At prompt: SIGINT is ignored — clack's text() or Ink's useInput handles \x03 directly
@@ -186,7 +187,7 @@ async function runMainLoop(
       await agent.runTask(intercept?.replaceInput ?? userInput);
     } catch (error: any) {
       if (error?.name === 'AbortError' || error?.message === 'CANCELLED') {
-        registry.store.set('agent:cancelled', undefined);
+        registry.store.set(SK.AgentCancelled, undefined);
         continue;
       }
       displayMgr.onError({
@@ -195,7 +196,7 @@ async function runMainLoop(
         stack: error instanceof Error ? error.stack : undefined,
       });
     } finally {
-      registry.store.set('agent:cancelled', undefined);
+      registry.store.set(SK.AgentCancelled, undefined);
       saveSession(process.cwd(), agent.getHistory());
     }
   }
@@ -272,7 +273,7 @@ async function startCLI(options: { debug?: boolean; think?: boolean; skipPermiss
   else if (options.think) displayMgr.onStatus({ message: MSG_THINK_MODE, agentName: 'main' });
   if (options.skipPermission) displayMgr.onStatus({ message: MSG_SKIP_PERMISSION, agentName: 'main' });
 
-  const agent = new NanoCodeAgent(registry, llmClient, config.agent?.role, config.systemPrompt, 'main', displayMgr);
+  const agent = new NanoCodeAgent({ registry, llmClient, agentRole: config.agent?.role, promptConfig: config.systemPrompt, name: 'main', display: displayMgr });
   setCommandAgent(agent);
   setTargetAgent(agent, displayMgr);
 

@@ -299,14 +299,7 @@ async function executeForkedSkill(
   await registerBuiltinPlugin(subRegistry, 'token-budget');
   await registerBuiltinPlugin(subRegistry, 'search');
 
-  const subAgent = new NanoCodeAgent(
-    subRegistry,
-    llmClient,
-    `技能: ${skill.name}`,
-    undefined,
-    skill.name,
-    display,
-  );
+  const subAgent = new NanoCodeAgent({ registry: subRegistry, llmClient, agentRole: `技能: ${skill.name}`, name: skill.name, display });
 
   try {
     const result = await subAgent.runTask(fullPrompt);
@@ -341,14 +334,7 @@ async function handleRunAgent(
   await registerBuiltinPlugin(subRegistry, 'token-budget');
   await registerBuiltinPlugin(subRegistry, 'search');
 
-  const subAgent = new NanoCodeAgent(
-    subRegistry,
-    llmClient,
-    role,
-    undefined,
-    'run_agent',
-    display,
-  );
+  const subAgent = new NanoCodeAgent({ registry: subRegistry, llmClient, agentRole: role, name: 'run_agent', display });
 
   try {
     const result = await subAgent.runTask(query);

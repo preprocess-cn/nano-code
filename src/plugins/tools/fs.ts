@@ -4,6 +4,7 @@ import * as path from 'path';
 import { confirm } from '@clack/prompts';
 import { NanoPlugin, PluginRegistry } from '../../plugin.js';
 import { ToolDefinition, ToolResponse, ToolContext } from '../../contract.js';
+import { SK } from '../../store-keys.js';
 import { getPatchForDisplay, newFileHunk } from '../../utils/diff.js';
 
 // ── 文件读取缓存（用于压缩后恢复上下文）──
@@ -154,7 +155,7 @@ export const fsPlugin: NanoPlugin = {
   },
 
   async onInit(_registry: PluginRegistry): Promise<void> {
-    _registry.store.set('fs:readCache', () => getReadCache());
+    _registry.store.set(SK.FsReadCache, () => getReadCache());
   },
 
   async execute(name: string, args: any, ctx: ToolContext): Promise<ToolResponse> {
@@ -188,6 +189,9 @@ export const fsPlugin: NanoPlugin = {
         try {
           if (!args.path || args.content === undefined) {
             return toolError('Error: Missing required parameters "path" or "content".');
+          }
+          if (typeof args.content === 'string' && args.content.length > 10 * 1024 * 1024) {
+            return toolError('Error: File content exceeds 10MB limit. Please split into smaller files.');
           }
           const finalPath = safeResolvePath(args.path);
           let fileExists = false;
@@ -236,7 +240,14 @@ export const fsPlugin: NanoPlugin = {
             return toolError('Error: Could not patch file. The "search" string was not found in the file. Please ensure your indentation and characters match exactly.');
           }
 
-          const updatedContent = fileContent.replace(search, replace);
+          // Check for multiple matches — search string must uniquely identify the location
+          const firstIdx = fileContent.indexOf(search);
+          const secondIdx = fileContent.indexOf(search, firstIdx + 1);
+          if (secondIdx !== -1) {
+            return toolError('Error: The "search" string appears multiple times in the file. Please expand the search context (include surrounding lines) to uniquely identify the target location.');
+          }
+
+          const updatedContent = fileContent.slice(0, firstIdx) + replace + fileContent.slice(firstIdx + search.length);
           const diff = getPatchForDisplay({ filePath: relativePath, oldContent: fileContent, newContent: updatedContent });
 
           if (!ctx.skipPermission && ctx.sideEffect) {

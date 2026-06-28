@@ -2,10 +2,10 @@ import { NanoPlugin, PluginRegistry } from '../../plugin.js';
 import { ToolDefinition, ToolResponse, ToolContext, PermissionConfirmRequest } from '../../contract.js';
 import {
   PlanMode, Task, TaskStatus,
-  STORE_KEY_MODE, STORE_KEY_PLAN_CONTENT, STORE_KEY_TASKS, STORE_KEY_TASK_COUNT,
 } from '../task-plan/types.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { SK } from '../../store-keys.js';
 
 // ── File paths ──
 
@@ -89,8 +89,8 @@ async function deleteTaskFile(taskId: string): Promise<boolean> {
 async function syncTaskCache(): Promise<void> {
   if (!_store) return;
   const tasks = await readAllTasks();
-  _store.set(STORE_KEY_TASKS, tasks);
-  _store.set(STORE_KEY_TASK_COUNT, tasks.length);
+  _store.set(SK.Tasks, tasks);
+  _store.set(SK.TaskCount, tasks.length);
 }
 
 // ── Tool: enter_plan_mode ──
@@ -99,11 +99,11 @@ async function handleEnterPlanMode(): Promise<ToolResponse> {
   if (!_store) {
     return { status: 'error', message: 'Internal error: store not available' };
   }
-  const currentMode = _store.get<PlanMode>(STORE_KEY_MODE) || 'normal';
+  const currentMode = _store.get<PlanMode>(SK.Mode) || 'normal';
   if (currentMode === 'plan') {
     return { status: 'success', data: 'Already in plan mode.' };
   }
-  _store.set(STORE_KEY_MODE, 'plan');
+  _store.set(SK.Mode, 'plan');
   return {
     status: 'success',
     data: 'Entered plan mode. You should now focus on exploring the codebase and designing an implementation approach.\n\nIn plan mode, you MUST NOT edit any files (except the plan file at .nano-code/plan.md) or run any non-readonly tools. Use exit_plan_mode when you are ready to present your plan for approval.',
@@ -116,7 +116,7 @@ async function handleExitPlanMode(ctx: ToolContext): Promise<ToolResponse> {
   if (!_store) {
     return { status: 'error', message: 'Internal error: store not available' };
   }
-  const currentMode = _store.get<PlanMode>(STORE_KEY_MODE) || 'normal';
+  const currentMode = _store.get<PlanMode>(SK.Mode) || 'normal';
   if (currentMode !== 'plan') {
     return { status: 'error', message: 'Not in plan mode. Use enter_plan_mode first.' };
   }
@@ -125,7 +125,6 @@ async function handleExitPlanMode(ctx: ToolContext): Promise<ToolResponse> {
   let planContent = '';
   try {
     planContent = await fs.readFile(planFilePath(), 'utf-8');
-    _store.set(STORE_KEY_PLAN_CONTENT, planContent);
   } catch {
     return { status: 'error', message: 'No plan found at .nano-code/plan.md. Write your plan to this file first.' };
   }
@@ -143,8 +142,11 @@ async function handleExitPlanMode(ctx: ToolContext): Promise<ToolResponse> {
     }
   }
 
+  // Store approved plan content
+  _store.set(SK.PlanContent, planContent);
+
   // Switch back to normal mode
-  _store.set(STORE_KEY_MODE, 'normal');
+  _store.set(SK.Mode, 'normal');
 
   return {
     status: 'success',
@@ -440,11 +442,11 @@ export const taskPlanPlugin: NanoPlugin = {
     _store = registry.store;
     // Sync task cache from disk on startup
     const tasks = await readAllTasks();
-    _store.set(STORE_KEY_TASKS, tasks);
-    _store.set(STORE_KEY_TASK_COUNT, tasks.length);
+    _store.set(SK.Tasks, tasks);
+    _store.set(SK.TaskCount, tasks.length);
     // Default mode is normal
-    if (!_store.get(STORE_KEY_MODE)) {
-      _store.set(STORE_KEY_MODE, 'normal');
+    if (!_store.get(SK.Mode)) {
+      _store.set(SK.Mode, 'normal');
     }
   },
 };

@@ -123,7 +123,7 @@ describe('filePatcher 修补文件功能测试', () => {
     assert.match(response.message || '', /must not be empty/i);
   });
 
-  test('search 在文件中出现多次时，仅替换第一个匹配', async () => {
+  test('search 在文件中出现多次时返回 error（需要更精确的上下文）', async () => {
     fs.writeFileSync(testFilePath, 'aaa bbb aaa bbb\n', 'utf8');
 
     const response = await fsPlugin.execute('patch_file', {
@@ -132,9 +132,8 @@ describe('filePatcher 修补文件功能测试', () => {
       replace: 'xxx'
     }, CTX_CONFIRM);
 
-    assert.strictEqual(response.status, 'success');
-    const content = fs.readFileSync(testFilePath, 'utf8');
-    assert.strictEqual(content, 'xxx bbb aaa bbb\n');
+    assert.strictEqual(response.status, 'error');
+    assert.match(response.message || '', /appears multiple times/i);
   });
 
   test('缩进/大小写敏感匹配：不会替换大小写不同的内容', async () => {

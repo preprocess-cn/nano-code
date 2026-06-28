@@ -4,6 +4,7 @@ import { PluginRegistry } from '../../plugin.js';
 import { DisplayManager } from '../../display.js';
 import { countMessagesTokens } from '../token-budget/counter.js';
 import { CompactOptions, CompactionResult } from './types.js';
+import { SK } from '../../store-keys.js';
 import {
   COMPACT_SYSTEM_PROMPT,
   buildCompactUserPrompt,
@@ -217,7 +218,7 @@ export class CompactService {
 
   /** 获取最近读取的文件内容，注入为用户消息 */
   private getFileReadCacheMessages(): ChatMessage[] {
-    const getCache = this.registry.store.get<() => Array<{ path: string; content: string }>>('fs:readCache');
+    const getCache = this.registry.store.get<() => Array<{ path: string; content: string }>>(SK.FsReadCache);
     if (!getCache) return [];
     const cache = getCache();
     if (!cache || cache.length === 0) return [];

@@ -4,8 +4,7 @@ import { isMainAgent } from '../../contract.js';
 import { formatStatusText } from '../../display-strings.js';
 import { ThinkStream } from './think-stream.js';
 import type { PluginRegistry } from '../../plugin.js';
-import { getCurrentAgentMode } from '../commands/agent-slash.js';
-import { STORE_KEY_MODE, STORE_KEY_TASK_COUNT } from '../task-plan/types.js';
+import { SK, type AgentModeInfo } from '../../store-keys.js';
 
 /** 非主 agent 的消息加 [name] 前缀 */
 function p(agentName: string, msg: string): string {
@@ -19,8 +18,8 @@ let _store: { get<T>(key: string): T | undefined } | null = null;
 
 function getModeLabel(): string {
   if (!_store) return '';
-  const mode = _store.get<string>(STORE_KEY_MODE);
-  const taskCount = _store.get<number>(STORE_KEY_TASK_COUNT) ?? 0;
+  const mode = _store.get<string>(SK.Mode);
+  const taskCount = _store.get<number>(SK.TaskCount) ?? 0;
   const parts: string[] = [];
   if (mode === 'plan') parts.push('\x1b[33mplan mode\x1b[0m');
   if (taskCount > 0) parts.push(`${taskCount} tasks`);
@@ -72,7 +71,7 @@ export const replDisplay: DisplayPlugin = {
   },
 
   async prompt(): Promise<string | null> {
-    const agentMode = getCurrentAgentMode();
+    const agentMode = _store?.get<AgentModeInfo>(SK.AgentMode) ?? null;
     const suffix = getModeLabel();
     const promptMsg = agentMode
       ? `[${agentMode.name}${suffix}] >>  请输入开发任务或指令：`

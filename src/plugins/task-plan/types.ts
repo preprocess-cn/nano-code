@@ -14,7 +14,4 @@ export interface Task {
   metadata?: Record<string, unknown>;
 }
 
-export const STORE_KEY_MODE = 'task-plan:mode';
-export const STORE_KEY_PLAN_CONTENT = 'task-plan:planContent';
-export const STORE_KEY_TASKS = 'task-plan:tasks';
-export const STORE_KEY_TASK_COUNT = 'task-plan:taskCount';
+// Store keys moved to src/store-keys.ts — use SK.Mode / SK.PlanContent / SK.Tasks / SK.TaskCount

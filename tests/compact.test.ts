@@ -16,7 +16,7 @@ function makeAgent(history?: ChatMessage[]): NanoCodeAgent {
   const registry = new PluginRegistry();
   // Use a mock LLMClient to avoid env var loading
   const mockLLM = {} as LLMClient;
-  const agent = new NanoCodeAgent(registry, mockLLM, undefined, undefined, 'test');
+  const agent = new NanoCodeAgent({ registry: registry, llmClient: mockLLM, name: 'test' });
   if (history) agent.loadHistory(history);
   return agent;
 }

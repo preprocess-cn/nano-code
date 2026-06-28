@@ -90,4 +90,17 @@ describe('fileWriter 文件写入功能测试', () => {
     assert.strictEqual(response.status, 'success');
     assert.strictEqual(fs.readFileSync(path.join(tmpDir, 'no-se.txt'), 'utf8'), 'auto-write');
   });
+
+  test('content 超过 10MB 时拒绝写入', async () => {
+    const filePath = path.relative(process.cwd(), path.join(tmpDir, 'huge.txt'));
+    const hugeContent = 'x'.repeat(10 * 1024 * 1024 + 1);
+    const response = await fsPlugin.execute('write_file_content', {
+      path: filePath,
+      content: hugeContent
+    }, NO_CONFIRM);
+
+    assert.strictEqual(response.status, 'error');
+    assert.match(response.message || '', /10MB/i);
+    assert.ok(!fs.existsSync(path.join(tmpDir, 'huge.txt')));
+  });
 });

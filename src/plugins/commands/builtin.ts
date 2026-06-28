@@ -10,8 +10,8 @@ import { saveSession } from '../../session.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import type { BuiltinCommand } from './types.js';
-import { STORE_KEY_MODE, STORE_KEY_TASK_COUNT } from '../task-plan/types.js';
 import { readAllTasks, getPlanFilePath } from '../tools/task-plan.js';
+import { SK } from '../../store-keys.js';
 
 export interface BuiltinContext {
   agent: NanoCodeAgent;
@@ -105,7 +105,7 @@ const BUILTIN_COMMANDS: BuiltinCommand[] = [
       if (cleanArgs) options.customInstructions = cleanArgs;
 
       // 清理自动压缩信号（手动 /compact 后不再触发自动压缩）
-      ctx.registry.store.set('compact:signal', false);
+      ctx.registry.store.set(SK.CompactSignal, false);
 
       const service = new CompactService(llmClient, ctx.registry, ctx.display);
 
@@ -172,7 +172,7 @@ const BUILTIN_COMMANDS: BuiltinCommand[] = [
       }
       const args = (ctx.args || '').trim();
       const store = ctx.registry.store;
-      const mode = store.get<string>(STORE_KEY_MODE) || 'normal';
+      const mode = store.get<string>(SK.Mode) || 'normal';
 
       if (args === 'open') {
         const planPath = getPlanFilePath();
@@ -180,7 +180,7 @@ const BUILTIN_COMMANDS: BuiltinCommand[] = [
       }
 
       if (args === 'exit') {
-        store.set(STORE_KEY_MODE, 'normal');
+        store.set(SK.Mode, 'normal');
         return { handled: true, skipAgent: true, message: '已退出 Plan Mode，恢复为常规模式。' };
       }
 
@@ -246,6 +246,28 @@ const BUILTIN_COMMANDS: BuiltinCommand[] = [
     },
   },
   {
+    name: 'permissions',
+    description: '查看/管理会话权限 — /permissions [reset]',
+    handler: async (ctx?: BuiltinContext) => {
+      if (!ctx?.registry) {
+        return { handled: true, skipAgent: true, message: '无法获取上下文信息' };
+      }
+      const args = (ctx.args || '').trim();
+      if (args === 'reset') {
+        ctx.registry.clearPermissions();
+        return { handled: true, skipAgent: true, message: '会话权限 allowlist 已清空，工具将重新请求确认。' };
+      }
+      const allowed = ctx.registry.getAllowedTools();
+      if (allowed.length === 0) {
+        return { handled: true, skipAgent: true, message: '当前会话中没有已允许免确认的工具。' };
+      }
+      return {
+        handled: true, skipAgent: true,
+        message: ['', '当前会话已允许免确认的工具：', ...allowed.map(t => `  - ${t}`), '', '使用 /permissions reset 清空 allowlist。', ''].join('\n'),
+      };
+    },
+  },
+  {
     name: 'context',
     description: '查看上下文分布及用量',
     handler: async (ctx?: BuiltinContext) => {
@@ -255,7 +277,7 @@ const BUILTIN_COMMANDS: BuiltinCommand[] = [
       }
 
       // Get API usage from token-budget plugin (priority 1)
-      const getApiUsage = ctx.registry.store.get('token-budget:getApiUsage') as
+      const getApiUsage = ctx.registry.store.get(SK.TokenBudgetGetApiUsage) as
         (() => { inputTokens: number; outputTokens: number; totalTokens: number }) | undefined;
       const apiTotalTokens = getApiUsage?.().totalTokens;
 

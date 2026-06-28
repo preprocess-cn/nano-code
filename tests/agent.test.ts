@@ -2,6 +2,7 @@ import { describe, it } from 'node:test';
 import * as assert from 'node:assert/strict';
 import { NanoCodeAgent } from '../src/agent.js';
 import { PluginRegistry } from '../src/plugin.js';
+import { SK } from '../src/store-keys.js';
 
 /** Minimal mock that satisfies the LLMClient shape without calling the API. */
 function mockLLM() {
@@ -14,17 +15,17 @@ function mockLLM() {
 describe('NanoCodeAgent — identity (getName)', () => {
 
   it('default name is main', () => {
-    const agent = new NanoCodeAgent(new PluginRegistry(), mockLLM());
+    const agent = new NanoCodeAgent({ registry: new PluginRegistry(), llmClient: mockLLM() });
     assert.equal(agent.getName(), 'main');
   });
 
   it('custom name is returned by getName', () => {
-    const agent = new NanoCodeAgent(new PluginRegistry(), mockLLM(), undefined, undefined, 'dba');
+    const agent = new NanoCodeAgent({ registry: new PluginRegistry(), llmClient: mockLLM(), name: 'dba' });
     assert.equal(agent.getName(), 'dba');
   });
 
   it('runTask returns the last assistant content', async () => {
-    const agent = new NanoCodeAgent(new PluginRegistry(), mockLLM());
+    const agent = new NanoCodeAgent({ registry: new PluginRegistry(), llmClient: mockLLM() });
     const result = await agent.runTask('hello');
     assert.equal(result, 'mock response');
   });
@@ -34,7 +35,7 @@ describe('NanoCodeAgent — identity (getName)', () => {
       sendSystemMessage: async () => ({ text: null, stopReason: 'stop' }),
       getModel: () => 'gpt-4o',
     };
-    const agent = new NanoCodeAgent(new PluginRegistry(), mock as any);
+    const agent = new NanoCodeAgent({ registry: new PluginRegistry(), llmClient: mock as any });
     const result = await agent.runTask('hello');
     assert.equal(result, undefined);
   });
@@ -44,19 +45,19 @@ describe('NanoCodeAgent — identity (getName)', () => {
 describe('NanoCodeAgent — getHistory / loadHistory', () => {
 
   it('getHistory returns empty array for a fresh agent', () => {
-    const agent = new NanoCodeAgent(new PluginRegistry(), mockLLM());
+    const agent = new NanoCodeAgent({ registry: new PluginRegistry(), llmClient: mockLLM() });
     assert.deepEqual(agent.getHistory(), []);
   });
 
   it('getHistory returns a copy (mutating the result does not affect internal state)', () => {
-    const agent = new NanoCodeAgent(new PluginRegistry(), mockLLM());
+    const agent = new NanoCodeAgent({ registry: new PluginRegistry(), llmClient: mockLLM() });
     const h = agent.getHistory();
     h.push({ role: 'user', content: 'injected' });
     assert.equal(agent.getHistory().length, 0);
   });
 
   it('loadHistory replaces the internal history', () => {
-    const agent = new NanoCodeAgent(new PluginRegistry(), mockLLM());
+    const agent = new NanoCodeAgent({ registry: new PluginRegistry(), llmClient: mockLLM() });
     const messages = [
       { role: 'user' as const, content: 'q1' },
       { role: 'assistant' as const, content: 'a1' },
@@ -67,7 +68,7 @@ describe('NanoCodeAgent — getHistory / loadHistory', () => {
   });
 
   it('loadHistory does not share the array reference', () => {
-    const agent = new NanoCodeAgent(new PluginRegistry(), mockLLM());
+    const agent = new NanoCodeAgent({ registry: new PluginRegistry(), llmClient: mockLLM() });
     const messages = [{ role: 'user' as const, content: 'test' }];
     agent.loadHistory(messages);
     messages.push({ role: 'user' as const, content: 'appended' });
@@ -76,17 +77,17 @@ describe('NanoCodeAgent — getHistory / loadHistory', () => {
 
   it('agent stores constructor args correctly', () => {
     const registry = new PluginRegistry();
-    const agent = new NanoCodeAgent(registry, mockLLM(), 'custom-role');
+    const agent = new NanoCodeAgent({ registry: registry, llmClient: mockLLM(), agentRole: 'custom-role' });
     assert.deepEqual(agent.getHistory(), []);
   });
 
   it('getAgentRole returns the role passed to constructor', () => {
-    const agent = new NanoCodeAgent(new PluginRegistry(), mockLLM(), 'test-role');
+    const agent = new NanoCodeAgent({ registry: new PluginRegistry(), llmClient: mockLLM(), agentRole: 'test-role' });
     assert.equal(agent.getAgentRole(), 'test-role');
   });
 
   it('getAgentRole returns undefined when no role was set', () => {
-    const agent = new NanoCodeAgent(new PluginRegistry(), mockLLM());
+    const agent = new NanoCodeAgent({ registry: new PluginRegistry(), llmClient: mockLLM() });
     assert.equal(agent.getAgentRole(), undefined);
   });
 
@@ -95,27 +96,27 @@ describe('NanoCodeAgent — getHistory / loadHistory', () => {
 describe('NanoCodeAgent — setRole', () => {
 
   it('setRole updates the agent role', () => {
-    const agent = new NanoCodeAgent(new PluginRegistry(), mockLLM());
+    const agent = new NanoCodeAgent({ registry: new PluginRegistry(), llmClient: mockLLM() });
     agent.setRole('new-role');
     assert.equal(agent.getAgentRole(), 'new-role');
   });
 
   it('setRole with role and promptConfig', () => {
-    const agent = new NanoCodeAgent(new PluginRegistry(), mockLLM());
+    const agent = new NanoCodeAgent({ registry: new PluginRegistry(), llmClient: mockLLM() });
     const config = { withTools: 'custom {tool_list} tools', noTools: 'custom no tools' };
     agent.setRole('expert', config);
     assert.equal(agent.getAgentRole(), 'expert');
   });
 
   it('setRole with undefined clears the role', () => {
-    const agent = new NanoCodeAgent(new PluginRegistry(), mockLLM(), 'old-role');
+    const agent = new NanoCodeAgent({ registry: new PluginRegistry(), llmClient: mockLLM(), agentRole: 'old-role' });
     assert.equal(agent.getAgentRole(), 'old-role');
     agent.setRole(undefined, undefined);
     assert.equal(agent.getAgentRole(), undefined);
   });
 
   it('setRole replaces previous role', () => {
-    const agent = new NanoCodeAgent(new PluginRegistry(), mockLLM());
+    const agent = new NanoCodeAgent({ registry: new PluginRegistry(), llmClient: mockLLM() });
     agent.setRole('first');
     agent.setRole('second');
     assert.equal(agent.getAgentRole(), 'second');
@@ -137,7 +138,7 @@ describe('NanoCodeAgent — lifecycle hooks', () => {
       onToolResult() {},
       onError() {},
     };
-    const agent = new NanoCodeAgent(new PluginRegistry(), mockLLM(), undefined, undefined, 'main', display as any);
+    const agent = new NanoCodeAgent({ registry: new PluginRegistry(), llmClient: mockLLM(), name: 'main', display: display as any });
     await agent.runTask('hello');
     assert.ok(events.some(e => e.startsWith('start:')), 'should have onAgentTurnStart');
     assert.ok(events.some(e => e.startsWith('end:')), 'should have onAgentTurnEnd');
@@ -154,7 +155,7 @@ describe('NanoCodeAgent — lifecycle hooks', () => {
       if (key === 'agent') storeAgentState = registry.store.get('agent');
     };
 
-    const agent = new NanoCodeAgent(registry, mockLLM(), undefined, undefined, 'store-test');
+    const agent = new NanoCodeAgent({ registry: registry, llmClient: mockLLM(), name: 'store-test' });
     await agent.runTask('hello');
     assert.ok(storeAgentState, 'should have set agent state');
     assert.equal(storeAgentState.agentName, 'store-test');
@@ -174,7 +175,7 @@ describe('NanoCodeAgent — lifecycle hooks', () => {
       onToolResult() {},
       onError() {},
     };
-    const agent = new NanoCodeAgent(new PluginRegistry(), mockLLM(), undefined, undefined, 'my-agent', display as any);
+    const agent = new NanoCodeAgent({ registry: new PluginRegistry(), llmClient: mockLLM(), name: 'my-agent', display: display as any });
     await agent.runTask('hello');
     assert.ok(events.some(e => e === 'start:my-agent'), 'agentName should be my-agent');
     assert.ok(events.some(e => e === 'end:my-agent'), 'agentName should be my-agent');
@@ -207,7 +208,7 @@ describe('NanoCodeAgent — malformed tool call JSON', () => {
     };
 
     const registry = new PluginRegistry();
-    const agent = new NanoCodeAgent(registry, mock as any);
+    const agent = new NanoCodeAgent({ registry: registry, llmClient: mock as any });
     await agent.runTask('do something');
 
     const history = agent.getHistory();
@@ -241,7 +242,7 @@ describe('NanoCodeAgent — malformed tool call JSON', () => {
     };
 
     const registry = new PluginRegistry();
-    const agent = new NanoCodeAgent(registry, mock as any);
+    const agent = new NanoCodeAgent({ registry: registry, llmClient: mock as any });
     await agent.runTask('do something');
 
     const history = agent.getHistory();
@@ -272,7 +273,7 @@ describe('NanoCodeAgent — malformed tool call JSON', () => {
     };
 
     const registry = new PluginRegistry();
-    const agent = new NanoCodeAgent(registry, mock as any);
+    const agent = new NanoCodeAgent({ registry: registry, llmClient: mock as any });
     await agent.runTask('do something');
 
     const history = agent.getHistory();
@@ -320,7 +321,7 @@ describe('NanoCodeAgent — newMessages injection', () => {
       }),
     });
 
-    const agent = new NanoCodeAgent(registry, mock as any);
+    const agent = new NanoCodeAgent({ registry: registry, llmClient: mock as any });
     await agent.runTask('use skill');
 
     const history = agent.getHistory();
@@ -377,7 +378,7 @@ describe('NanoCodeAgent — newMessages injection', () => {
       }),
     });
 
-    const agent = new NanoCodeAgent(registry, mock as any);
+    const agent = new NanoCodeAgent({ registry: registry, llmClient: mock as any });
     await agent.runTask('do multi skill');
 
     const history = agent.getHistory();
@@ -421,7 +422,7 @@ describe('NanoCodeAgent — newMessages injection', () => {
       execute: async () => ({ status: 'success' as const, data: 'normal result' }),
     });
 
-    const agent = new NanoCodeAgent(registry, mock as any);
+    const agent = new NanoCodeAgent({ registry: registry, llmClient: mock as any });
     await agent.runTask('normal task');
 
     const history = agent.getHistory();
@@ -447,7 +448,7 @@ describe('NanoCodeAgent — cancellation', () => {
       getModel: () => 'gpt-4o',
     };
 
-    const agent = new NanoCodeAgent(registry, mock as any);
+    const agent = new NanoCodeAgent({ registry: registry, llmClient: mock as any });
     const result = await agent.runTask('hello');
 
     assert.equal(llmCalled, false, 'LLM should not be called when cancelled');
@@ -466,9 +467,9 @@ describe('NanoCodeAgent — cancellation', () => {
       getModel: () => 'gpt-4o',
     };
 
-    const agent = new NanoCodeAgent(registry, mock as any);
-    registry.store.set('agent:abort', new AbortController());
-    registry.store.set('agent:cancelled', true);
+    const agent = new NanoCodeAgent({ registry: registry, llmClient: mock as any });
+    registry.store.set(SK.AgentAbort, new AbortController());
+    registry.store.set(SK.AgentCancelled, true);
 
     const result = await agent.runTask('hello');
     assert.equal(result, undefined);
@@ -476,12 +477,12 @@ describe('NanoCodeAgent — cancellation', () => {
 
   it('clears cancel flag from store after handling', async () => {
     const registry = new PluginRegistry();
-    registry.store.set('agent:cancelled', true);
+    registry.store.set(SK.AgentCancelled, true);
 
-    const agent = new NanoCodeAgent(registry, mockLLM());
+    const agent = new NanoCodeAgent({ registry: registry, llmClient: mockLLM() });
     await agent.runTask('hello');
 
-    assert.equal(registry.store.get('agent:cancelled'), undefined);
+    assert.equal(registry.store.get(SK.AgentCancelled), undefined);
   });
 
 });

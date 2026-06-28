@@ -50,7 +50,7 @@ export function createSkillsSlashPlugin(llmClient?: LLMClient, display?: Display
         await registerBuiltinPlugin(subRegistry, 'token-budget');
         await registerBuiltinPlugin(subRegistry, 'search');
 
-        const subAgent = new NanoCodeAgent(subRegistry, llmClient, `技能: ${skill.name}`, undefined, skill.name, display);
+        const subAgent = new NanoCodeAgent({ registry: subRegistry, llmClient, agentRole: `技能: ${skill.name}`, name: skill.name, display });
 
         try {
           const result = await subAgent.runTask(fullPrompt);

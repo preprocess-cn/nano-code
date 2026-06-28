@@ -78,6 +78,37 @@ export class PluginRegistry {
     return this._confirmCallback;
   }
 
+  // ── Session-level allowlist ──
+  // 工具级 Always Allow：用户确认一次后当前会话不再重复确认。
+  // 不持久化，--continue 后 allowlist 为空，权限确认自然恢复。
+
+  private _allowlist: Map<string, true> = new Map();
+
+  /** 检查某工具是否已加入当前会话的 allowlist */
+  isToolAllowed(toolName: string): boolean {
+    return this._allowlist.has(toolName);
+  }
+
+  /** 将某工具加入当前会话的 allowlist */
+  allowTool(toolName: string): void {
+    this._allowlist.set(toolName, true);
+  }
+
+  /** 清空 allowlist（/permissions reset） */
+  clearPermissions(): void {
+    this._allowlist.clear();
+  }
+
+  /** 获取当前会话已允许的工具列表 */
+  getAllowedTools(): string[] {
+    return Array.from(this._allowlist.keys());
+  }
+
+  /** 获取某工具的 sideEffect 标记 */
+  getToolSideEffect(toolName: string): boolean {
+    return this.toolSideEffects.get(toolName) ?? true;
+  }
+
   setOutputHandler(handler: CommandOutputHandler): void {
     this._outputHandler = handler;
   }
@@ -195,7 +226,6 @@ export class PluginRegistry {
 
   /**
    * Chain: call each plugin's transform hook passing previous result.
-   * Skips plugins that don't implement the hook or throw.
    */
   private execPipe<T>(getHook: (p: NanoPlugin) => ((v: T) => T) | undefined, initial: T, label: string): T {
     let v = initial;
@@ -267,10 +297,6 @@ export class PluginRegistry {
     return this.execPipe(p => p.onAfterToolCall, result, 'onAfterToolCall');
   }
 
-  /**
-   * 遍历所有实现了 onBeforeAgentInput 的插件，返回第一个处理结果。
-   * 无插件处理该输入时返回 null（正常交由 agent 处理）。
-   */
   async execBeforeAgentInput(input: string): Promise<CommandInterceptResult | null> {
     for (const plugin of this.plugins.values()) {
       if (plugin.onBeforeAgentInput) {

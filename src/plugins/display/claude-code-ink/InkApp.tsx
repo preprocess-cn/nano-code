@@ -9,6 +9,8 @@ import { Markdown, StreamingMarkdown } from './components/Markdown.js';
 import type { DiffHunk } from '../../../contract.js';
 import type { ContextAnalysis } from '../../token-budget/analyzer.js';
 
+export type PermissionResponse = 'allow_once' | 'always_allow' | 'deny';
+
 export interface TextSegment {
   text: string;
   dim?: boolean;
@@ -46,7 +48,7 @@ export interface InkAppProps {
   suggestions?: CommandSuggestion[];
   activeAgentName?: string;
   pendingPermission?: PermissionPrompt | null;
-  onPermissionResponse?: (allowed: boolean) => void;
+  onPermissionResponse?: (response: PermissionResponse) => void;
   mode?: 'normal' | 'plan';
   taskCount?: number;
 }
@@ -283,9 +285,10 @@ function DiffView({ hunks, filePath }: { hunks: DiffHunk[]; filePath: string }):
 
 function PermissionDialog({
   toolName, message, details, diff, filePath, onResponse,
-}: PermissionPrompt & { onResponse: (allowed: boolean) => void }): React.ReactElement {
-  const options: SelectOption[] = [
-    { label: '批准 (Yes)', value: 'allow' },
+}: PermissionPrompt & { onResponse: (response: PermissionResponse) => void }): React.ReactElement {
+  const options: SelectOption<PermissionResponse>[] = [
+    { label: '批准 (Yes)', value: 'allow_once' },
+    { label: '始终允许 (Always Allow)', value: 'always_allow' },
     { label: '拒绝 (No)', value: 'deny' },
   ];
 
@@ -329,8 +332,8 @@ function PermissionDialog({
       { flexDirection: 'column', paddingX: 1 },
       React.createElement(Select, {
         options,
-        onChange: (value) => onResponse(value === 'allow'),
-        onCancel: () => onResponse(false),
+        onChange: (value: unknown) => onResponse(value as PermissionResponse),
+        onCancel: () => onResponse('deny'),
       }),
       React.createElement(Box, { marginTop: 1 },
         React.createElement(Text, { dimColor: true }, 'Esc to cancel'),

@@ -79,6 +79,7 @@ import { createRememberSkill } from './remember.js';
 import { createStuckSkill } from './stuck.js';
 import { createSkillifySkill } from './skillify.js';
 import { createKeybindingsSkill } from './keybindings.js';
+import { createReviewSkill } from './review.js';
 
 export function registerAllDefaultBundledSkills(): void {
   // Phase 2 — Tier 1
@@ -87,6 +88,7 @@ export function registerAllDefaultBundledSkills(): void {
   registerBundledSkill(createLoremIpsumSkill());
   // Phase 3 — Tier 2
   registerBundledSkill(createDebugSkill());
+  registerBundledSkill(createReviewSkill());
   registerBundledSkill(createBatchSkill());
   registerBundledSkill(createUpdateConfigSkill());
   registerBundledSkill(createRememberSkill());

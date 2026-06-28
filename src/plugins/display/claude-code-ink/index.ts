@@ -1,12 +1,12 @@
 import type { DisplayPlugin, StartConfig, StatusEvent, StreamEvent, ToolCallEvent, ToolResultEvent, ErrorEvent, AgentEvent, StateSnapshot } from '../../../display.js';
 import type { ContextAnalysis } from '../../token-budget/analyzer.js';
 import { inkRender, type Instance } from './ink.js';
-import { InkApp, type UIMessage, type TextSegment, type PermissionPrompt } from './InkApp.js';
+import { InkApp, type UIMessage, type TextSegment, type PermissionPrompt, type PermissionResponse } from './InkApp.js';
 import { ThinkStream } from '../think-stream.js';
 import type { PluginRegistry } from '../../../plugin.js';
 import { formatStatusText } from '../../../display-strings.js';
-import { getCurrentAgentMode } from '../../commands/agent-slash.js';
-import { STORE_KEY_MODE, STORE_KEY_TASK_COUNT } from '../../task-plan/types.js';
+import type { AgentModeInfo } from '../../../store-keys.js';
+import { SK } from '../../../store-keys.js';
 import React from 'react';
 
 /** 为常用工具生成简洁的参数预览，避免大 JSON 刷屏 */
@@ -147,15 +147,15 @@ function createPlugin(): DisplayPlugin {
   let thinkStream: ThinkStream | null = null;
   let lastStreamTarget: UIMessage | null = null;
   let lastThinkTarget: UIMessage | null = null;
-  // Permission confirm state
+  // Permission confirm state — 支持 allow_once / always_allow / deny
   let pendingPermission: PermissionPrompt | null = null;
-  let permissionResolve: ((value: boolean) => void) | null = null;
+  let permissionResolve: ((value: boolean | 'always_allow') => void) | null = null;
   let registry: PluginRegistry | null = null;
 
   function cancelExecution(): void {
     if (registry) {
-      registry.store.set('agent:cancelled', true);
-      const abortCtrl = registry.store.get<AbortController>('agent:abort');
+      registry.store.set(SK.AgentCancelled, true);
+      const abortCtrl = registry.store.get<AbortController>(SK.AgentAbort);
       if (abortCtrl && !abortCtrl.signal.aborted) abortCtrl.abort();
     }
   }
@@ -164,15 +164,15 @@ function createPlugin(): DisplayPlugin {
     if (!inkInstance) return;
     const suggestions = _suggestionProvider?.() ?? [];
     try {
-      const currentMode = (registry?.store?.get<string>(STORE_KEY_MODE)) ?? 'normal';
-      const currentTaskCount = (registry?.store?.get<number>(STORE_KEY_TASK_COUNT)) ?? 0;
+      const currentMode = (registry?.store?.get<string>(SK.Mode)) ?? 'normal';
+      const currentTaskCount = (registry?.store?.get<number>(SK.TaskCount)) ?? 0;
       inkInstance.rerender(
         React.createElement(InkApp, {
           greeting,
           messages: [...messages],
           inputBuffer: '',
           suggestions,
-          activeAgentName: getCurrentAgentMode()?.name,
+          activeAgentName: registry?.store?.get<AgentModeInfo>(SK.AgentMode)?.name,
           mode: currentMode as 'normal' | 'plan',
           taskCount: currentTaskCount,
           onInputChange: () => {},
@@ -193,12 +193,12 @@ function createPlugin(): DisplayPlugin {
             }
           },
           pendingPermission,
-          onPermissionResponse: (allowed: boolean) => {
+          onPermissionResponse: (response: PermissionResponse) => {
             if (permissionResolve) {
               const r = permissionResolve;
               permissionResolve = null;
               pendingPermission = null;
-              r(allowed);
+              r(response === 'allow_once' ? true : response === 'always_allow' ? 'always_allow' : false);
               render();
             }
           },
@@ -217,7 +217,7 @@ function createPlugin(): DisplayPlugin {
     async onInit(r: PluginRegistry): Promise<void> {
       registry = r;
       registry.setConfirmCallback(async (req) => {
-        return new Promise<boolean>((resolve) => {
+        return new Promise<boolean | 'always_allow'>((resolve) => {
           pendingPermission = { toolName: req.toolName, message: req.message, details: req.details, diff: req.diff, filePath: req.filePath };
           permissionResolve = resolve;
           render();
@@ -260,7 +260,7 @@ function createPlugin(): DisplayPlugin {
             messages: [...messages],
             inputBuffer: '',
             suggestions: initSuggestions,
-            activeAgentName: getCurrentAgentMode()?.name,
+            activeAgentName: registry?.store?.get<AgentModeInfo>(SK.AgentMode)?.name,
             onInputChange: () => {},
             onInputSubmit: (text: string) => {
               if (promptResolve) {

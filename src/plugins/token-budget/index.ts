@@ -5,6 +5,7 @@ import { countMessagesTokens } from './counter.js';
 import { initTokenizer } from './counter.js';
 import type { LLMClient } from '../../llm.js';
 import type { DisplayManager } from '../../display.js';
+import { SK } from '../../store-keys.js';
 
 // ── Plugin ──
 
@@ -30,7 +31,7 @@ export function createTokenBudgetPlugin(config?: TokenBudgetConfig): NanoPlugin 
     compressionThreshold: config?.compressionThreshold ?? 80000,
     warnAtTokens: config?.warnAtTokens ?? 50000,
     autoCompactThreshold: config?.autoCompactThreshold ?? 0,
-    autoCompactEnabled: config?.autoCompactEnabled ?? false,
+    autoCompactEnabled: config?.autoCompactEnabled ?? true,
     llmClient: config?.llmClient,
     displayMgr: config?.displayMgr,
   };
@@ -40,27 +41,25 @@ export function createTokenBudgetPlugin(config?: TokenBudgetConfig): NanoPlugin 
   let totalTokensAccumulated = 0;
   let warned = false;
   let compressed = false;
-  let autoCompacted = false;
   let _registryRef: PluginRegistry | null = null;
 
   // ── Auto-compact helper (fire-and-forget, runs outside the request lifecycle) ──
   const runCompact = async (llm: LLMClient, display: DisplayManager, reg: PluginRegistry | null) => {
     if (!reg) return;
-    const messages = reg.store.get<ChatMessage[]>('agent:messages');
+    const messages = reg.store.get<ChatMessage[]>(SK.AgentMessages);
     if (!messages || messages.length === 0) return;
     try {
       const { CompactService } = await import('../../plugins/compact/service.js');
       const service = new CompactService(llm, reg, display);
       const result = await service.compactRaw(messages, { preserveCount: 2 });
-      reg.store.set('compact:result', result.messages);
-      reg.store.set('compact:completed', true);
+      reg.store.set(SK.CompactResult, result.messages);
+      reg.store.set(SK.CompactCompleted, true);
       display.onStatus({
         message: `自动压缩: ${result.originalMessageCount} → ${result.compactedMessageCount} 条消息, 节省 ~${(result.savedTokens / 1000).toFixed(1)}K tokens`,
         agentName: 'main',
       });
     } catch {
-      reg.store.set('compact:retry', true);
-      autoCompacted = false;
+      reg.store.set(SK.CompactRetry, true);
     }
   };
 
@@ -96,25 +95,24 @@ export function createTokenBudgetPlugin(config?: TokenBudgetConfig): NanoPlugin 
       totalTokensAccumulated = 0;
       warned = false;
       compressed = false;
-      autoCompacted = false;
 
       // 从 store 读取初始累计值（--continue 恢复的会话）
-      const initialAccumulated = _registry.store.get<number>('token-budget:initialAccumulated');
+      const initialAccumulated = _registry.store.get<number>(SK.TokenBudgetInitialAccumulated);
       if (initialAccumulated) {
         totalTokensAccumulated += initialAccumulated;
       }
 
       // Expose getApiUsage via shared store for other plugins (e.g. /context)
-      _registry.store.set('token-budget:getApiUsage', () => ({
+      _registry.store.set(SK.TokenBudgetGetApiUsage, () => ({
         inputTokens,
         outputTokens,
         totalTokens: totalTokensAccumulated,
       }));
 
       // Initialize auto-compact signals
-      _registry.store.set('compact:signal', false);
-      _registry.store.set('compact:completed', false);
-      _registry.store.set('compact:retry', false);
+      _registry.store.set(SK.CompactSignal, false);
+      _registry.store.set(SK.CompactCompleted, false);
+      _registry.store.set(SK.CompactRetry, false);
     },
 
     onBeforeRequest(messages: ChatMessage[]): ChatMessage[] {
@@ -183,20 +181,26 @@ export function createTokenBudgetPlugin(config?: TokenBudgetConfig): NanoPlugin 
         totalTokensAccumulated = inputTokens + outputTokens;
       }
 
-      // 失败重试：主循环 catch 块设置 compact:retry，此处重置 autoCompacted
-      if (_registryRef?.store.get('compact:retry')) {
-        autoCompacted = false;
-        _registryRef.store.set('compact:retry', false);
+      // 失败重试信号清理
+      if (_registryRef) {
+        _registryRef.store.set(SK.CompactRetry, false);
       }
 
-      // Auto-compact: run compact directly from the plugin
-      if (cfg.autoCompactEnabled && !autoCompacted && cfg.llmClient && cfg.displayMgr) {
-        const threshold = cfg.autoCompactThreshold > 0
-          ? cfg.autoCompactThreshold
-          : cfg.maxTokensPerSession * 0.9;
-        if (totalTokensAccumulated > threshold) {
-          autoCompacted = true;
-          runCompact(cfg.llmClient, cfg.displayMgr, _registryRef);
+      // Auto-compact: 基于当前消息历史实际大小触发，而非累计总值。
+      // 压缩后消息减小，下次再超阈值才再次触发（slide window 效果）。
+      if (cfg.autoCompactEnabled && cfg.llmClient && cfg.displayMgr && _registryRef) {
+        // 已有待消费的压缩结果时不再触发（避免并发重入）
+        if (!_registryRef.store.get(SK.CompactResult)) {
+          const messages = _registryRef.store.get<ChatMessage[]>(SK.AgentMessages);
+          if (messages && messages.length > 0) {
+            const currentTokens = countMessagesTokens(messages);
+            const threshold = cfg.autoCompactThreshold > 0
+              ? cfg.autoCompactThreshold
+              : cfg.maxTokensPerSession * 0.9;
+            if (currentTokens > threshold) {
+              runCompact(cfg.llmClient, cfg.displayMgr, _registryRef);
+            }
+          }
         }
       }
     },
