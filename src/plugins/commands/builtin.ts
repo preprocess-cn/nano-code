@@ -1,4 +1,4 @@
-import { CommandInterceptResult } from '../../core/contract.js';
+import { CommandInterceptResult, type InjectedMessage } from '../../core/contract.js';
 import { NanoCodeAgent } from '../../core/agent.js';
 import { PluginRegistry } from '../../core/plugin.js';
 import { loadConfig, NanoConfig, getSystemWhitelist } from '../../core/config.js';
@@ -54,6 +54,7 @@ const BUILTIN_COMMANDS: BuiltinCommand[] = [
       lines.push('  /task, /tasks     查看任务列表');
       lines.push('  /doctor           诊断系统健康状态');
       lines.push('  /plugin, /plugins 管理插件 — /plugin list, enable <name>, disable <name>');
+      lines.push('  /init            初始化 nano-code.md — 分析项目结构并生成代码库文档');
       lines.push('');
 
       const skills = loadAllSkills();
@@ -346,6 +347,19 @@ const BUILTIN_COMMANDS: BuiltinCommand[] = [
       return { handled: true, skipAgent: true, message: `未知 plugin 子命令: ${args}。可用: list, enable <name>, disable <name>, manage` };
     },
   },
+  {
+    name: 'init',
+    description: '初始化 nano-code.md — 分析项目并生成代码库文档',
+    handler: async (ctx?: BuiltinContext) => {
+      return {
+        handled: true,
+        injectMessages: [{
+          role: 'user',
+          content: INIT_PROMPT,
+        }],
+      };
+    },
+  },
 ];
 
 export function getBuiltinCommands(): BuiltinCommand[] {
@@ -505,3 +519,71 @@ function togglePlugin(name: string, enable: boolean, config: NanoConfig | undefi
 
   return { handled: true, skipAgent: true, message: `插件 "${name}" 已${enable ? '启用' : '禁用'}。` };
 }
+
+const INIT_PROMPT = `请分析当前项目，创建一份 \`nano-code.md\` 文件。
+
+## 任务说明
+
+你正在创建一份给 AI 编程助手（nano-code）阅读的项目指南。这份文件将帮助 AI 理解项目的结构、约定和操作方式。
+
+## 你需要做的是
+
+1. **探索项目** — 使用 list_files、glob、read_file 等工具了解项目结构
+2. **发现关键命令** — 查找构建、测试、lint 命令（package.json 的 scripts、Makefile、CI 配置等）
+3. **理解架构** — 了解项目的主要模块、目录结构和依赖关系
+4. **识别约定** — 找出代码风格、提交规范、分支策略等约定（从现有配置中推断）
+5. **记录注意事项** — 记录非显而易见的陷阱、环境要求、特殊工作流
+
+## nano-code.md 的内容要求
+
+文件位于项目根目录，包含以下内容结构：
+
+\`\`\`
+# <Project Name>
+
+This file provides guidance to nano-code when working with code in this repository.
+
+## Build & Test
+
+- 构建命令（如 \`npm run build\`）
+- 测试命令（如 \`npm test\`）
+- Lint/格式化命令
+- 其他常用开发命令
+
+## Architecture Overview
+
+- 项目的主要语言和框架
+- 目录结构说明（核心模块及其职责）
+- 关键设计决策
+
+## Code Style & Conventions
+
+- 与语言默认规范不同的代码风格规则
+- 命名约定
+- 提交信息格式 / PR 规范
+- 分支策略
+
+## Notes
+
+- 非显而易见的陷阱和注意事项
+- 环境变量和设置步骤
+- 特殊的工作流要求
+
+## Key Files
+
+- 项目关键文件的路径和用途说明（可选）
+\`\`\`
+
+## 指导原则
+
+- **包含**：无法通过编程常识推断的信息、项目特有的命令和约定、非显而易见的架构决策
+- **排除**：文件逐个列表、标准语言惯例（如"JavaScript 使用分号"）、通用编程建议、经常变化的信息（如 API 文档）、显而易见的命令（如 \`npm install\`）
+- **引用**：使用 \`path/to/file\` 语法引用具体文件路径
+
+## 现有配置
+
+如果项目已存在 \`CLAUDE.md\`、\`.cursorrules\`、\`AGENTS.md\` 等 AI 配置文件，请读取它们，提取其中对 AI 仍有价值的信息合并到新的 \`nano-code.md\` 中。
+
+## 输出
+
+使用 Write 工具创建 \`nano-code.md\`。如果文件已存在，读取它并提供改进建议。`;

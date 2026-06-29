@@ -53,6 +53,7 @@ npm start
 | `/permissions reset` | 清空权限 allowlist |
 | `/doctor` | 诊断系统健康状态（配置、API 连通性、插件加载） |
 | `/plugin`, `/plugins` | 管理插件 — `/plugin list`, `/plugin enable <name>`, `/plugin disable <name>` |
+| `/init` | 初始化 nano-code.md — 分析项目结构并生成代码库文档 |
 
 `/compact` 支持参数：`/compact --dry-run`（预览）、`/compact --preserve 3`（保留最近 3 组对话）、`/compact --model gpt-4o-mini`（指定总结模型），剩余参数作为自定义总结侧重指令。
 

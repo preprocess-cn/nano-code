@@ -64,6 +64,7 @@
 | ✅ | Ctrl+C 取消执行 | 执行中 Ctrl+C 中断 LLM 流 + 停止 agent，返回提示状态 |
 | ✅ | LLM AbortSignal | `sendSystemMessage` 支持 `AbortSignal`，立即中断 HTTP 流避免浪费 token |
 | ✅ | WebFetch/WebSearch 工具 | 网络获取与搜索，让 LLM 获取实时信息 |
+| ✅ | **`/init` 命令** | 分析项目结构、发现构建/测试命令、记录架构和约定，生成 `nano-code.md` 代码库文档 |
 | ✅ | 代码审查 `/review` | Review 内置 skill，审查 git diff 的正确性/性能/安全，输出 CRITICAL/WARNING/SUGGESTION 三级报告 |
 
 ## P1 — 规划、任务与记忆
