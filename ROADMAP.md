@@ -47,6 +47,12 @@
 | ✅ | **交互式 `/plugin` 命令** | 会话中通过 `/plugin list/enable/disable/manage` 管理插件；Ink 下进入全屏交互式插件管理器，`↑↓`/`Enter`/`/` 搜索/Esc 退出；REPL 回退文本列表 |
 | ☐ | 插件热加载 | 运行时开关插件无需重启 |
 | ✅ | 上下文裁剪与压缩 | `/compact` 内建命令 + 基于 LLM 摘要的智能压缩，保留最近对话、移植 Claude Code 9 段总结模板 |
+| ✅ | 后台 agent 执行 | `agent-<name>({ query, run_in_background: true })` 异步执行，主 agent 立即返回 `taskId`，完成后自动注入结果；可同时启动多个后台 agent |
+| ✅ | Agent 任务状态查询 | `agent_task_status({ task_id? })` 工具查询单个或全部后台任务状态 |
+| ✅ | Agent 间通信 | `send_message({ to, summary, message })` 工具，基于 `MessageBus` 单例的信箱模式，支持 agent 名称或 taskId 寻址 |
+| ✅ | Agent Coordinator 协调层 | 统一管理所有 agent 工具的注册、后台执行生命周期和 agent 间消息传递，替代逐一手动注册 |
+| ✅ | Ink 后台任务指示器 | `BackgroundTaskBar` 底栏组件，实时展示运行/完成/失败状态，5 秒自动清理 |
+| ✅ | 后台任务展示层事件 | `BackgroundTaskEvent` + `onBackgroundTask` 回调，REPL 和 Ink 双实现 |
 | ✅ | **Ink 上下文可视化** | `InkApp.tsx` 内联 `ContextVis` 组件渲染色块网格，数据源为 `analyzer.ts` 的 7 维度分析 |
 | ✅ | 多轮摘要记忆 | 自动压缩默认启用（`autoCompactEnabled: true`），触发策略改为基于当前消息大小 + slide window 多次压缩，压缩前全量备份至 `.nano-code-session.pre-compact.json` |
 | ✅ | 角色模式 & 斜杠命令 | profiles/ 通过 `--profile` 启动时加载，主 agent 可通过斜杠 `/` 切换 agent；profile 运行时切换暂不支持 |
@@ -213,4 +219,8 @@ MCP 和 agent 工具都是"主 agent 委托能力给外部"，区别在：
 - **核心层独立打包**：核心文件移至 `src/core/`，只暴露接口层；`agent.ts` 依赖 `DisplayPlugin` 接口而非 `DisplayManager`；`src/core/index.ts` 公共 API 导出
 - **display-strings.ts 消除**：集中式字符串文件已删除，所有字符串分散到各所属模块；核心模块（llm.ts）不再包含展示字符串，改为原始诊断日志
 - **StatusEvent level 协议**：新增 `MessageLevel` 类型（`status`/`info`/`warn`/`error`/`success`），`StatusEvent.level` 必填，展示层据此渲染而非猜测 `formatStatusText`
+- **Agent 协调层**：`AgentCoordinator` 统一管理 agent 注册/后台执行/通信，`BackgroundTaskManager` 调度后台任务生命周期，`MessageBus` 信箱模式 agent 间消息传递
+- **后台 agent 执行**：`run_in_background=true` 异步执行，完成后自动注入主 agent 请求
+- **Agent 间通信**：`send_message` 工具基于 MessageBus 单例，支持 agent 名称/taskId 寻址
+- **后台任务展示**：`BackgroundTaskEvent` + `onBackgroundTask` 回调，Ink `BackgroundTaskBar` 底栏组件实时展示
 - **cli-display 展示插件**：非交互式 CLI 展示层，`display.enabled: false` 时自动启用，AI 响应输出到 stdout，状态/错误到 stderr

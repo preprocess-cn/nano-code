@@ -165,6 +165,18 @@ interface DisplayPlugin {
   onAgentTurnStart?(event: AgentEvent): void;  // agent 开始处理
   onAgentTurnEnd?(event: AgentEvent): void;    // agent 完成一轮处理
   onStateSnapshot?(snapshot: StateSnapshot): void; // 状态快照（含 messageCount）
+  onBackgroundTask?(event: BackgroundTaskEvent): void; // 后台任务状态变更
+}
+```
+
+`BackgroundTaskEvent` 结构：
+
+```typescript
+interface BackgroundTaskEvent {
+  agentName: string;
+  taskId: string;
+  taskStatus: 'started' | 'completed' | 'error';
+  message: string;
 }
 ```
 
@@ -342,6 +354,42 @@ plugins:
 - 递归防护：子 agent 内部不注册 agent 工具
 - 子 agent 如需持久记忆，在定义中指定独立 `namespace`
 
+### 后台执行
+
+子 agent 支持异步后台执行，适用于耗时任务：
+
+```bash
+# 调用子 agent 时设置 run_in_background=true
+# 主 agent 立即返回 taskId，无需等待子 agent 完成
+agent-dba({ query: "分析慢查询", run_in_background: true })
+# → { taskId: "task_1", agentName: "dba", status: "started" }
+```
+
+后台任务特性：
+- 主 agent 可同时启动多个后台 agent，各自独立执行
+- 后台 agent 完成后，结果自动注入到主 agent 的下一次 LLM 请求中
+- 通过 `agent_task_status({ task_id? })` 工具查询单个或全部任务状态
+- 后台任务状态在 `DisplayPlugin` 中以 `onBackgroundTask` 事件通知：
+  - **REPL 模式**：打印 `[后台] agent名（taskId）...` 消息
+  - **Ink 模式**：底栏显示 `BackgroundTaskBar`，实时展示运行/完成/失败状态，完成后 5 秒自动消失
+
+### Agent 间通信
+
+运行中的 agent 可以通过 `send_message` 工具互相通信：
+
+```bash
+# 主 agent 给后台 agent 发送消息
+send_message({ to: "task_1", summary: "提供上下文", message: "检查 users 表结构" })
+
+# 后台 agent 给主 agent 回复
+send_message({ to: "main", summary: "查询结果", message: "users 表有 3 个索引..." })
+```
+
+- `to` 参数支持 agent 名称（如 `"dba"`）或任务 ID（如 `"task_3"`）
+- 消息在接收方下一次 LLM 请求时自动注入，`onBeforeRequest` 钩子处理
+- 接收方在系统提示中看到 `## 新消息` 提示，消息内容自动注入为 user 角色消息
+- `MessageBus` 单例管理所有信箱，agent 退出时自动清理
+
 ## 架构
 
 ```
@@ -353,17 +401,20 @@ plugins:
 ┌──────────────────────────────────┴────────────────┐
 │                  Plugins                           │
 │  fs │ command │ memory │ MCP │ token-budget │ …  │
-└───────────────────────────────────────────────────┘
-         ↕ 子 agent 调用（独立实例）
-┌─────────────────────────────────────────────────┐
-│            Agent 工具（~/.nano-code/agents/）     │
+├───────────────────────────────────────────────────┤
+│           Agent Coordinator                       │
+│  Agent 注册 / 后台任务管理 / send_message 通信     │
+│  BackgroundTaskManager │ MessageBus               │
+├───────────────────────────────────────────────────┤
+│            Agent 工具（~/.nano-code/agents/）      │
 │  agent:dba  │  agent:reviewer  │  …              │
-└─────────────────────────────────────────────────┘
+└───────────────────────────────────────────────────┘
 ```
 
 - **Core** (`src/core/`) — 核心引擎，零 UI 依赖。Agent 循环、LLM 通信、插件编排、配置管理、会话持久化、类型定义。通过 `src/core/index.ts` 暴露公共 API。
 - **Display** (`src/display.ts`) — `DisplayPlugin` 接口 + `DisplayManager` 编排。核心层只依赖 `DisplayPlugin` 接口，不耦合具体实现。
 - **Plugins** — 所有功能通过插件提供，Core 不内置任何业务工具。插件间通过 `IStore` 共享状态，无需互相依赖
+- **Agent Coordinator** — 统一管理所有 agent 工具的注册、后台执行生命周期和 agent 间消息传递（`BackgroundTaskManager` + `MessageBus` 单例）
 - **Agent 工具** — 领域专家子 agent，通过 YAML 定义，自动注册为工具，独立上下文执行
 
 ### 内置插件
@@ -376,7 +427,7 @@ plugins:
 | **memory** | `"memory": {}` | 记忆存储与检索，支持多会话持久化和标签查询 |
 | **skills** | 系统白名单自动启用 | 10 个内置 TypeScript 技能 + 文件系统 SKILL.md 技能，`skill`/`skills_list`/`skill_view`/`run_agent` 工具 |
 | **store** | 内建默认 `InMemoryStore` | 插件间共享状态通道，`IStore` 接口可替换实现 |
-| **agent** | 自动发现 `~/.nano-code/agents/*.yaml` | `agent-<name>` 子 agent 调用工具 |
+| **agent** | 自动发现 `~/.nano-code/agents/*.yaml` | `agent-<name>` 子 agent 调用工具；`agent_task_status` 查询后台任务；`send_message` agent 间通信 |
 | **task-plan** | 内建默认注册 | Plan Mode（`enter_plan_mode`/`exit_plan_mode`） + 任务系统（`task_create`/`task_list`/`task_update`/`task_stop`） |
 | **display** | 通过 `display.plugin` 配置 | 展示层插件，支持生命周期事件（独立于 PluginRegistry） |
 
