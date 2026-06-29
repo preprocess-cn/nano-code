@@ -44,6 +44,7 @@
 | ✅ | **`plugin mcp-add`** | 对标 `claude mcp add`，快速添加 MCP server 到 `.mcp.json`，支持 `--scope user` 写到 `~/.nano-code/.mcp.json` |
 | ✅ | **`plugin autoscan`** | 扫描 `~/.claude/.mcp.json` 将 Claude Code 已安装的 MCP 插件导入到 nano-code 自有配置 |
 | ✅ | **轻量权限系统** | PluginRegistry allowlist + agent 层 permission gate + fs/command 加固，Ink 权限弹窗三选项（批准/始终允许/拒绝），`/permissions` 查看/管理已允许工具 |
+| ✅ | **交互式 `/plugin` 命令** | 会话中通过 `/plugin list/enable/disable/manage` 管理插件；Ink 下进入全屏交互式插件管理器，`↑↓`/`Enter`/`/` 搜索/Esc 退出；REPL 回退文本列表 |
 | ☐ | 插件热加载 | 运行时开关插件无需重启 |
 | ✅ | 上下文裁剪与压缩 | `/compact` 内建命令 + 基于 LLM 摘要的智能压缩，保留最近对话、移植 Claude Code 9 段总结模板 |
 | ✅ | **Ink 上下文可视化** | `InkApp.tsx` 内联 `ContextVis` 组件渲染色块网格，数据源为 `analyzer.ts` 的 7 维度分析 |

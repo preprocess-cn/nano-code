@@ -52,6 +52,7 @@ npm start
 | `/permissions` | 查看会话已允许免确认的工具列表 |
 | `/permissions reset` | 清空权限 allowlist |
 | `/doctor` | 诊断系统健康状态（配置、API 连通性、插件加载） |
+| `/plugin`, `/plugins` | 管理插件 — `/plugin list`, `/plugin enable <name>`, `/plugin disable <name>` |
 
 `/compact` 支持参数：`/compact --dry-run`（预览）、`/compact --preserve 3`（保留最近 3 组对话）、`/compact --model gpt-4o-mini`（指定总结模型），剩余参数作为自定义总结侧重指令。
 
@@ -94,6 +95,15 @@ nano-code plugin mcp-add my-server --transport http --url http://localhost:8080
 扫描 Claude Code 的 `~/.claude/.mcp.json`，将其中尚未在 nano-code 自有配置中的 MCP server 导入到 `~/.nano-code/.mcp.json`。幂等安全，已导入的条目不会重复写入。
 
 系统插件（白名单）禁用/启用仅通过配置文件操作。
+
+### 交互式插件管理
+
+会话中通过 `/plugin` 斜杠命令管理插件：
+
+- **REPL 模式**：`/plugin list` 查看列表，`/plugin enable <name>` / `/plugin disable <name>` 切换状态
+- **Ink 模式**：直接输入 `/plugin` 进入交互式插件管理器，`↑↓` 选择、`Enter` 切换启用/禁用、`/` 搜索过滤、`Esc`/`q` 退出
+
+更改需要重启 nano-code 或运行 `/reload-plugins` 后生效。
 
 ### 展示层配置
 
