@@ -70,12 +70,28 @@ plugins:
 ### 插件管理命令
 
 ```bash
-nano-code plugin list                          # 列出所有插件及状态（含 agent 插件）
+nano-code plugin list                          # 列出所有插件及状态（含 agent 插件 + MCP server）
 nano-code plugin install <source>              # 安装插件（npm 包/git 仓库/本地路径）
+nano-code plugin mcp-add <name> [选项] [--] <command> [args...]  # 添加 MCP server
+nano-code plugin autoscan                      # 从 ~/.claude/.mcp.json 导入 MCP server
 nano-code plugin enable <name>                 # 启用插件或 agent
 nano-code plugin disable <name>                # 禁用插件或 agent
 nano-code doctor                               # 诊断运行环境健康状态
 ```
+
+#### `plugin mcp-add`
+
+```bash
+nano-code plugin mcp-add my-server -- npx -y @modelcontextprotocol/server-filesystem
+nano-code plugin mcp-add my-server --scope user -- npx -y my-mcp-package   # 写到 ~/.nano-code/.mcp.json
+nano-code plugin mcp-add my-server --transport http --url http://localhost:8080
+```
+
+写入目标：`--scope user` → `~/.nano-code/.mcp.json`；默认（project）→ `$CWD/.mcp.json`。
+
+#### `plugin autoscan`
+
+扫描 Claude Code 的 `~/.claude/.mcp.json`，将其中尚未在 nano-code 自有配置中的 MCP server 导入到 `~/.nano-code/.mcp.json`。幂等安全，已导入的条目不会重复写入。
 
 系统插件（白名单）禁用/启用仅通过配置文件操作。
 
@@ -421,7 +437,37 @@ interface Task {
 
 ## MCP 集成
 
-nano-code 支持 [Model Context Protocol](https://modelcontextprotocol.io/) 标准协议。在 `.nano-code.yaml` 中声明 MCP Server：
+nano-code 支持 [Model Context Protocol](https://modelcontextprotocol.io/) 标准协议。MCP Server 可通过三种方式配置，启动时自动合并加载：
+
+### 方式一：`.mcp.json`（推荐）
+
+遵循 MCP 生态标准的 `.mcp.json` 文件，支持三个层级，从低到高合并：
+
+| 层级 | 路径 | 说明 |
+|------|------|------|
+| 全局 nano-code | `~/.nano-code/.mcp.json` | nano-code 自有全局配置 |
+| 项目 | `$CWD/.mcp.json` | 项目级配置，覆盖全局同名条目 |
+| Claude Code 兼容 | `~/.claude/.mcp.json` | **只读发现**，nano-code 不会写入此文件 |
+
+```json
+{
+  "mcpServers": {
+    "my-server": {
+      "command": "npx",
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "."]
+    }
+  }
+}
+```
+
+`plugin mcp-add` 命令管理 `.mcp.json` 条目：
+
+```bash
+nano-code plugin mcp-add my-server -- npx -y @modelcontextprotocol/server-filesystem
+nano-code plugin mcp-add my-server --scope user -- npx -y my-mcp-package
+```
+
+### 方式二：`.nano-code.yaml` 插件段
 
 ```yaml
 plugins:
@@ -437,6 +483,25 @@ plugins:
     command: uvx
     args:
       - mcp-server-playwright
+```
+
+### 方式三：自动发现（零配置）
+
+已通过各 MCP 项目官方安装脚本（如 `codebase-memory-mcp` 的 `install.sh`）写入 `~/.claude/.mcp.json` 的 MCP server，nano-code 启动时自动发现并加载。无需额外配置。
+
+也可通过 `plugin autoscan` 将其导入到 nano-code 自有配置：
+
+```bash
+nano-code plugin autoscan
+```
+
+### 迁移 Claude Code 的 MCP 插件
+
+如果之前使用 Claude Code 且已安装 MCP server（如 codebase-memory-mcp），只需：
+
+```bash
+nano-code plugin autoscan    # 一次性导入所有插件到 nano-code 配置
+# 或完全零配置：启动后自动从 ~/.claude/.mcp.json 发现
 ```
 
 ## 插件开发

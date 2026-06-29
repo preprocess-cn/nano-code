@@ -40,12 +40,15 @@
 |---|------|------|
 | ☐ | CI/CD | GitHub Actions + 自动测试 |
 | ☐ | 发布准备 | package.json 补全、README 更新、npm publish |
+| ✅ | **MCP 自动发现** | 启动时自动扫描 `~/.nano-code/.mcp.json` + `$CWD/.mcp.json` + `~/.claude/.mcp.json`（只读兼容），零配置加载已安装的 MCP server |
+| ✅ | **`plugin mcp-add`** | 对标 `claude mcp add`，快速添加 MCP server 到 `.mcp.json`，支持 `--scope user` 写到 `~/.nano-code/.mcp.json` |
+| ✅ | **`plugin autoscan`** | 扫描 `~/.claude/.mcp.json` 将 Claude Code 已安装的 MCP 插件导入到 nano-code 自有配置 |
 | ✅ | **轻量权限系统** | PluginRegistry allowlist + agent 层 permission gate + fs/command 加固，Ink 权限弹窗三选项（批准/始终允许/拒绝），`/permissions` 查看/管理已允许工具 |
 | ☐ | 插件热加载 | 运行时开关插件无需重启 |
 | ✅ | 上下文裁剪与压缩 | `/compact` 内建命令 + 基于 LLM 摘要的智能压缩，保留最近对话、移植 Claude Code 9 段总结模板 |
 | ✅ | **Ink 上下文可视化** | `InkApp.tsx` 内联 `ContextVis` 组件渲染色块网格，数据源为 `analyzer.ts` 的 7 维度分析 |
 | ✅ | 多轮摘要记忆 | 自动压缩默认启用（`autoCompactEnabled: true`），触发策略改为基于当前消息大小 + slide window 多次压缩，压缩前全量备份至 `.nano-code-session.pre-compact.json` |
-| ☐ | 角色模式 & 斜杠命令 | profiles/ 仅通过 `--profile` 启动时加载，主 agent 中不支持运行时切换 |
+| ✅ | 角色模式 & 斜杠命令 | profiles/ 通过 `--profile` 启动时加载，主 agent 可通过斜杠 `/` 切换 agent；profile 运行时切换暂不支持 |
 | ✅ | 内置 Skill 系统 | 11 个对齐 Claude Code 的内置技能：simplify/verify/batch/debug/lorem-ipsum/update-config/remember/stuck/skillify/keybindings/review |
 | ☐ | ToolUseContext | 工具执行的共享运行时上下文（模型覆盖、effort、权限绑定等），贯穿 ReAct 循环 |
 | ☐ | contextModifier | 工具可通过 ToolResponse 返回上下文修改器，作用于后续工具调用的执行环境 |
@@ -79,21 +82,21 @@
 
 | # | 状态 | 功能 | 说明 |
 |---|------|------|------|
-| 1 | ☐ | 全局错误边界 | 注册 `unhandledRejection`/`uncaughtException` 全局处理器，捕获后展示友好错误而非直接 crash |
-| 2 | ☐ | 优雅退出 | `process.exit()` 前清理 MCP 子进程、恢复终端状态、保存会话，避免终端残留 |
-| 3 | ☐ | MCP 子进程生命周期管理 | 主进程异常退出时自动 kill MCP 子进程，防止孤儿进程泄漏 |
-| 4 | ☐ | 减少 `any` 类型 | `rawToolCall`、`args`、`err` 等 30+ 处 `: any` 改为具体类型，提升编译期安全性 |
-| 5 | ☐ | package.json 补全 | 补充 `repository`、`bugs`、`homepage`、`engines`、`files`、`keywords` 字段，使 `npm publish` 可用 |
+| 1 | ✅ | 全局错误边界 | 注册 `unhandledRejection`/`uncaughtException` 全局处理器，捕获后展示友好错误而非直接 crash |
+| 2 | ✅ | 优雅退出 | `process.exit()` 前清理 MCP 子进程、恢复终端状态、保存会话，避免终端残留 |
+| 3 | ✅ | MCP 子进程生命周期管理 | 主进程异常退出时自动 kill MCP 子进程，防止孤儿进程泄漏 |
+| 4 | ✅ | 减少 `any` 类型 | `rawToolCall`、`args`、`err` 等 30+ 处 `: any` 改为具体类型，提升编译期安全性 |
+| 5 | ✅ | package.json 补全 | 补充 `repository`、`bugs`、`homepage`、`engines`、`files`、`keywords` 字段，使 `npm publish` 可用 |
 
 ## P1 — 用户可诊断
 
 | # | 状态 | 功能 | 说明 |
 |---|------|------|------|
-| 1 | ☐ | 结构化日志 | 替代 `console.log`/`console.error`，支持日志级别（debug/info/warn/error）、文件输出、`--verbose` 开关 |
-| 2 | ☐ | 诊断命令 `nano-code doctor` | 一键验证：配置文件解析、API 连通性、插件加载、环境变量，输出诊断报告 |
+| 1 | ✅ | 结构化日志 | 替代 `console.log`/`console.error`，支持日志级别（debug/info/warn/error）、文件输出、`--verbose` 开关 |
+| 2 | ✅ | 诊断命令 `nano-code doctor` | 一键验证：配置文件解析、API 连通性、插件加载、环境变量，输出诊断报告 |
 | 3 | ☐ | 升级机制 | `nano-code upgrade` 检查 npm registry 最新版本并升级，启动时可选做版本检查 |
-| 4 | ☐ | 配置版本化与迁移 | 配置文件添加 `configVersion` 字段，向后不兼容变更时自动迁移 |
-| 5 | ☐ | 错误信息改进 | 替换 `"工具物理执行失败"` 等半中半英的笼统错误为用户可理解的描述 + 解决指引 |
+| 4 | ✅ | 配置版本化与迁移 | 配置文件添加 `configVersion` 字段，向后不兼容变更时自动迁移 |
+| 5 | ✅ | 错误信息改进 | 替换 `"工具物理执行失败"` 等半中半英的笼统错误为用户可理解的描述 + 解决指引 |
 
 ## P2 — 开发者体验
 
@@ -101,7 +104,7 @@
 |---|------|------|------|
 | 1 | ☐ | CI/CD | GitHub Actions：push/PR 自动跑测试 + tsc 类型检查，release tag 自动 npm publish |
 | 2 | ☐ | CONTRIBUTING.md | 贡献指南：开发环境搭建、代码规范、PR 流程、测试要求 |
-| 3 | ☐ | 依赖锁定 | `package-lock.json` 入版本库，`npm install` 的行为跨机器可复现 |
+| 3 | ✅ | 依赖锁定 | `package-lock.json` 入版本库，`npm install` 的行为跨机器可复现 |
 | 4 | ☐ | npm publish 产出物 | 配置 `files` 字段或 `.npmignore`，只发布 `dist/` + `README.md` + `LICENSE`，不发布源码和测试 |
 | 5 | ☐ | E2E 测试 | 端到端 agent 循环测试：模拟 LLM 响应，验证工具调用 → 结果回注 → 下一轮循环的全链路 |
 

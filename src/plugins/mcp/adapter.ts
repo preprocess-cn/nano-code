@@ -1,5 +1,8 @@
 import { spawn, ChildProcess } from 'child_process';
 import * as readline from 'readline';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
 import { NanoPlugin } from '../../core/plugin.js';
 import { ToolDefinition, ToolResponse, ToolContext } from '../../core/contract.js';
 import { NanoConfig } from '../../core/config.js';
@@ -454,11 +457,40 @@ export function createMCPPlugin(transport: MCPTransport, sideEffect = true): Nan
   };
 }
 
-// ── Load MCP plugins from config ──
+// ── Read .mcp.json helpers ──
+
+function readMcpJsonServers(filePath: string): Record<string, any> | null {
+  try {
+    const raw = fs.readFileSync(filePath, 'utf-8');
+    const parsed = JSON.parse(raw);
+    return (parsed && typeof parsed.mcpServers === 'object' && parsed.mcpServers !== null)
+      ? parsed.mcpServers
+      : null;
+  } catch { return null; }
+}
+
+let _mcpJsonPaths: string[] | null = null;
+
+/** 覆盖 .mcp.json 扫描路径（用于测试或自定义配置）。设为空数组可禁用扫描。 */
+export function setMcpJsonPaths(paths: string[]): void {
+  _mcpJsonPaths = paths;
+}
+
+function getMcpJsonPaths(): string[] {
+  if (_mcpJsonPaths !== null) return _mcpJsonPaths;
+  return [
+    path.join(os.homedir(), '.nano-code', '.mcp.json'),   // nano-code 全局
+    path.join(process.cwd(), '.mcp.json'),                   // 项目配置
+    path.join(os.homedir(), '.claude', '.mcp.json'),         // Claude Code 全局（只读发现）
+  ];
+}
+
+// ── Load MCP plugins from config + .mcp.json ──
 
 export function buildMCPPluginsFromConfig(config: NanoConfig): NanoPlugin[] {
   const plugins: NanoPlugin[] = [];
 
+  // Phase 1: From nano-code config.plugins
   for (const [name, entry] of Object.entries(config.plugins)) {
     if (entry.type !== 'mcp' || entry.enabled === false) continue;
 
@@ -486,6 +518,40 @@ export function buildMCPPluginsFromConfig(config: NanoConfig): NanoPlugin[] {
     }
 
     plugins.push(createMCPPlugin(mcpTransport, entry.sideEffect ?? true));
+  }
+
+  // Phase 2: From .mcp.json 文件（nano-code 全局 → 项目 → Claude Code 全局）
+  // seenByEntry 跟踪 .mcp.json 中已注册的 server 名（防止跨文件重复）
+  const seenByEntry = new Set<string>();
+  for (const [name, entry] of Object.entries(config.plugins)) {
+    if (entry.type === 'mcp' && entry.enabled !== false) seenByEntry.add(name);
+  }
+
+  for (const filePath of getMcpJsonPaths()) {
+    const servers = readMcpJsonServers(filePath);
+    if (!servers) continue;
+
+    for (const [name, cfg] of Object.entries(servers)) {
+      if (seenByEntry.has(name)) continue;
+      seenByEntry.add(name);
+
+      // 用户通过 nano-code config 显式禁用 → 跳过
+      const override = config.plugins[name];
+      if (override?.enabled === false) continue;
+
+      let mcpTransport: MCPTransport;
+
+      if (cfg.url) {
+        mcpTransport = new MCPHTTPTransport(cfg.url, 10000);
+      } else if (cfg.command) {
+        mcpTransport = new MCPStdioTransport(cfg.command, cfg.args || [], cfg.env || {}, 10000);
+      } else {
+        console.warn(`[mcp] .mcp.json "${name}" 缺少 command 或 url，跳过。`);
+        continue;
+      }
+
+      plugins.push(createMCPPlugin(mcpTransport, true));
+    }
   }
 
   return plugins;

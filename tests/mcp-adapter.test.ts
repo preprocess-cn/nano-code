@@ -1,11 +1,15 @@
-import { describe, it, afterEach } from 'node:test';
+import { describe, it, beforeEach, afterEach } from 'node:test';
 import * as assert from 'node:assert/strict';
 import { writeFileSync, mkdtempSync, rmSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
-import { MCPStdioTransport, createMCPPlugin, buildMCPPluginsFromConfig } from '../src/plugins/mcp/adapter.js';
+import { MCPStdioTransport, createMCPPlugin, buildMCPPluginsFromConfig, setMcpJsonPaths } from '../src/plugins/mcp/adapter.js';
 import type { MCPTransport } from '../src/plugins/mcp/adapter.js';
 import { NanoConfig } from '../src/core/config.js';
+
+// ── Disable .mcp.json scanning in tests to avoid interference from user's global config ──
+beforeEach(() => setMcpJsonPaths([]));
+afterEach(() => setMcpJsonPaths([]));
 
 // ── Temp file helpers (avoid shell quoting issues with inline -e scripts) ──
 
@@ -299,6 +303,54 @@ describe('buildMCPPluginsFromConfig', () => {
       core: { model: 'gpt-4o', temperature: 0, maxTokens: 4096, defaultTimeout: 120000 },
       plugins: {
         'bad-http': { type: 'mcp', transport: 'http', enabled: true },
+      },
+    };
+
+    const plugins = buildMCPPluginsFromConfig(config);
+    assert.equal(plugins.length, 0);
+  });
+
+  it('loads servers from .mcp.json paths', () => {
+    // Point to a temp .mcp.json
+    const dir = mkdtempSync(join(tmpdir(), 'mcp-json-test-'));
+    tmpScripts.push(dir);
+    const mcpJsonPath = join(dir, '.mcp.json');
+    writeFileSync(mcpJsonPath, JSON.stringify({
+      mcpServers: {
+        'test-mcp': { command: 'echo', args: ['hello'] },
+      },
+    }));
+
+    setMcpJsonPaths([mcpJsonPath]);
+
+    const config: NanoConfig = {
+      configVersion: 1,
+      core: { model: 'gpt-4o', temperature: 0, maxTokens: 4096, defaultTimeout: 120000 },
+      plugins: {},
+    };
+
+    const plugins = buildMCPPluginsFromConfig(config);
+    assert.equal(plugins.length, 1);
+    assert.ok(plugins[0].name.includes('test-mcp') || plugins[0].name.includes('echo'));
+  });
+
+  it('nano-code config can disable .mcp.json servers', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mcp-json-test-'));
+    tmpScripts.push(dir);
+    const mcpJsonPath = join(dir, '.mcp.json');
+    writeFileSync(mcpJsonPath, JSON.stringify({
+      mcpServers: {
+        'test-mcp': { command: 'echo', args: ['hello'] },
+      },
+    }));
+
+    setMcpJsonPaths([mcpJsonPath]);
+
+    const config: NanoConfig = {
+      configVersion: 1,
+      core: { model: 'gpt-4o', temperature: 0, maxTokens: 4096, defaultTimeout: 120000 },
+      plugins: {
+        'test-mcp': { enabled: false },
       },
     };
 

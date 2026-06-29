@@ -5,6 +5,13 @@ import * as yaml from 'js-yaml';
 import { execSync } from 'child_process';
 import { loadConfig, getSystemWhitelist } from './core/config.js';
 import { loadAgentDefinitions } from './agent-loader.js';
+import {
+  getProjectMcpJsonPath,
+  getGlobalMcpJsonPath,
+  getClaudeMcpJsonPath,
+  addMcpServer,
+  importFromClaudeConfig,
+} from './plugins/mcp/config-writer.js';
 
 const GLOBAL_DIR = path.join(os.homedir(), '.nano-code');
 const PROJECT_CONFIG = path.join(process.cwd(), '.nano-code.yaml');
@@ -16,14 +23,18 @@ export async function handlePluginCommand(args: string[], _globalOptions: any): 
     case 'list': return listPlugins();
     case 'enable': return setEnabled(args[1], true);
     case 'disable': return setEnabled(args[1], false);
+    case 'mcp-add': return mcpAddCommand(args.slice(1), _globalOptions);
+    case 'autoscan': return autoscanCommand();
     default:
       console.log('用法: nano-code plugin <command> [options]');
       console.log('');
       console.log('命令:');
-      console.log('  install <source>   安装插件（npm 包 / git 仓库 / 本地路径）');
-      console.log('  list               列出所有已安装插件');
-      console.log('  enable <name>      启用插件');
-      console.log('  disable <name>     禁用插件');
+      console.log('  install <source>      安装插件（npm 包 / git 仓库 / 本地路径）');
+      console.log('  mcp-add <name> [选项] 添加 MCP server（对标 claude mcp add）');
+      console.log('  autoscan              扫描 ~/.claude/.mcp.json 导入插件到 nano-code');
+      console.log('  list                  列出所有已安装插件');
+      console.log('  enable <name>         启用插件');
+      console.log('  disable <name>        禁用插件');
   }
 }
 
@@ -78,7 +89,9 @@ async function installFromGit(url: string): Promise<void> {
   }
 
   if (!await detectAndInstallFromDir(targetDir, repoName, url)) {
-    console.error(`无法识别 "${url}" 的插件类型。`);
+    console.error(`无法自动安装 "${url}"。`);
+    console.error(`该项目可能不是 Node.js 插件。请尝试运行其官方安装脚本。`);
+    console.error(`对于 MCP 类工具，nano-code 会自动从 ~/.claude/.mcp.json 发现已安装的 MCP server。`);
   }
 }
 
@@ -96,21 +109,24 @@ async function installFromPath(localPath: string): Promise<void> {
   }
 }
 
-/** 从本地目录检测并安装插件（先检查 bin → MCP，再检查 main → NanoPlugin）。 */
+/** 从本地目录检测并安装插件（先检查 bin → MCP 写入 .mcp.json，再检查 main → NanoPlugin 写入 .nano-code.yaml）。 */
 async function detectAndInstallFromDir(dir: string, name: string, source: string): Promise<boolean> {
   const pkgPath = path.join(dir, 'package.json');
   if (!fs.existsSync(pkgPath)) return false;
 
   const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
 
-  // MCP 模式：package.json 有 bin 字段
+  // MCP 模式：package.json 有 bin 字段 → 写入项目 .mcp.json
   if (pkg.bin) {
+    const { addMcpServer, getProjectMcpJsonPath } = await import('./plugins/mcp/config-writer.js');
     const binName = typeof pkg.bin === 'string' ? name : Object.keys(pkg.bin)[0];
     const binPath = typeof pkg.bin === 'string'
       ? path.join(dir, pkg.bin)
       : path.join(dir, pkg.bin[binName]);
-    addToProjectConfig(binName, { type: 'mcp', command: 'node', args: [binPath] });
+    const filePath = getProjectMcpJsonPath();
+    addMcpServer(filePath, binName, { command: 'node', args: [binPath] });
     console.log(`已安装 MCP 插件 "${binName}" <- ${source}`);
+    console.log(`配置已写入 ${filePath}，重启 nano-code 后生效。`);
     return true;
   }
 
@@ -142,21 +158,204 @@ function addToProjectConfig(name: string, entry: Record<string, any>): void {
   console.log(`已写入项目配置 ${PROJECT_CONFIG}`);
 }
 
+// ── mcp-add ──
+
+async function mcpAddCommand(args: string[], globalOpts: Record<string, any> = {}): Promise<void> {
+  // Parse: nano-code plugin mcp-add <name> [--scope user] [-e KEY=VAL] [--transport http] [--url URL] [-- <command> <args...>]
+  const parsed = parseMcpAddArgs(args);
+  if (!parsed) return;
+
+  // cac 可能将 --scope 解析为 global option，补充进来
+  if (!parsed.scopeOverridden && (globalOpts.scope === 'user' || globalOpts.scope === 'project')) {
+    parsed.scope = globalOpts.scope;
+  }
+
+  const { name, scope, env, transport, url, command, cmdArgs } = parsed;
+
+  // Determine target file（user → nano-code 全局，project → 项目目录）
+  const filePath = scope === 'user'
+    ? path.join(os.homedir(), '.nano-code', '.mcp.json')
+    : getProjectMcpJsonPath();
+
+  let serverConfig: Record<string, any>;
+  if (transport === 'http' || transport === 'sse') {
+    if (!url) {
+      console.error(`--transport ${transport} 需要指定 --url。`);
+      return;
+    }
+    serverConfig = { url };
+  } else {
+    if (!command) {
+      console.error('stdio 模式需要指定命令：nano-code plugin mcp-add <name> -- <command> [args...]');
+      return;
+    }
+    serverConfig = { command, args: cmdArgs };
+    if (Object.keys(env).length > 0) serverConfig.env = env;
+  }
+
+  addMcpServer(filePath, name, serverConfig);
+  console.log(`MCP server "${name}" 已添加到 ${filePath}`);
+  console.log(`重启 nano-code 后生效，或运行 /reload-plugins 立即加载。`);
+}
+
+// ── autoscan ──
+
+async function autoscanCommand(): Promise<void> {
+  const claudePath = getClaudeMcpJsonPath();
+  const claudeCfg = (await import('./plugins/mcp/config-writer.js')).readMcpJson(claudePath);
+  if (!claudeCfg || Object.keys(claudeCfg.mcpServers).length === 0) {
+    console.log(`~/.claude/.mcp.json 中未发现 MCP server。`);
+    return;
+  }
+
+  const count = importFromClaudeConfig();
+  if (count === 0) {
+    console.log(`已扫描 ~/.claude/.mcp.json，全部条目已在 ~/.nano-code/.mcp.json 中，无需导入。`);
+    return;
+  }
+
+  console.log(`已从 Claude Code 导入 ${count} 个 MCP server 到 ~/.nano-code/.mcp.json：`);
+  for (const [name, cfg] of Object.entries(claudeCfg.mcpServers)) {
+    console.log(`  ${name.padEnd(30)} ${cfg.command || cfg.url || ''}`);
+  }
+  console.log(`重启 nano-code 后生效，或运行 /reload-plugins 立即加载。`);
+}
+
+interface McpAddParsed {
+  name: string;
+  scope: 'project' | 'user';
+  scopeOverridden: boolean;
+  env: Record<string, string>;
+  transport: string;
+  url?: string;
+  command?: string;
+  cmdArgs: string[];
+}
+
+function parseMcpAddArgs(args: string[]): McpAddParsed | null {
+  if (args.length === 0) {
+    console.error('用法: nano-code plugin mcp-add <name> [选项] [-- <command> <args...>]');
+    console.error('示例:');
+    console.error('  nano-code plugin mcp-add my-server -- npx -y my-mcp-package');
+    console.error('  nano-code plugin mcp-add my-server --scope user -- npx -y my-mcp-package');
+    console.error('  nano-code plugin mcp-add my-server --transport http --url http://localhost:8080');
+    return null;
+  }
+
+  const name = args[0];
+  if (!/^[a-zA-Z0-9_-]+$/.test(name)) {
+    console.error('插件名只能包含字母、数字、连字符和下划线。');
+    return null;
+  }
+
+  let scope: 'project' | 'user' = 'project';
+  let scopeOverridden = false;
+  const env: Record<string, string> = {};
+  let transport = 'stdio';
+  let url: string | undefined;
+  let command: string | undefined;
+  const cmdArgs: string[] = [];
+
+  let i = 1;
+  let afterDoubleDash = false;
+
+  while (i < args.length) {
+    const arg = args[i];
+
+    if (!afterDoubleDash && arg === '--') {
+      afterDoubleDash = true;
+      i++;
+      continue;
+    }
+
+    if (!afterDoubleDash && arg.startsWith('--')) {
+      switch (arg) {
+        case '--scope':
+          i++;
+          if (i >= args.length) { console.error('--scope 需要参数 (project|user)'); return null; }
+          if (args[i] !== 'project' && args[i] !== 'user') { console.error('--scope 只能是 project 或 user'); return null; }
+          scope = args[i] as 'project' | 'user';
+          scopeOverridden = true;
+          break;
+        case '--transport':
+          i++;
+          if (i >= args.length) { console.error('--transport 需要参数 (stdio|http|sse)'); return null; }
+          if (!['stdio', 'http', 'sse'].includes(args[i])) { console.error('--transport 只能是 stdio、http 或 sse'); return null; }
+          transport = args[i];
+          break;
+        case '--url':
+          i++;
+          if (i >= args.length) { console.error('--url 需要参数'); return null; }
+          url = args[i];
+          break;
+        default:
+          console.error(`未知选项: ${arg}`);
+          return null;
+      }
+      i++;
+      continue;
+    }
+
+    if (!afterDoubleDash && (arg === '-e' || arg === '--env')) {
+      i++;
+      if (i >= args.length) { console.error('-e 需要 KEY=VAL 格式'); return null; }
+      const match = args[i].match(/^([^=]+)=(.*)$/);
+      if (!match) { console.error(`环境变量格式错误: ${args[i]} （应为 KEY=VAL）`); return null; }
+      env[match[1]] = match[2];
+      i++;
+      continue;
+    }
+
+    if (!afterDoubleDash && arg.startsWith('-') && arg !== '-e') {
+      console.error(`未知选项: ${arg}`);
+      return null;
+    }
+
+    // Positional args
+    if (command === undefined) {
+      command = arg;
+    } else {
+      cmdArgs.push(arg);
+    }
+    i++;
+  }
+
+  return { name, scope, scopeOverridden, env, transport, url, command, cmdArgs };
+}
+
 // ── List ──
 
 async function listPlugins(): Promise<void> {
   const config = loadConfig();
   const whitelist = getSystemWhitelist(config);
 
-  // 收集所有插件名：已配置的 + 系统白名单中未配置的 + agent 定义
+  // 收集所有插件名：已配置的 + 系统白名单中未配置的 + agent 定义 + .mcp.json 中的 MCP server
   const names = new Set(Object.keys(config.plugins));
   for (const w of whitelist) names.add(w);
+
+  // 扫描 .mcp.json 中的 MCP server
+  const { readMcpJson } = await import('./plugins/mcp/config-writer.js');
+  const mcpJsonNames = new Set<string>();
+  const claudeJsonNames = new Set<string>();
+  for (const f of [getProjectMcpJsonPath(), getGlobalMcpJsonPath()]) {
+    const cfg = readMcpJson(f);
+    if (cfg) for (const name of Object.keys(cfg.mcpServers)) { names.add(name); mcpJsonNames.add(name); }
+  }
+  // Claude Code 全局配置（仅供显示，不做自动发现）
+  const claudeCfg = readMcpJson(getClaudeMcpJsonPath());
+  if (claudeCfg) {
+    for (const name of Object.keys(claudeCfg.mcpServers)) {
+      if (!mcpJsonNames.has(name)) { names.add(name); claudeJsonNames.add(name); }
+    }
+  }
 
   const rows: Array<{ name: string; status: string; tag: string }> = [];
   for (const name of names) {
     const cfg = config.plugins[name];
     const enabled = cfg ? cfg.enabled !== false : true;
-    const tag = whitelist.has(name) ? 'system' : (cfg?.type || 'user');
+    const tag = whitelist.has(name) ? 'system'
+      : (cfg?.type || (mcpJsonNames.has(name) ? 'mcp'
+        : (claudeJsonNames.has(name) ? 'claude' : 'user')));
     rows.push({ name, status: enabled ? 'active' : 'inactive', tag });
   }
 
