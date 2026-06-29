@@ -55,6 +55,12 @@ export interface DebugEvent extends AgentEvent {
   data: string;
 }
 
+export interface BackgroundTaskEvent extends AgentEvent {
+  taskId: string;
+  taskStatus: 'started' | 'completed' | 'error';
+  message: string;
+}
+
 // ════════════════════════════════════════════
 // StateSnapshot — agent 循环结束时的状态快照
 // ════════════════════════════════════════════
@@ -95,6 +101,8 @@ export interface DisplayPlugin {
   onToolResult?(event: ToolResultEvent): void;
   onError?(event: ErrorEvent): void;
   onDebug?(event: DebugEvent): void;
+
+  onBackgroundTask?(event: BackgroundTaskEvent): void;
 
   /** agent 开始思考/处理任务时触发 */
   onAgentTurnStart?(event: AgentEvent): void;
@@ -202,6 +210,10 @@ export class DisplayManager implements DisplayPlugin {
 
   onAgentTurnStart(event: AgentEvent): void {
     for (const p of this.plugins) p.onAgentTurnStart?.(event);
+  }
+
+  onBackgroundTask(event: BackgroundTaskEvent): void {
+    for (const p of this.plugins) p.onBackgroundTask?.(event);
   }
 
   onAgentTurnEnd(event: AgentEvent): void {

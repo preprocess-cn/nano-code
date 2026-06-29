@@ -6,8 +6,7 @@ import { buildMCPPluginsFromConfig } from './plugins/mcp/adapter.js';
 import { npmLoaderPlugin } from './plugins/npm-loader.js';
 import { loadSession, saveSession } from './core/session.js';
 import { handlePluginCommand, printPluginList } from './plugin-cli.js';
-import { loadAgentDefinitions } from './agent-loader.js';
-import { createAgentToolPlugin } from './agent-tool.js';
+import { createAgentCoordinatorPlugin } from './agent-coordinator.js';
 import { createSkillsPlugin } from './plugins/skills/index.js';
 import { registerAllDefaultBundledSkills, unregisterBundledSkill } from './plugins/skills/bundled/index.js';
 import { createCommandsPlugin, setCommandAgent } from './plugins/commands/index.js';
@@ -121,10 +120,7 @@ async function initializePlugins(
     disableSkillTool: config.skills?.disableSkillTool ?? false,
   }));
 
-  for (const def of loadAgentDefinitions()) {
-    if (def.enabled === false) continue;
-    await registry.register(createAgentToolPlugin(def, llmClient, displayMgr));
-  }
+  await registry.register(createAgentCoordinatorPlugin(llmClient, displayMgr));
 
   await registry.register(createCommandsPlugin(displayMgr, registry, config));
   await registry.register(createAgentSlashPlugin(displayMgr));

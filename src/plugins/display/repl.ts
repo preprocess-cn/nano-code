@@ -1,5 +1,5 @@
 import { intro, text, outro, isCancel, confirm } from '@clack/prompts';
-import { DisplayPlugin, StartConfig, StatusEvent, StreamEvent, ToolCallEvent, ToolResultEvent, ErrorEvent, DebugEvent, MessageLevel } from '../../display.js';
+import { DisplayPlugin, StartConfig, StatusEvent, StreamEvent, ToolCallEvent, ToolResultEvent, ErrorEvent, DebugEvent, BackgroundTaskEvent, MessageLevel } from '../../display.js';
 import { isMainAgent } from '../../core/contract.js';
 import { ThinkStream } from './think-stream.js';
 
@@ -153,6 +153,14 @@ export const replDisplay: DisplayPlugin = {
   onDebug(event: DebugEvent): void {
     if (!debug) return;
     console.log(p(event.agentName, event.data));
+  },
+
+  onBackgroundTask(event: BackgroundTaskEvent): void {
+    const icon = event.taskStatus === 'started' ? '→' : event.taskStatus === 'completed' ? '✓' : '✗';
+    const level = event.taskStatus === 'started' ? 'info' : event.taskStatus === 'completed' ? 'success' : 'error';
+    const prefix = statusLevelPrefix(level);
+    const stream = level === 'error' ? process.stderr : process.stdout;
+    stream.write(`${prefix}[后台] ${event.message}\n`);
   },
 };
 

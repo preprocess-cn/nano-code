@@ -1,7 +1,7 @@
-import type { DisplayPlugin, StartConfig, StatusEvent, StreamEvent, ToolCallEvent, ToolResultEvent, ErrorEvent, AgentEvent, StateSnapshot, MessageLevel } from '../../../display.js';
+import type { DisplayPlugin, StartConfig, StatusEvent, StreamEvent, ToolCallEvent, ToolResultEvent, ErrorEvent, AgentEvent, BackgroundTaskEvent, StateSnapshot, MessageLevel } from '../../../display.js';
 import type { ContextAnalysis } from '../../token-budget/analyzer.js';
 import { inkRender, type Instance } from './ink.js';
-import { InkApp, type UIMessage, type TextSegment, type PermissionPrompt, type PermissionResponse } from './InkApp.js';
+import { InkApp, type UIMessage, type TextSegment, type PermissionPrompt, type PermissionResponse, type BackgroundTaskInfo } from './InkApp.js';
 import { ThinkStream } from '../think-stream.js';
 import type { PluginRegistry } from '../../../core/plugin.js';
 import type { AgentModeInfo } from '../../../core/store-keys.js';
@@ -153,6 +153,8 @@ function createPlugin(): DisplayPlugin {
   let registry: PluginRegistry | null = null;
   // Plugin manager overlay state
   let pluginManagerResolve: (() => void) | null = null;
+  // Background task display state
+  let backgroundTasks: BackgroundTaskInfo[] = [];
 
   function cancelExecution(): void {
     if (registry) {
@@ -177,6 +179,7 @@ function createPlugin(): DisplayPlugin {
           activeAgentName: registry?.store?.get<AgentModeInfo>(SK.AgentMode)?.name,
           mode: currentMode as 'normal' | 'plan',
           taskCount: currentTaskCount,
+          backgroundTasks,
           onInputChange: () => {},
           onInputSubmit: (text: string) => {
             if (promptResolve) {
@@ -245,6 +248,7 @@ function createPlugin(): DisplayPlugin {
         inkInstance = null;
       }
       messages = [];
+      backgroundTasks = [];
       streamAccumulator = '';
       visibleAccumulator = '';
       thinkStream = null;
@@ -263,6 +267,7 @@ function createPlugin(): DisplayPlugin {
             inputBuffer: '',
             suggestions: initSuggestions,
             activeAgentName: registry?.store?.get<AgentModeInfo>(SK.AgentMode)?.name,
+            backgroundTasks,
             onInputChange: () => {},
             onInputSubmit: (text: string) => {
               if (promptResolve) {
@@ -424,6 +429,34 @@ function createPlugin(): DisplayPlugin {
     onAgentTurnEnd(_event: AgentEvent): void {},
 
     onStateSnapshot(_snapshot: StateSnapshot): void {},
+
+    onBackgroundTask(event: BackgroundTaskEvent): void {
+      const existing = backgroundTasks.findIndex((t) => t.taskId === event.taskId);
+      const bgStatus: BackgroundTaskInfo['status'] =
+        event.taskStatus === 'started' ? 'running' : event.taskStatus;
+      const info: BackgroundTaskInfo = {
+        taskId: event.taskId,
+        agentName: event.agentName,
+        status: bgStatus,
+        message: event.message,
+      };
+
+      if (existing >= 0) {
+        backgroundTasks[existing] = info;
+      } else {
+        backgroundTasks.push(info);
+      }
+
+      // Auto-remove completed/error tasks after 5 seconds
+      if (event.taskStatus === 'completed' || event.taskStatus === 'error') {
+        setTimeout(() => {
+          backgroundTasks = backgroundTasks.filter((t) => t.taskId !== event.taskId);
+          render();
+        }, 5000);
+      }
+
+      render();
+    },
 
     onContextAnalysis(analysis: ContextAnalysis): void {
       messages.push({

@@ -6,6 +6,7 @@ import ScrollBox, { type ScrollBoxHandle } from './engine/components/ScrollBox.j
 import { useDeclaredCursor } from './engine/hooks/use-declared-cursor.js';
 import { ColorDiff } from './color-diff.js';
 import { Markdown, StreamingMarkdown } from './components/Markdown.js';
+import { BackgroundTaskBar } from './components/BackgroundTaskBar.js';
 import type { DiffHunk } from '../../../core/contract.js';
 import type { ContextAnalysis } from '../../token-budget/analyzer.js';
 
@@ -38,6 +39,13 @@ export interface CommandSuggestion {
   type: 'builtin' | 'skill' | 'agent';
 }
 
+export interface BackgroundTaskInfo {
+  taskId: string;
+  agentName: string;
+  status: 'running' | 'completed' | 'error';
+  message: string;
+}
+
 export interface InkAppProps {
   greeting: string;
   messages: UIMessage[];
@@ -51,6 +59,7 @@ export interface InkAppProps {
   onPermissionResponse?: (response: PermissionResponse) => void;
   mode?: 'normal' | 'plan';
   taskCount?: number;
+  backgroundTasks?: BackgroundTaskInfo[];
 }
 
 function AgentLabel({ agentName }: { agentName: string }): React.ReactElement | null {
@@ -364,10 +373,6 @@ function filterSuggestions(suggestions: CommandSuggestion[], query: string): Com
     .map(r => r.s);
 }
 
-function suggestionPrefix(s: CommandSuggestion): string {
-  return s.type === 'agent' ? '◆ ' : '/';
-}
-
 function AgentHeader({ name }: { name: string }): React.ReactElement {
   return React.createElement(
     Box,
@@ -673,6 +678,18 @@ function AppContent(props: InkAppProps): React.ReactElement {
     }
   });
 
+  // Scrollable suggestion window
+  const SUGGESTION_VISIBLE_COUNT = 8;
+  const suggestionWindowStart = isSuggestionOpen && suggestionFiltered.length > SUGGESTION_VISIBLE_COUNT
+    ? Math.max(0, Math.min(
+        selectedSuggestionIndex - Math.floor(SUGGESTION_VISIBLE_COUNT / 2),
+        suggestionFiltered.length - SUGGESTION_VISIBLE_COUNT,
+      ))
+    : 0;
+  const visibleSuggestions = isSuggestionOpen
+    ? suggestionFiltered.slice(suggestionWindowStart, suggestionWindowStart + SUGGESTION_VISIBLE_COUNT)
+    : [];
+
   // Welcome screen when no messages yet
   if (messages.length === 0) {
     return React.createElement(
@@ -715,16 +732,15 @@ function AppContent(props: InkAppProps): React.ReactElement {
             ? React.createElement(
                 Box,
                 { flexDirection: 'column', paddingLeft: 2, paddingTop: 1 },
-                ...suggestionFiltered.slice(0, 8).map((s, i) =>
-                  React.createElement(Text, {
+                ...visibleSuggestions.map((s, i) => {
+                  const actualIndex = suggestionWindowStart + i;
+                  const isFocused = actualIndex === selectedSuggestionIndex;
+                  return React.createElement(Text, {
                     key: s.name,
-                    color: i === selectedSuggestionIndex ? '#7c3aed' : s.type === 'agent' ? '#06b6d4' : undefined,
-                    dimColor: i !== selectedSuggestionIndex,
-                  }, `${i === selectedSuggestionIndex ? '● ' : '○ '}${suggestionPrefix(s)}${s.name}  ${s.description}`),
-                ),
-                ...(suggestionFiltered.length > 8
-                  ? [React.createElement(Text, { key: '__more', dimColor: true }, `...还有 ${suggestionFiltered.length - 8} 个`)]
-                  : []),
+                    color: isFocused ? '#7c3aed' : s.type === 'agent' ? '#06b6d4' : undefined,
+                    dimColor: !isFocused,
+                  }, `${isFocused ? '● ' : '○ '}/${s.name}  ${s.type === 'agent' ? '[agent] ' : ''}${s.description}`);
+                }),
               )
             : null,
         ),
@@ -769,6 +785,7 @@ function AppContent(props: InkAppProps): React.ReactElement {
       { flexDirection: 'column', flexShrink: 0, paddingLeft: 1, paddingRight: 1, paddingBottom: 1, marginTop: 1 },
       // Mode indicator bar (plan mode badge + task count)
       React.createElement(ModeIndicator, { mode: props.mode, taskCount: props.taskCount }),
+      React.createElement(BackgroundTaskBar, { tasks: props.backgroundTasks ?? [] }),
       React.createElement(
         Box,
         {
@@ -791,16 +808,15 @@ function AppContent(props: InkAppProps): React.ReactElement {
         ? React.createElement(
             Box,
             { flexDirection: 'column', paddingLeft: 2, paddingTop: 1 },
-            ...suggestionFiltered.slice(0, 8).map((s, i) =>
-              React.createElement(Text, {
+            ...visibleSuggestions.map((s, i) => {
+              const actualIndex = suggestionWindowStart + i;
+              const isFocused = actualIndex === selectedSuggestionIndex;
+              return React.createElement(Text, {
                 key: s.name,
-                color: i === selectedSuggestionIndex ? '#7c3aed' : s.type === 'agent' ? '#06b6d4' : undefined,
-                dimColor: i !== selectedSuggestionIndex,
-              }, `${i === selectedSuggestionIndex ? '● ' : '○ '}${suggestionPrefix(s)}${s.name}  ${s.description}`),
-            ),
-            ...(suggestionFiltered.length > 8
-              ? [React.createElement(Text, { key: '__more', dimColor: true }, `...还有 ${suggestionFiltered.length - 8} 个`)]
-              : []),
+                color: isFocused ? '#7c3aed' : s.type === 'agent' ? '#06b6d4' : undefined,
+                dimColor: !isFocused,
+              }, `${isFocused ? '● ' : '○ '}/${s.name}  ${s.type === 'agent' ? '[agent] ' : ''}${s.description}`);
+            }),
           )
         : null,
     ),
