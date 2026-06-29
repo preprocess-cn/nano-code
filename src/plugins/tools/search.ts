@@ -1,8 +1,8 @@
 import * as fs from 'fs/promises';
 import * as fsSync from 'fs';
 import * as path from 'path';
-import { NanoPlugin } from '../../plugin.js';
-import { ToolDefinition, ToolResponse, ToolContext } from '../../contract.js';
+import { NanoPlugin } from '../../core/plugin.js';
+import { ToolDefinition, ToolResponse, ToolContext } from '../../core/contract.js';
 
 // ── Simple glob implementation ──
 

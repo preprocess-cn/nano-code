@@ -1,8 +1,8 @@
 import { describe, it } from 'node:test';
 import * as assert from 'node:assert/strict';
-import { PluginRegistry } from '../src/plugin.js';
+import { PluginRegistry } from '../src/core/plugin.js';
 import { createTokenBudgetPlugin } from '../src/plugins/token-budget/index.js';
-import { ChatMessage } from '../src/llm.js';
+import { ChatMessage } from '../src/core/llm.js';
 
 function makeMsgs(count: number, content = 'hello world '): ChatMessage[] {
   return Array.from({ length: count }, (_, i) => ({

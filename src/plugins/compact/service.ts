@@ -1,10 +1,10 @@
-import { ChatMessage, LLMClient } from '../../llm.js';
-import { NanoCodeAgent } from '../../agent.js';
-import { PluginRegistry } from '../../plugin.js';
+import { ChatMessage, LLMClient } from '../../core/llm.js';
+import { NanoCodeAgent } from '../../core/agent.js';
+import { PluginRegistry } from '../../core/plugin.js';
 import { DisplayManager } from '../../display.js';
 import { countMessagesTokens } from '../token-budget/counter.js';
 import { CompactOptions, CompactionResult } from './types.js';
-import { SK } from '../../store-keys.js';
+import { SK } from '../../core/store-keys.js';
 import {
   COMPACT_SYSTEM_PROMPT,
   buildCompactUserPrompt,

@@ -1,4 +1,4 @@
-import { CommandInterceptResult, InjectedMessage } from '../../contract.js';
+import { CommandInterceptResult, InjectedMessage } from '../../core/contract.js';
 
 export type CommandAction = 'exit' | 'skipAgent' | 'injectAndContinue';
 

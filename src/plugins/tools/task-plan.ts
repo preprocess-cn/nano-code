@@ -1,11 +1,11 @@
-import { NanoPlugin, PluginRegistry } from '../../plugin.js';
-import { ToolDefinition, ToolResponse, ToolContext, PermissionConfirmRequest } from '../../contract.js';
+import { NanoPlugin, PluginRegistry } from '../../core/plugin.js';
+import { ToolDefinition, ToolResponse, ToolContext, PermissionConfirmRequest } from '../../core/contract.js';
 import {
   PlanMode, Task, TaskStatus,
 } from '../task-plan/types.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { SK } from '../../store-keys.js';
+import { SK } from '../../core/store-keys.js';
 
 // ── File paths ──
 

@@ -1,9 +1,9 @@
 import { spawn, ChildProcess } from 'child_process';
 import * as readline from 'readline';
-import { NanoPlugin } from '../../plugin.js';
-import { ToolDefinition, ToolResponse, ToolContext } from '../../contract.js';
-import { NanoConfig } from '../../config.js';
-import { getPackageVersion } from '../../version.js';
+import { NanoPlugin } from '../../core/plugin.js';
+import { ToolDefinition, ToolResponse, ToolContext } from '../../core/contract.js';
+import { NanoConfig } from '../../core/config.js';
+import { getPackageVersion } from '../../core/version.js';
 
 // ── JSON-RPC types ──
 

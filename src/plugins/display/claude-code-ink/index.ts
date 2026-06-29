@@ -3,10 +3,10 @@ import type { ContextAnalysis } from '../../token-budget/analyzer.js';
 import { inkRender, type Instance } from './ink.js';
 import { InkApp, type UIMessage, type TextSegment, type PermissionPrompt, type PermissionResponse } from './InkApp.js';
 import { ThinkStream } from '../think-stream.js';
-import type { PluginRegistry } from '../../../plugin.js';
-import type { AgentModeInfo } from '../../../store-keys.js';
+import type { PluginRegistry } from '../../../core/plugin.js';
+import type { AgentModeInfo } from '../../../core/store-keys.js';
 
-import { SK } from '../../../store-keys.js';
+import { SK } from '../../../core/store-keys.js';
 import React from 'react';
 
 /** 为常用工具生成简洁的参数预览，避免大 JSON 刷屏 */

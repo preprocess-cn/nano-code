@@ -3,7 +3,7 @@ import * as path from 'path';
 import * as os from 'os';
 import * as yaml from 'js-yaml';
 import { execSync } from 'child_process';
-import { loadConfig, getSystemWhitelist } from './config.js';
+import { loadConfig, getSystemWhitelist } from './core/config.js';
 import { loadAgentDefinitions } from './agent-loader.js';
 
 const GLOBAL_DIR = path.join(os.homedir(), '.nano-code');
@@ -233,7 +233,7 @@ async function setEnabled(name: string, enabled: boolean): Promise<void> {
  * 打印运行中注册表的所有插件及其工具（--list-plugins 模式使用）。
  * 与上方 listPlugins() 不同，此函数操作运行时的 PluginRegistry 实例。
  */
-export function printPluginList(registry: import('./plugin.js').PluginRegistry): void {
+export function printPluginList(registry: import('./core/plugin.js').PluginRegistry): void {
   const plugins = registry.listPlugins();
   if (plugins.length === 0) {
     console.log('\n  当前没有注册任何插件。\n');

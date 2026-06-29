@@ -1,5 +1,5 @@
-import { NanoPlugin } from '../../plugin.js';
-import { ToolDefinition, ToolResponse, ToolContext } from '../../contract.js';
+import { NanoPlugin } from '../../core/plugin.js';
+import { ToolDefinition, ToolResponse, ToolContext } from '../../core/contract.js';
 
 // ── Helpers ──
 

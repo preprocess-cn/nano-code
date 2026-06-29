@@ -338,8 +338,8 @@ describe('buildSystemPrompt with skill listing', () => {
       getPrompt: async () => '',
     });
 
-    const { buildSystemPrompt } = await import('../src/prompt.js');
-    const { PluginRegistry } = await import('../src/plugin.js');
+    const { buildSystemPrompt } = await import('../src/core/prompt.js');
+    const { PluginRegistry } = await import('../src/core/plugin.js');
     const { createSkillsPlugin } = await import('../src/plugins/skills/index.js');
     const registry = new PluginRegistry();
     await registry.register(createSkillsPlugin());
@@ -359,8 +359,8 @@ describe('buildSystemPrompt with skill listing', () => {
       getPrompt: async () => '',
     });
 
-    const { buildSystemPrompt } = await import('../src/prompt.js');
-    const { PluginRegistry } = await import('../src/plugin.js');
+    const { buildSystemPrompt } = await import('../src/core/prompt.js');
+    const { PluginRegistry } = await import('../src/core/plugin.js');
     const { createSkillsPlugin } = await import('../src/plugins/skills/index.js');
     const registry = new PluginRegistry();
     await registry.register(createSkillsPlugin());
@@ -382,8 +382,8 @@ describe('buildSystemPrompt with skill listing', () => {
       getPrompt: async () => '',
     });
 
-    const { buildSystemPrompt } = await import('../src/prompt.js');
-    const { PluginRegistry } = await import('../src/plugin.js');
+    const { buildSystemPrompt } = await import('../src/core/prompt.js');
+    const { PluginRegistry } = await import('../src/core/plugin.js');
     const { createSkillsPlugin } = await import('../src/plugins/skills/index.js');
     const registry = new PluginRegistry();
     await registry.register(createSkillsPlugin());
@@ -399,8 +399,8 @@ describe('buildSystemPrompt with skill listing', () => {
   });
 
   it('returns empty section when no skills registered', async () => {
-    const { buildSystemPrompt } = await import('../src/prompt.js');
-    const { PluginRegistry } = await import('../src/plugin.js');
+    const { buildSystemPrompt } = await import('../src/core/prompt.js');
+    const { PluginRegistry } = await import('../src/core/plugin.js');
     const registry = new PluginRegistry();
 
     const result = buildSystemPrompt(registry, undefined);

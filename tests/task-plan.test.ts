@@ -4,8 +4,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import os from 'os';
 import { taskPlanPlugin } from '../src/plugins/tools/task-plan.js';
-import { ToolContext } from '../src/contract.js';
-import { SK } from '../src/store-keys.js';
+import { ToolContext } from '../src/core/contract.js';
+import { SK } from '../src/core/store-keys.js';
 
 // ── Helpers ──
 

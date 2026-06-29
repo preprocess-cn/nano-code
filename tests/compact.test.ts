@@ -2,9 +2,9 @@ import { describe, it, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import { extractSummary, formatCompactSummaryMessage, buildCompactUserPrompt, COMPACT_SYSTEM_PROMPT } from '../src/plugins/compact/prompt.js';
 import { CompactService } from '../src/plugins/compact/service.js';
-import { NanoCodeAgent } from '../src/agent.js';
-import { PluginRegistry } from '../src/plugin.js';
-import { LLMClient, ChatMessage } from '../src/llm.js';
+import { NanoCodeAgent } from '../src/core/agent.js';
+import { PluginRegistry } from '../src/core/plugin.js';
+import { LLMClient, ChatMessage } from '../src/core/llm.js';
 
 // ── Helpers ──
 

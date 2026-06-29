@@ -1,8 +1,8 @@
 import { describe, it } from 'node:test';
 import * as assert from 'node:assert/strict';
-import { PluginRegistry, NanoPlugin, ToolCall, LLMResponse } from '../src/plugin.js';
-import { ToolResponse, ToolDefinition } from '../src/contract.js';
-import { ChatMessage } from '../src/llm.js';
+import { PluginRegistry, NanoPlugin, ToolCall, LLMResponse } from '../src/core/plugin.js';
+import { ToolResponse, ToolDefinition } from '../src/core/contract.js';
+import { ChatMessage } from '../src/core/llm.js';
 
 // ── Helpers ──
 

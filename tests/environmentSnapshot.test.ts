@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert';
-import { formatToolResponse } from '../src/prompt.js';
+import { formatToolResponse } from '../src/core/prompt.js';
 
 describe('Environment Snapshot 环境快照注入测试', () => {
   test('error 状态的 response 会被自动追加 [System Environment Snapshot]', () => {

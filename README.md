@@ -334,7 +334,8 @@ plugins:
 └─────────────────────────────────────────────────┘
 ```
 
-- **Core** — Agent 循环（支持主/子两层）、LLM 通信、插件编排、配置管理
+- **Core** (`src/core/`) — 核心引擎，零 UI 依赖。Agent 循环、LLM 通信、插件编排、配置管理、会话持久化、类型定义。通过 `src/core/index.ts` 暴露公共 API。
+- **Display** (`src/display.ts`) — `DisplayPlugin` 接口 + `DisplayManager` 编排。核心层只依赖 `DisplayPlugin` 接口，不耦合具体实现。
 - **Plugins** — 所有功能通过插件提供，Core 不内置任何业务工具。插件间通过 `IStore` 共享状态，无需互相依赖
 - **Agent 工具** — 领域专家子 agent，通过 YAML 定义，自动注册为工具，独立上下文执行
 
@@ -469,7 +470,7 @@ interface IStore {
 }
 ```
 
-默认实现为 `InMemoryStore`（`src/store.ts`），可替换为任何后端存储。
+默认实现为 `InMemoryStore`（`src/core/store.ts`），可替换为任何后端存储。
 
 详细指南请参考 [`docs/plugin-development.md`](docs/plugin-development.md)。
 

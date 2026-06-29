@@ -1,5 +1,5 @@
-import { NanoPlugin, PluginRegistry } from '../plugin.js';
-import { ToolDefinition, ToolResponse, ToolContext } from '../contract.js';
+import { NanoPlugin, PluginRegistry } from '../core/plugin.js';
+import { ToolDefinition, ToolResponse, ToolContext } from '../core/contract.js';
 
 /**
  * npm 插件加载器。

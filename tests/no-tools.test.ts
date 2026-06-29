@@ -1,9 +1,9 @@
 import { describe, it } from 'node:test';
 import * as assert from 'node:assert/strict';
-import { PluginRegistry } from '../src/plugin.js';
-import { buildSystemPrompt } from '../src/prompt.js';
-import { SystemPromptConfig } from '../src/config.js';
-import { ToolResponse } from '../src/contract.js';
+import { PluginRegistry } from '../src/core/plugin.js';
+import { buildSystemPrompt } from '../src/core/prompt.js';
+import { SystemPromptConfig } from '../src/core/config.js';
+import { ToolResponse } from '../src/core/contract.js';
 
 const MOCK_PROMPT = {
   noTools: '你是一个名为 nano-code 的 {role}。请保持回答简洁专业。',

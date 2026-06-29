@@ -197,14 +197,15 @@ MCP 和 agent 工具都是"主 agent 委托能力给外部"，区别在：
 - **DisplayPlugin 生命周期事件**：`onAgentTurnStart/End`、`onStateSnapshot`，插件可感知 agent 任务开始/结束
 - **额外参数注入（extraParams）**：`NanoPlugin.onExtraParams()` 钩子，`PluginRegistry.collectExtraParams()` 收集，agent 自动透传 LLM API
 - **usage 剥离**：`LLMResponse` 不再包含 usage，改为 `onMeta` 回调 + `rawMeta` 参数由插件自行解析（`token-budget` 插件已适配）
-- **插件间共享状态（IStore）**：`IStore` 接口（`get/set/subscribe`），默认 `InMemoryStore` 实现，位于 `src/store.ts`，可替换为任何后端存储；`IStore.set<T>()` 类型安全（`value: T` 而非 `value: unknown`）
+- **插件间共享状态（IStore）**：`IStore` 接口（`get/set/subscribe`），默认 `InMemoryStore` 实现，位于 `src/core/store.ts`，可替换为任何后端存储；`IStore.set<T>()` 类型安全（`value: T` 而非 `value: unknown`）
 - **Ink 斜杠命令建议弹出**：输入 `/` 开头时自动弹出技能/命令列表，实时过滤，键盘导航 ↑↓ Tab Enter Esc，Tab 补全命令名
 - **Ink 输入框模式变色**：`!` 开头边框变粉色（`#ff0087`）、`/` 开头变紫色（`#7c3aed`），正常灰色（`#6b7280`）
 - **Ink Plan Mode 状态指示器**：底栏黄色 `● plan on` 徽标 + 任务数量显示
 - **Plan Mode 系统**：`enter_plan_mode`/`exit_plan_mode` 工具 + 3 阶段工作流系统提示注入 + 用户确认弹窗
 - **任务/清单系统**：`task_create`/`task_list`/`task_update`/`task_stop` 工具，`.nano-code/tasks/` JSON 文件持久化
 - **技能/命令桥接层**（`skills-bridge.ts`）：独立文件管理跨插件依赖（skills + commands），通过 provider 模式注入 Ink 显示层
-- **核心边界清理**：`InMemoryStore` 从 `plugins/store/` 移至 `src/store.ts`；`IStore.set<T>()` 类型签名修复（`value: unknown` → `value: T`）；`handleExit` 改为 `async` 优雅等待 `registry.destroy()` 完成
+- **核心边界清理**：`InMemoryStore` 从 `plugins/store/` 移至 `src/core/store.ts`；`IStore.set<T>()` 类型签名修复（`value: unknown` → `value: T`）；`handleExit` 改为 `async` 优雅等待 `registry.destroy()` 完成
+- **核心层独立打包**：核心文件移至 `src/core/`，只暴露接口层；`agent.ts` 依赖 `DisplayPlugin` 接口而非 `DisplayManager`；`src/core/index.ts` 公共 API 导出
 - **display-strings.ts 消除**：集中式字符串文件已删除，所有字符串分散到各所属模块；核心模块（llm.ts）不再包含展示字符串，改为原始诊断日志
 - **StatusEvent level 协议**：新增 `MessageLevel` 类型（`status`/`info`/`warn`/`error`/`success`），`StatusEvent.level` 必填，展示层据此渲染而非猜测 `formatStatusText`
 - **cli-display 展示插件**：非交互式 CLI 展示层，`display.enabled: false` 时自动启用，AI 响应输出到 stdout，状态/错误到 stderr

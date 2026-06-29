@@ -1,7 +1,7 @@
-import { NanoPlugin, PluginRegistry } from '../../plugin.js';
-import { ToolDefinition, ToolResponse, ToolContext } from '../../contract.js';
-import { LLMClient } from '../../llm.js';
-import { NanoCodeAgent } from '../../agent.js';
+import { NanoPlugin, PluginRegistry } from '../../core/plugin.js';
+import { ToolDefinition, ToolResponse, ToolContext } from '../../core/contract.js';
+import { LLMClient } from '../../core/llm.js';
+import { NanoCodeAgent } from '../../core/agent.js';
 import { DisplayManager } from '../../display.js';
 import { loadAllSkills, findSkill, listSkillFiles, readSkillFile, getSkillsDir, substituteArgs, SkillDefinition } from './loader.js';
 import {
@@ -292,7 +292,7 @@ async function executeForkedSkill(
   subRegistry.setAgentName(skill.name);
   subRegistry.setDefaultContext({ skipPermission: true, defaultTimeout: 120000 });
 
-  const { registerBuiltinPlugin } = await import('../../plugin.js');
+  const { registerBuiltinPlugin } = await import('../../core/plugin.js');
   await registerBuiltinPlugin(subRegistry, 'fs');
   await registerBuiltinPlugin(subRegistry, 'command');
   await registerBuiltinPlugin(subRegistry, 'memory');
@@ -327,7 +327,7 @@ async function handleRunAgent(
   subRegistry.setAgentName('run_agent');
   subRegistry.setDefaultContext({ skipPermission: true, defaultTimeout: 120000 });
 
-  const { registerBuiltinPlugin } = await import('../../plugin.js');
+  const { registerBuiltinPlugin } = await import('../../core/plugin.js');
   await registerBuiltinPlugin(subRegistry, 'fs');
   await registerBuiltinPlugin(subRegistry, 'command');
   await registerBuiltinPlugin(subRegistry, 'memory');

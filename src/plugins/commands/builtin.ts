@@ -1,18 +1,18 @@
-import { CommandInterceptResult } from '../../contract.js';
-import { NanoCodeAgent } from '../../agent.js';
-import { PluginRegistry } from '../../plugin.js';
-import { NanoConfig } from '../../config.js';
+import { CommandInterceptResult } from '../../core/contract.js';
+import { NanoCodeAgent } from '../../core/agent.js';
+import { PluginRegistry } from '../../core/plugin.js';
+import { NanoConfig } from '../../core/config.js';
 import { DisplayManager } from '../../display.js';
 import { loadAllSkills } from '../skills/loader.js';
 import { analyzeContextUsage, type ContextAnalysis } from '../token-budget/analyzer.js';
 import { CompactService } from '../compact/service.js';
-import { saveSession } from '../../session.js';
+import { saveSession } from '../../core/session.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import type { BuiltinCommand } from './types.js';
 import { readAllTasks, getPlanFilePath } from '../tools/task-plan.js';
-import { SK } from '../../store-keys.js';
-import { runDoctor, formatDoctorResults } from '../../doctor.js';
+import { SK } from '../../core/store-keys.js';
+import { runDoctor, formatDoctorResults } from '../../core/doctor.js';
 
 export interface BuiltinContext {
   agent: NanoCodeAgent;
@@ -301,7 +301,7 @@ const BUILTIN_COMMANDS: BuiltinCommand[] = [
         const llmClient = ctx.agent?.getLLMClient();
         results = await runDoctor(ctx.config || { configVersion: 1, core: { maxTokens: 128000, defaultTimeout: 120000 }, plugins: {} }, ctx.registry, llmClient);
       } else {
-        const { loadConfig } = await import('../../config.js');
+        const { loadConfig } = await import('../../core/config.js');
         results = await runDoctor(loadConfig(), undefined, undefined);
       }
       return { handled: true, skipAgent: true, message: formatDoctorResults(results) };

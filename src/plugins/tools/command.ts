@@ -1,7 +1,7 @@
 import { spawn } from 'child_process';
 import { confirm } from '@clack/prompts';
-import { NanoPlugin } from '../../plugin.js';
-import { ToolDefinition, ToolResponse, ToolContext } from '../../contract.js';
+import { NanoPlugin } from '../../core/plugin.js';
+import { ToolDefinition, ToolResponse, ToolContext } from '../../core/contract.js';
 
 /**
  * [LOCK] 危险命令黑名单模式列表

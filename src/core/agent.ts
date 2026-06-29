@@ -2,7 +2,7 @@ import { LLMClient, ChatMessage } from './llm.js';
 import { PluginRegistry, ToolCall } from './plugin.js';
 import { SystemPromptConfig } from './config.js';
 import { buildSystemPrompt, formatToolResponse } from './prompt.js';
-import { DisplayManager } from './display.js';
+import type { DisplayPlugin } from '../display.js';
 import { ToolResponse, ToolContext, InjectedMessage, isMainAgent } from './contract.js';
 import { SK } from './store-keys.js';
 
@@ -12,7 +12,7 @@ export interface NanoCodeAgentOptions {
   agentRole?: string;
   promptConfig?: SystemPromptConfig;
   name?: string;
-  display?: DisplayManager;
+  display?: DisplayPlugin;
 }
 
 export class NanoCodeAgent {
@@ -22,7 +22,7 @@ export class NanoCodeAgent {
   private agentRole?: string;
   private promptConfig?: SystemPromptConfig;
   private name: string;
-  private display?: DisplayManager;
+  private display?: DisplayPlugin;
 
   constructor(options: NanoCodeAgentOptions) {
     this.llmClient = options.llmClient || new LLMClient();
@@ -73,7 +73,7 @@ export class NanoCodeAgent {
   }
 
   async runTask(userPrompt: string): Promise<string | undefined> {
-    this.display?.onAgentTurnStart({ agentName: this.name });
+    this.display?.onAgentTurnStart?.({ agentName: this.name });
 
     // 检查插件是否已执行自动压缩（如 token-budget），加载结果
     const compacted = this.registry.store.get<ChatMessage[]>(SK.CompactResult);
@@ -91,11 +91,11 @@ export class NanoCodeAgent {
 
     while (true) {
       if (this.registry.store.get(SK.AgentCancelled)) {
-        this.display?.onStatus({ message: 'end', agentName: this.name, level: 'status' });
+        this.display?.onStatus?.({ message: 'end', agentName: this.name, level: 'status' });
         this.registry.store.set(SK.AgentCancelled, undefined);
         break;
       }
-      this.display?.onStatus({ message: 'thinking', agentName: this.name, level: 'status' });
+      this.display?.onStatus?.({ message: 'thinking', agentName: this.name, level: 'status' });
 
       const systemMessage = buildSystemPrompt(this.registry, this.promptConfig, this.agentRole);
       let messagesWithSystem: ChatMessage[] = [systemMessage, ...this.messageHistory];
@@ -107,7 +107,7 @@ export class NanoCodeAgent {
       const onChunk = (chunk: string) => {
         if (!chunk) return;
         if (isSubAgent) streamBuffer += chunk;
-        else this.display?.onStreamChunk({ text: chunk, agentName: this.name });
+        else this.display?.onStreamChunk?.({ text: chunk, agentName: this.name });
       };
 
       const extraParams = this.registry.collectExtraParams();
@@ -131,8 +131,8 @@ export class NanoCodeAgent {
       } catch (err: any) {
         if (err?.name === 'AbortError' || err?.message === 'CANCELLED' || isCancelled()) {
           this.registry.store.set(SK.AgentAbort, undefined);
-          this.display?.onStatus({ message: 'end', agentName: this.name, level: 'status' });
-          this.display?.onAgentTurnEnd({ agentName: this.name });
+          this.display?.onStatus?.({ message: 'end', agentName: this.name, level: 'status' });
+          this.display?.onAgentTurnEnd?.({ agentName: this.name });
           break;
         }
         throw err;
@@ -141,15 +141,15 @@ export class NanoCodeAgent {
       this.registry.store.set(SK.AgentAbort, undefined);
 
       if (isCancelled()) {
-        this.display?.onStatus({ message: 'end', agentName: this.name, level: 'status' });
-        this.display?.onAgentTurnEnd({ agentName: this.name });
+        this.display?.onStatus?.({ message: 'end', agentName: this.name, level: 'status' });
+        this.display?.onAgentTurnEnd?.({ agentName: this.name });
         break;
       }
 
       this.registry.execAfterRequest(response, responseMeta);
 
       if (isSubAgent && streamBuffer) {
-        this.display?.onStreamChunk({ text: '\n' + streamBuffer + '\n', agentName: this.name });
+        this.display?.onStreamChunk?.({ text: '\n' + streamBuffer + '\n', agentName: this.name });
       }
 
       const assistantMessage: ChatMessage = {
@@ -163,9 +163,9 @@ export class NanoCodeAgent {
       this.messageHistory.push(assistantMessage);
 
       if (response.stopReason !== 'tool_use' || !response.toolCalls) {
-        this.display?.onStatus({ message: 'end', agentName: this.name, level: 'status' });
-        this.display?.onStateSnapshot({ agentName: this.name, messageCount: this.messageHistory.length });
-        this.display?.onAgentTurnEnd({ agentName: this.name });
+        this.display?.onStatus?.({ message: 'end', agentName: this.name, level: 'status' });
+        this.display?.onStateSnapshot?.({ agentName: this.name, messageCount: this.messageHistory.length });
+        this.display?.onAgentTurnEnd?.({ agentName: this.name });
         break;
       }
 
@@ -179,7 +179,7 @@ export class NanoCodeAgent {
       // 更新存储中的消息快照，供 token-budget 等插件在下轮循环中做准确的大小判断
       this.registry.store.set(SK.AgentMessages, this.getHistory());
 
-      this.display?.onStateSnapshot({ agentName: this.name, messageCount: this.messageHistory.length });
+      this.display?.onStateSnapshot?.({ agentName: this.name, messageCount: this.messageHistory.length });
 	      this.registry.store.set(SK.AgentStatus, { agentName: this.name, status: "running", messageCount: this.messageHistory.length });
     }
 
@@ -215,7 +215,7 @@ export class NanoCodeAgent {
 
     const allowedCall = this.registry.execBeforeToolCall(toolCall);
     if (allowedCall === null) {
-      this.display?.onStatus({ message: `工具调用已被插件策略拦截: ${toolName}`, agentName: this.name, level: 'warn' });
+      this.display?.onStatus?.({ message: `工具调用已被插件策略拦截: ${toolName}`, agentName: this.name, level: 'warn' });
       toolMessages.push({
         role: 'tool', tool_call_id: toolCall.id, name: toolName,
         content: JSON.stringify({ status: 'error', message: 'Tool call blocked by plugin policy.' }),
@@ -226,7 +226,7 @@ export class NanoCodeAgent {
     // ── 先展示工具调用信息，再检查权限 ──
     // 顺序：onToolCall → permission gate → execute
     // 用户拒绝时也会显示被拒绝的工具调用及结果
-    this.display?.onToolCall({ toolName, args: toolArgs, agentName: this.name });
+    this.display?.onToolCall?.({ toolName, args: toolArgs, agentName: this.name });
 
     // ── Permission gate ──
     // sideEffect=true 且不在 allowlist 中的工具需要用户确认
@@ -246,7 +246,7 @@ export class NanoCodeAgent {
         } else if (response) {
           agentConfirmed = true;
         } else {
-          this.display?.onToolResult({ status: 'rejected_by_user', message: '用户拒绝', agentName: this.name });
+          this.display?.onToolResult?.({ status: 'rejected_by_user', message: '用户拒绝', agentName: this.name });
           toolMessages.push({
             role: 'tool', tool_call_id: toolCall.id, name: toolName,
             content: JSON.stringify({ status: 'rejected_by_user', message: '用户拒绝工具调用' }),
@@ -273,7 +273,7 @@ export class NanoCodeAgent {
       }
     }
 
-    this.display?.onToolResult({ status: toolResult.status, message: toolResult.message, agentName: this.name });
+    this.display?.onToolResult?.({ status: toolResult.status, message: toolResult.message, agentName: this.name });
 
     toolMessages.push({
       role: 'tool', tool_call_id: rawToolCall.id, name: toolName,

@@ -1,8 +1,8 @@
-import { NanoPlugin, PluginRegistry } from '../../plugin.js';
-import { CommandInterceptResult } from '../../contract.js';
+import { NanoPlugin, PluginRegistry } from '../../core/plugin.js';
+import { CommandInterceptResult } from '../../core/contract.js';
 import { DisplayManager } from '../../display.js';
-import { NanoCodeAgent } from '../../agent.js';
-import { NanoConfig } from '../../config.js';
+import { NanoCodeAgent } from '../../core/agent.js';
+import { NanoConfig } from '../../core/config.js';
 import { parseSlashCommand } from './parser.js';
 import { findBuiltinCommand, type BuiltinContext } from './builtin.js';
 

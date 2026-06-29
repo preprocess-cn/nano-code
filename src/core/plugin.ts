@@ -361,13 +361,13 @@ export class PluginRegistry {
 // ── Builtin plugin loaders ──
 
 const BUILTIN_LOADERS: Record<string, (settings?: Record<string, any>) => Promise<NanoPlugin>> = {
-  fs: async () => (await import('./plugins/tools/fs.js')).fsPlugin,
-  command: async () => (await import('./plugins/tools/command.js')).commandPlugin,
-  memory: async (s) => (await import('./plugins/tools/memory.js')).createMemoryPlugin(s || {}),
-  'token-budget': async (s) => (await import('./plugins/token-budget/index.js')).createTokenBudgetPlugin(s || {}),
-  skills: async () => (await import('./plugins/skills/index.js')).createSkillsPlugin(),
-  search: async () => (await import('./plugins/tools/search.js')).searchPlugin,
-  web: async () => (await import('./plugins/tools/web.js')).webPlugin,
+  fs: async () => (await import('../plugins/tools/fs.js')).fsPlugin,
+  command: async () => (await import('../plugins/tools/command.js')).commandPlugin,
+  memory: async (s) => (await import('../plugins/tools/memory.js')).createMemoryPlugin(s || {}),
+  'token-budget': async (s) => (await import('../plugins/token-budget/index.js')).createTokenBudgetPlugin(s || {}),
+  skills: async () => (await import('../plugins/skills/index.js')).createSkillsPlugin(),
+  search: async () => (await import('../plugins/tools/search.js')).searchPlugin,
+  web: async () => (await import('../plugins/tools/web.js')).webPlugin,
 };
 
 /**

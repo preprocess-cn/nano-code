@@ -1,11 +1,11 @@
-import { NanoPlugin, PluginRegistry, ToolCall, LLMResponse } from '../../plugin.js';
-import { ToolResponse, ToolContext, ToolDefinition } from '../../contract.js';
-import { ChatMessage } from '../../llm.js';
+import { NanoPlugin, PluginRegistry, ToolCall, LLMResponse } from '../../core/plugin.js';
+import { ToolResponse, ToolContext, ToolDefinition } from '../../core/contract.js';
+import { ChatMessage } from '../../core/llm.js';
 import { countMessagesTokens } from './counter.js';
 import { initTokenizer } from './counter.js';
-import type { LLMClient } from '../../llm.js';
+import type { LLMClient } from '../../core/llm.js';
 import type { DisplayManager } from '../../display.js';
-import { SK } from '../../store-keys.js';
+import { SK } from '../../core/store-keys.js';
 
 // ── Plugin ──
 

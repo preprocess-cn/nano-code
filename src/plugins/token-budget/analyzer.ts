@@ -1,7 +1,7 @@
-import { NanoCodeAgent } from '../../agent.js';
-import { PluginRegistry } from '../../plugin.js';
-import { NanoConfig } from '../../config.js';
-import { buildSystemPrompt } from '../../prompt.js';
+import { NanoCodeAgent } from '../../core/agent.js';
+import { PluginRegistry } from '../../core/plugin.js';
+import { NanoConfig } from '../../core/config.js';
+import { buildSystemPrompt } from '../../core/prompt.js';
 import { loadAgentDefinitions } from '../../agent-loader.js';
 import { loadAllSkills } from '../skills/loader.js';
 import * as fs from 'fs';

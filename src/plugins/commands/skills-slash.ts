@@ -1,7 +1,7 @@
-import { NanoPlugin, PluginRegistry } from '../../plugin.js';
-import { CommandInterceptResult } from '../../contract.js';
-import { LLMClient } from '../../llm.js';
-import { NanoCodeAgent } from '../../agent.js';
+import { NanoPlugin, PluginRegistry } from '../../core/plugin.js';
+import { CommandInterceptResult } from '../../core/contract.js';
+import { LLMClient } from '../../core/llm.js';
+import { NanoCodeAgent } from '../../core/agent.js';
 import { DisplayManager } from '../../display.js';
 import { findSkill, substituteArgs } from '../skills/loader.js';
 
@@ -43,7 +43,7 @@ export function createSkillsSlashPlugin(llmClient?: LLMClient, display?: Display
         subRegistry.setAgentName(skill.name);
         subRegistry.setDefaultContext({ skipPermission: true, defaultTimeout: 120000 });
 
-        const { registerBuiltinPlugin } = await import('../../plugin.js');
+        const { registerBuiltinPlugin } = await import('../../core/plugin.js');
         await registerBuiltinPlugin(subRegistry, 'fs');
         await registerBuiltinPlugin(subRegistry, 'command');
         await registerBuiltinPlugin(subRegistry, 'memory');

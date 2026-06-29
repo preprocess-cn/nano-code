@@ -1,4 +1,4 @@
-import { ChatMessage } from '../../llm.js';
+import { ChatMessage } from '../../core/llm.js';
 
 export interface CompactOptions {
   /** 保留多少组（user→assistant）对话，默认 2 */

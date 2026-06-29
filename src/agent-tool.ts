@@ -1,7 +1,7 @@
-import { NanoPlugin, PluginRegistry, registerBuiltinPlugin } from './plugin.js';
-import { ToolResponse, ToolContext, ToolDefinition } from './contract.js';
-import { NanoCodeAgent } from './agent.js';
-import { LLMClient } from './llm.js';
+import { NanoPlugin, PluginRegistry, registerBuiltinPlugin } from './core/plugin.js';
+import { ToolResponse, ToolContext, ToolDefinition } from './core/contract.js';
+import { NanoCodeAgent } from './core/agent.js';
+import { LLMClient } from './core/llm.js';
 import { AgentDefinition } from './agent-loader.js';
 import { DisplayManager } from './display.js';
 

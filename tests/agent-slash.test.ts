@@ -3,9 +3,9 @@ import * as assert from 'node:assert/strict';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { NanoCodeAgent } from '../src/agent.js';
-import { PluginRegistry } from '../src/plugin.js';
-import { SK, type AgentModeInfo } from '../src/store-keys.js';
+import { NanoCodeAgent } from '../src/core/agent.js';
+import { PluginRegistry } from '../src/core/plugin.js';
+import { SK, type AgentModeInfo } from '../src/core/store-keys.js';
 import {
   createAgentSlashPlugin,
   setTargetAgent,

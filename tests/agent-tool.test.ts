@@ -1,9 +1,9 @@
 import { describe, it } from 'node:test';
 import * as assert from 'node:assert/strict';
 import { createAgentToolPlugin } from '../src/agent-tool.js';
-import { PluginRegistry } from '../src/plugin.js';
+import { PluginRegistry } from '../src/core/plugin.js';
 import { AgentDefinition } from '../src/agent-loader.js';
-import { LLMClient } from '../src/llm.js';
+import { LLMClient } from '../src/core/llm.js';
 
 function mockLLMClient() {
   return {

@@ -1,7 +1,7 @@
 import { diffArrays } from 'diff';
 import { extname } from 'path';
 import hljs from 'highlight.js';
-import type { DiffHunk } from '../../../contract.js';
+import type { DiffHunk } from '../../../core/contract.js';
 
 // ---------------------------------------------------------------------------
 // Language detection

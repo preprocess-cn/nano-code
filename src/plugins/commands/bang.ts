@@ -1,6 +1,6 @@
 import { spawn } from 'child_process';
-import { NanoPlugin } from '../../plugin.js';
-import { CommandInterceptResult } from '../../contract.js';
+import { NanoPlugin } from '../../core/plugin.js';
+import { CommandInterceptResult } from '../../core/contract.js';
 import { DisplayManager } from '../../display.js';
 
 /**

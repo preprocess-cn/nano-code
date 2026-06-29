@@ -6,7 +6,7 @@ import ScrollBox, { type ScrollBoxHandle } from './engine/components/ScrollBox.j
 import { useDeclaredCursor } from './engine/hooks/use-declared-cursor.js';
 import { ColorDiff } from './color-diff.js';
 import { Markdown, StreamingMarkdown } from './components/Markdown.js';
-import type { DiffHunk } from '../../../contract.js';
+import type { DiffHunk } from '../../../core/contract.js';
 import type { ContextAnalysis } from '../../token-budget/analyzer.js';
 
 export type PermissionResponse = 'allow_once' | 'always_allow' | 'deny';

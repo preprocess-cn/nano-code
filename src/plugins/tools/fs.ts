@@ -2,9 +2,9 @@ import * as fs from 'fs/promises';
 import * as fsSync from 'fs';
 import * as path from 'path';
 import { confirm } from '@clack/prompts';
-import { NanoPlugin, PluginRegistry } from '../../plugin.js';
-import { ToolDefinition, ToolResponse, ToolContext } from '../../contract.js';
-import { SK } from '../../store-keys.js';
+import { NanoPlugin, PluginRegistry } from '../../core/plugin.js';
+import { ToolDefinition, ToolResponse, ToolContext } from '../../core/contract.js';
+import { SK } from '../../core/store-keys.js';
 import { getPatchForDisplay, newFileHunk } from '../../utils/diff.js';
 
 // ── 文件读取缓存（用于压缩后恢复上下文）──

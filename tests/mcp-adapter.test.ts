@@ -5,7 +5,7 @@ import { join } from 'path';
 import { tmpdir } from 'os';
 import { MCPStdioTransport, createMCPPlugin, buildMCPPluginsFromConfig } from '../src/plugins/mcp/adapter.js';
 import type { MCPTransport } from '../src/plugins/mcp/adapter.js';
-import { NanoConfig } from '../src/config.js';
+import { NanoConfig } from '../src/core/config.js';
 
 // ── Temp file helpers (avoid shell quoting issues with inline -e scripts) ──
 

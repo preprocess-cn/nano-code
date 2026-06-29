@@ -1,10 +1,10 @@
-import { NanoCodeAgent } from './agent.js';
-import { PluginRegistry, registerBuiltinPlugin } from './plugin.js';
-import { loadConfig, applyProfile, getSystemWhitelist } from './config.js';
-import { LLMClient } from './llm.js';
+import { NanoCodeAgent } from './core/agent.js';
+import { PluginRegistry, registerBuiltinPlugin } from './core/plugin.js';
+import { loadConfig, applyProfile, getSystemWhitelist } from './core/config.js';
+import { LLMClient } from './core/llm.js';
 import { buildMCPPluginsFromConfig } from './plugins/mcp/adapter.js';
 import { npmLoaderPlugin } from './plugins/npm-loader.js';
-import { loadSession, saveSession } from './session.js';
+import { loadSession, saveSession } from './core/session.js';
 import { handlePluginCommand, printPluginList } from './plugin-cli.js';
 import { loadAgentDefinitions } from './agent-loader.js';
 import { createAgentToolPlugin } from './agent-tool.js';
@@ -19,11 +19,11 @@ import { DisplayManager } from './display.js';
 import { replDisplay } from './plugins/display/repl.js';
 import { cliDisplay } from './plugins/display/cli.js';
 import { resolveDisplayPlugin } from './plugins/display/loader.js';
-import { SK } from './store-keys.js';
+import { SK } from './core/store-keys.js';
 import { cac } from 'cac';
-import { getPackageVersion } from './version.js';
-import { logManager } from './logger.js';
-import { runDoctor, formatDoctorResults } from './doctor.js';
+import { getPackageVersion } from './core/version.js';
+import { logManager } from './core/logger.js';
+import { runDoctor, formatDoctorResults } from './core/doctor.js';
 
 // ── CLI messages ──
 

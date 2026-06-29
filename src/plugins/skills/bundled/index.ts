@@ -10,7 +10,7 @@
  * - userInvocable: false → 从斜杠命令 UI 隐藏
  * - whenToUse: 追加到描述后，帮助 LLM 判断调用时机
  */
-import type { PluginRegistry } from '../../../plugin.js';
+import type { PluginRegistry } from '../../../core/plugin.js';
 
 export interface BundledSkillContext {
   cwd: string;

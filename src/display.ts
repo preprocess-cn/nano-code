@@ -1,4 +1,4 @@
-import { PluginRegistry } from './plugin.js';
+import { PluginRegistry } from './core/plugin.js';
 import type { ContextAnalysis } from './plugins/token-budget/analyzer.js';
 
 // ════════════════════════════════════════════
@@ -111,7 +111,8 @@ export interface DisplayPlugin {
 // DisplayManager — 多展示层管理器
 // ════════════════════════════════════════════
 
-export class DisplayManager {
+export class DisplayManager implements DisplayPlugin {
+  readonly name = 'display-manager';
   private plugins: DisplayPlugin[] = [];
 
   addPlugin(plugin: DisplayPlugin): void {

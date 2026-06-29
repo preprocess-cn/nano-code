@@ -1,8 +1,8 @@
 import { describe, it } from 'node:test';
 import * as assert from 'node:assert/strict';
-import { NanoCodeAgent } from '../src/agent.js';
-import { PluginRegistry } from '../src/plugin.js';
-import { SK } from '../src/store-keys.js';
+import { NanoCodeAgent } from '../src/core/agent.js';
+import { PluginRegistry } from '../src/core/plugin.js';
+import { SK } from '../src/core/store-keys.js';
 
 /** Minimal mock that satisfies the LLMClient shape without calling the API. */
 function mockLLM() {
