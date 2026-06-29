@@ -1,12 +1,14 @@
-import { describe, it, beforeEach } from 'node:test';
+import { describe, it, beforeEach, mock } from 'node:test';
 import * as assert from 'node:assert/strict';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { DisplayManager } from '../src/display.js';
+import { PluginRegistry } from '../src/core/plugin.js';
 import { replDisplay } from '../src/plugins/display/repl.js';
 import { resolveDisplayPlugin } from '../src/plugins/display/loader.js';
 import { getToolArgsPreview, formatToolCall } from '../src/plugins/display/claude-code-ink/index.js';
+import { collectPlugins, buildPluginList } from '../src/plugins/commands/builtin.js';
 
 describe('DisplayPlugin — repl', () => {
 
@@ -257,6 +259,65 @@ describe('DisplayManager — multi-plugin', () => {
     assert.equal(config.stdout, process.stdout);
     assert.equal(config.stderr, process.stderr);
     assert.equal(config.stdin, process.stdin);
+  });
+
+  describe('showPluginManager', () => {
+    it('returns false when no plugin implements it', async () => {
+      const mgr = new DisplayManager();
+      mgr.addPlugin({ name: 'silent' });
+      const registry = new PluginRegistry();
+      const result = await mgr.showPluginManager(registry);
+      assert.equal(result, false);
+    });
+
+    it('calls the first plugin that implements showPluginManager', async () => {
+      const mgr = new DisplayManager();
+      let called = false;
+
+      mgr.addPlugin({
+        name: 'with-manager',
+        async showPluginManager(_r: PluginRegistry) { called = true; return true; },
+      });
+      mgr.addPlugin({
+        name: 'without-manager',
+      });
+
+      const registry = new PluginRegistry();
+      const result = await mgr.showPluginManager(registry);
+      assert.equal(result, true);
+      assert.equal(called, true);
+    });
+
+    it('stops at the first implementing plugin and skips later ones', async () => {
+      const mgr = new DisplayManager();
+      const order: number[] = [];
+
+      mgr.addPlugin({
+        name: 'first',
+        async showPluginManager(_r: PluginRegistry) { order.push(1); return true; },
+      });
+      mgr.addPlugin({
+        name: 'second',
+        async showPluginManager(_r: PluginRegistry) { order.push(2); return true; },
+      });
+
+      await mgr.showPluginManager(new PluginRegistry());
+      assert.deepEqual(order, [1]);
+    });
+
+    it('does not call showPluginManager on plugins without it', async () => {
+      const mgr = new DisplayManager();
+
+      mgr.addPlugin({ name: 'no-manager' });
+      mgr.addPlugin({
+        name: 'with-manager',
+        async showPluginManager(_r: PluginRegistry) { return true; },
+      });
+
+      const registry = new PluginRegistry();
+      const result = await mgr.showPluginManager(registry);
+      assert.equal(result, true);
+    });
   });
 
 });

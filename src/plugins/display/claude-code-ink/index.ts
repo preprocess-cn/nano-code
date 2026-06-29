@@ -151,6 +151,8 @@ function createPlugin(): DisplayPlugin {
   let pendingPermission: PermissionPrompt | null = null;
   let permissionResolve: ((value: boolean | 'always_allow') => void) | null = null;
   let registry: PluginRegistry | null = null;
+  // Plugin manager overlay state
+  let pluginManagerResolve: (() => void) | null = null;
 
   function cancelExecution(): void {
     if (registry) {
@@ -431,6 +433,34 @@ function createPlugin(): DisplayPlugin {
         contextAnalysis: analysis,
       });
       render();
+    },
+
+    async showPluginManager(r: PluginRegistry): Promise<boolean> {
+      if (!inkInstance) return false;
+
+      // 渲染 PluginManager 覆盖主界面
+      const { PluginManager } = await import('./PluginManager.js');
+      inkInstance.rerender(
+        React.createElement(PluginManager, {
+          registry: r,
+          onDone: () => {
+            if (pluginManagerResolve) {
+              const r2 = pluginManagerResolve;
+              pluginManagerResolve = null;
+              r2();
+            }
+          },
+        }),
+      );
+
+      // 等待用户退出，然后恢复主界面
+      await new Promise<void>(resolve => {
+        pluginManagerResolve = resolve;
+      });
+
+      // 恢复 InkApp 主界面
+      render();
+      return true;
     },
   };
 }

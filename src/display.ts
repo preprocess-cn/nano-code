@@ -1,4 +1,5 @@
 import { PluginRegistry } from './core/plugin.js';
+import type { NanoConfig } from './core/config.js';
 import type { ContextAnalysis } from './plugins/token-budget/analyzer.js';
 
 // ════════════════════════════════════════════
@@ -105,6 +106,14 @@ export interface DisplayPlugin {
 
   /** 上下文分析可视化（Ink 展示层渲染色块） */
   onContextAnalysis?(analysis: ContextAnalysis): void;
+
+  /**
+   * 交互式插件管理器。
+   * 显示可滚动的插件列表，支持启用/禁用切换。
+   * 返回后由调用方决定是否要刷新插件列表等后续操作。
+   * 如果 display 不支持交互式管理（REPL），可不实现此方法。
+   */
+  showPluginManager?(registry: PluginRegistry): Promise<boolean>;
 }
 
 // ════════════════════════════════════════════
@@ -205,6 +214,20 @@ export class DisplayManager implements DisplayPlugin {
 
   onContextAnalysis(analysis: ContextAnalysis): void {
     for (const p of this.plugins) p.onContextAnalysis?.(analysis);
+  }
+
+  /**
+   * 调用首个实现了 showPluginManager 的 display 插件打开交互式插件管理器。
+   * 返回 true 表示已处理，false 表示无 display 支持。
+   */
+  async showPluginManager(registry: PluginRegistry): Promise<boolean> {
+    for (const p of this.plugins) {
+      if (p.showPluginManager) {
+        await p.showPluginManager(registry);
+        return true;
+      }
+    }
+    return false;
   }
 }
 

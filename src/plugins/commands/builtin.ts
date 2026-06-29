@@ -1,7 +1,7 @@
 import { CommandInterceptResult } from '../../core/contract.js';
 import { NanoCodeAgent } from '../../core/agent.js';
 import { PluginRegistry } from '../../core/plugin.js';
-import { NanoConfig } from '../../core/config.js';
+import { loadConfig, NanoConfig, getSystemWhitelist } from '../../core/config.js';
 import { DisplayManager } from '../../display.js';
 import { loadAllSkills } from '../skills/loader.js';
 import { analyzeContextUsage, type ContextAnalysis } from '../token-budget/analyzer.js';
@@ -13,6 +13,8 @@ import type { BuiltinCommand } from './types.js';
 import { readAllTasks, getPlanFilePath } from '../tools/task-plan.js';
 import { SK } from '../../core/store-keys.js';
 import { runDoctor, formatDoctorResults } from '../../core/doctor.js';
+import { loadAgentDefinitions } from '../../agent-loader.js';
+import { readMcpJson, getProjectMcpJsonPath, getGlobalMcpJsonPath, getClaudeMcpJsonPath } from '../mcp/config-writer.js';
 
 export interface BuiltinContext {
   agent: NanoCodeAgent;
@@ -51,6 +53,7 @@ const BUILTIN_COMMANDS: BuiltinCommand[] = [
       lines.push('  /plan             查看/管理 Plan Mode');
       lines.push('  /task, /tasks     查看任务列表');
       lines.push('  /doctor           诊断系统健康状态');
+      lines.push('  /plugin, /plugins 管理插件 — /plugin list, enable <name>, disable <name>');
       lines.push('');
 
       const skills = loadAllSkills();
@@ -307,6 +310,42 @@ const BUILTIN_COMMANDS: BuiltinCommand[] = [
       return { handled: true, skipAgent: true, message: formatDoctorResults(results) };
     },
   },
+  {
+    name: 'plugin',
+    aliases: ['plugins'],
+    description: '管理插件 — /plugin list, enable <name>, disable <name>',
+    handler: async (ctx?: BuiltinContext) => {
+      const args = (ctx?.args || '').trim();
+      const registry = ctx?.registry;
+      const config = ctx?.config;
+      const display = ctx?.display;
+
+      // 无参数或 /plugin manage → 尝试交互式管理
+      if (!args || args === 'manage') {
+        if (display) {
+          const handled = await display.showPluginManager(registry!);
+          if (handled) return { handled: true, skipAgent: true };
+        }
+        // fallback: 显示文本列表
+        return buildPluginList(config);
+      }
+
+      // /plugin list
+      if (args === 'list') {
+        return buildPluginList(config);
+      }
+
+      // /plugin enable <name> 或 /plugin disable <name>
+      const enableMatch = args.match(/^(enable|disable)\s+(.+)$/);
+      if (enableMatch) {
+        const enable = enableMatch[1] === 'enable';
+        const name = enableMatch[2].trim();
+        return togglePlugin(name, enable, config);
+      }
+
+      return { handled: true, skipAgent: true, message: `未知 plugin 子命令: ${args}。可用: list, enable <name>, disable <name>, manage` };
+    },
+  },
 ];
 
 export function getBuiltinCommands(): BuiltinCommand[] {
@@ -357,4 +396,112 @@ function formatContextOutput(analysis: ContextAnalysis): string {
   lines.push('');
 
   return lines.join('\n');
+}
+
+// ── /plugin sub-commands ──
+
+export interface PluginRow {
+  name: string;
+  status: string;
+  tag: string;
+}
+
+export function collectPlugins(config: NanoConfig | undefined): PluginRow[] {
+  const names = new Set<string>();
+  const mcpJsonNames = new Set<string>();
+  const claudeJsonNames = new Set<string>();
+
+  // 已配置的插件
+  if (config?.plugins) {
+    for (const name of Object.keys(config.plugins)) names.add(name);
+  }
+
+  // 系统白名单
+  if (config) {
+    const whitelist = getSystemWhitelist(config);
+    for (const w of whitelist) names.add(w);
+  }
+
+  // .mcp.json
+  for (const f of [getProjectMcpJsonPath(), getGlobalMcpJsonPath()]) {
+    const cfg = readMcpJson(f);
+    if (cfg) for (const name of Object.keys(cfg.mcpServers)) { names.add(name); mcpJsonNames.add(name); }
+  }
+  const claudeCfg = readMcpJson(getClaudeMcpJsonPath());
+  if (claudeCfg) {
+    for (const name of Object.keys(claudeCfg.mcpServers)) {
+      if (!mcpJsonNames.has(name)) { names.add(name); claudeJsonNames.add(name); }
+    }
+  }
+
+  const whitelist = config ? getSystemWhitelist(config) : new Set<string>();
+  const rows: PluginRow[] = [];
+  for (const name of names) {
+    const cfg = config?.plugins?.[name];
+    const enabled = cfg ? cfg.enabled !== false : true;
+    const tag = whitelist.has(name) ? 'system'
+      : (cfg?.type || (mcpJsonNames.has(name) ? 'mcp'
+        : (claudeJsonNames.has(name) ? 'claude' : 'user')));
+    rows.push({ name, status: enabled ? 'active' : 'inactive', tag });
+  }
+
+  // agent 插件
+  try {
+    for (const def of loadAgentDefinitions()) {
+      rows.push({
+        name: `agent:${def.name}`,
+        status: def.enabled !== false ? 'active' : 'inactive',
+        tag: 'agent',
+      });
+    }
+  } catch { /* 忽略加载失败 */ }
+
+  rows.sort((a, b) => {
+    const prio: Record<string, number> = { system: 0, agent: 1, user: 2, npm: 2, mcp: 2 };
+    const pa = prio[a.tag] ?? 3;
+    const pb = prio[b.tag] ?? 3;
+    if (pa !== pb) return pa - pb;
+    return a.name.localeCompare(b.name);
+  });
+
+  return rows;
+}
+
+export function buildPluginList(config: NanoConfig | undefined): CommandInterceptResult {
+  const rows = collectPlugins(config);
+  const lines: string[] = [];
+  lines.push('');
+  lines.push(`  已安装插件（共 ${rows.length} 个）:`);
+  lines.push('  ' + '-'.repeat(64));
+  for (const r of rows) {
+    lines.push(`  ${r.name.padEnd(28)} ${r.status.padEnd(10)} [${r.tag}]`);
+  }
+  lines.push('');
+  return { handled: true, skipAgent: true, message: lines.join('\n') };
+}
+
+function togglePlugin(name: string, enable: boolean, config: NanoConfig | undefined): CommandInterceptResult {
+  const whitelist = config ? getSystemWhitelist(config) : new Set<string>();
+
+  if (whitelist.has(name)) {
+    return { handled: true, skipAgent: true, message: `"${name}" 是系统插件，请通过 .nano-code.yaml 配置文件操作。` };
+  }
+
+  const PROJECT_CONFIG = path.join(process.cwd(), '.nano-code.yaml');
+  let projectCfg: Record<string, any> = {};
+  try {
+    projectCfg = JSON.parse(fs.readFileSync(PROJECT_CONFIG, 'utf-8'));
+  } catch { /* 文件不存在 */ }
+
+  if (!projectCfg.plugins) projectCfg.plugins = {};
+  if (!projectCfg.plugins[name]) projectCfg.plugins[name] = {};
+  projectCfg.plugins[name].enabled = enable;
+
+  try {
+    fs.writeFileSync(PROJECT_CONFIG, JSON.stringify(projectCfg, null, 2), 'utf-8');
+  } catch (err) {
+    return { handled: true, skipAgent: true, message: `写入配置失败: ${err}` };
+  }
+
+  return { handled: true, skipAgent: true, message: `插件 "${name}" 已${enable ? '启用' : '禁用'}。` };
 }
