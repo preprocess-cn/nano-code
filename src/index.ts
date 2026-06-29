@@ -290,6 +290,7 @@ async function startCLI(options: { debug?: boolean; think?: boolean; skipPermiss
   // ── --list-plugins mode: print and exit ──
   if (options.listPlugins) {
     printPluginList(registry);
+    await registry.destroy();
     return;
   }
 
