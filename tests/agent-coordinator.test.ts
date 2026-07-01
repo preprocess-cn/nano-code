@@ -1,8 +1,8 @@
 import { describe, it, afterEach, beforeEach } from 'node:test';
 import * as assert from 'node:assert/strict';
-import { createAgentCoordinatorPlugin } from '../src/agent-coordinator.js';
-import { BackgroundTaskManager } from '../src/background-task-manager.js';
-import { MessageBus } from '../src/agent-message-bus.js';
+import { createAgentCoordinatorPlugin } from '../src/plugins/coordinator/coordinator.js';
+import { BackgroundTaskManager } from '../src/plugins/coordinator/task-manager.js';
+import { MessageBus } from '../src/plugins/coordinator/message-bus.js';
 import { PluginRegistry } from '../src/core/plugin.js';
 import { LLMClient, ChatMessage } from '../src/core/llm.js';
 
@@ -95,6 +95,51 @@ describe('AgentCoordinator', () => {
     const plugin = createAgentCoordinatorPlugin(mockLLMClient());
     const result = plugin.onSystemPrompt!('Base prompt.');
     assert.ok(!result.includes('Running Background Tasks'));
+  });
+
+  it('onSystemPrompt does not produce duplicate headers on multiple calls', () => {
+    const plugin = createAgentCoordinatorPlugin(mockLLMClient());
+    // Each call is independent — no accumulation across calls
+    const first = plugin.onSystemPrompt!('Base prompt.');
+    const second = plugin.onSystemPrompt!('Base prompt.');
+    const count = (second.match(/## Specialist Agents/g) || []).length;
+    assert.equal(count, 1, 'should have exactly one Specialist Agents header');
+  });
+
+  it('onSystemPrompt with running tasks renders multiple tasks', () => {
+    const mgr = BackgroundTaskManager.getInstance();
+    const id1 = mgr.startTask('agent-a', 'task one', () => new Promise(() => {}));
+    const id2 = mgr.startTask('agent-b', 'task two', () => new Promise(() => {}));
+
+    const plugin = createAgentCoordinatorPlugin(mockLLMClient());
+    const result = plugin.onSystemPrompt!('Base prompt.');
+    assert.ok(result.includes('Running Background Tasks'));
+    assert.ok(result.includes('agent-a'));
+    assert.ok(result.includes('agent-b'));
+    assert.ok(result.includes(id1));
+    assert.ok(result.includes(id2));
+  });
+
+  it('onSystemPrompt includes all subsections when agents exist', () => {
+    const plugin = createAgentCoordinatorPlugin(mockLLMClient());
+    const result = plugin.onSystemPrompt!('Base prompt.');
+
+    if (result.includes('## Specialist Agents')) {
+      assert.ok(result.includes('同步 vs 后台'), 'should have sync vs background section');
+      assert.ok(result.includes('并发'), 'should have concurrency section');
+      assert.ok(result.includes('Agent 间通信'), 'should have inter-agent communication section');
+      assert.ok(result.includes('send_message'), 'should mention send_message');
+    }
+  });
+
+  it('onSystemPrompt passes through unchanged when no agents and no running tasks', () => {
+    const plugin = createAgentCoordinatorPlugin(mockLLMClient());
+    const input = 'Simple prompt without agents.';
+    const result = plugin.onSystemPrompt!(input);
+    // If no agent defs exist on disk and no running tasks, prompt should be unchanged
+    if (!result.includes('## Specialist Agents') && !result.includes('Running Background Tasks')) {
+      assert.equal(result, input);
+    }
   });
 
   it('onBeforeRequest injects completed task notification', async () => {

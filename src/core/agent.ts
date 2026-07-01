@@ -13,6 +13,8 @@ export interface NanoCodeAgentOptions {
   promptConfig?: SystemPromptConfig;
   name?: string;
   display?: DisplayPlugin;
+  /** 外部注入的 AbortController。子 agent 通过此控制器接收父 agent 的取消信号。 */
+  abortController?: AbortController;
 }
 
 export class NanoCodeAgent {
@@ -23,6 +25,7 @@ export class NanoCodeAgent {
   private promptConfig?: SystemPromptConfig;
   private name: string;
   private display?: DisplayPlugin;
+  private abortController?: AbortController;
 
   constructor(options: NanoCodeAgentOptions) {
     this.llmClient = options.llmClient || new LLMClient();
@@ -31,6 +34,7 @@ export class NanoCodeAgent {
     this.promptConfig = options.promptConfig;
     this.name = options.name ?? 'main';
     this.display = options.display;
+    this.abortController = options.abortController;
   }
 
   getName(): string {
@@ -114,9 +118,9 @@ export class NanoCodeAgent {
       let responseMeta: Record<string, unknown> | undefined;
 
       // Set up cancellation: AbortController for LLM stream, flag for checkpoints
-      const abortController = new AbortController();
+      const abortController = this.abortController ?? new AbortController();
       this.registry.store.set(SK.AgentAbort, abortController);
-      const isCancelled = () => this.registry.store.get(SK.AgentCancelled) === true;
+      const isCancelled = () => this.registry.store.get(SK.AgentCancelled) === true || abortController.signal.aborted;
 
       let response;
       try {
