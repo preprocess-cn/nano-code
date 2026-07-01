@@ -96,10 +96,28 @@ function analyzeSystemPrompt(registry: PluginRegistry, config: NanoConfig): { di
   };
 }
 
+/**
+ * Collect tool names belonging to MCP plugins.
+ * A plugin is considered MCP if its name contains "mcp" or its description mentions "mcp server".
+ */
+function getMcpToolNames(registry: PluginRegistry): Set<string> {
+  const allPlugins = registry.listPlugins();
+  const names = new Set<string>();
+  for (const p of allPlugins) {
+    if (p.name.includes('mcp') || p.name.startsWith('MCP') || p.description?.toLowerCase().includes('mcp server')) {
+      for (const tool of p.tools) {
+        names.add(tool.function.name);
+      }
+    }
+  }
+  return names;
+}
+
 // ── Tools analysis ──
 
 function analyzeTools(registry: PluginRegistry): ContextDimension {
-  const schemas = registry.getAllSchemas();
+  const mcpToolNames = getMcpToolNames(registry);
+  const schemas = registry.getAllSchemas().filter(s => !mcpToolNames.has(s.function.name));
   const items: ContextItem[] = [];
   for (const s of schemas) {
     items.push({
@@ -114,19 +132,8 @@ function analyzeTools(registry: PluginRegistry): ContextDimension {
 // ── MCP Tools analysis ──
 
 function analyzeMcpTools(registry: PluginRegistry): ContextDimension {
-  // Identify MCP plugins: those with "mcp" in their name/description
-  const allPlugins = registry.listPlugins();
-  const mcpPlugins = allPlugins.filter(p =>
-    p.name.includes('mcp') || p.name.startsWith('MCP') || p.description?.toLowerCase().includes('mcp server'),
-  );
-  // Collect schemas that belong to MCP plugins
+  const mcpToolNames = getMcpToolNames(registry);
   const allSchemas = registry.getAllSchemas();
-  const mcpToolNames = new Set<string>();
-  for (const plugin of mcpPlugins) {
-    for (const tool of plugin.tools) {
-      mcpToolNames.add(tool.function.name);
-    }
-  }
   const mcpSchemas = allSchemas.filter(s => mcpToolNames.has(s.function.name));
   const items: ContextItem[] = [];
   for (const s of mcpSchemas) {

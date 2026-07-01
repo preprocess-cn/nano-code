@@ -107,3 +107,67 @@ describe('Token Budget Plugin', () => {
     assert.equal(r.getAllSchemas().length, 0);
   });
 });
+
+// ── /context analyzer: Tools 与 MCP Tools 互斥 ──
+
+import { NanoConfig } from '../src/core/config.js';
+import { ToolDefinition } from '../src/core/contract.js';
+import { NanoPlugin } from '../src/core/plugin.js';
+import { analyzeContextUsage } from '../src/plugins/token-budget/analyzer.js';
+
+function makeTool(name: string): ToolDefinition {
+  return {
+    type: 'function',
+    function: { name, description: `tool ${name}`, parameters: {} },
+  };
+}
+
+function makePlugin(name: string, tools: string[]): NanoPlugin {
+  return {
+    name,
+    getTools: () => tools.map(makeTool),
+    execute: async (_n: string, _a: any) => ({ status: 'success' as const }),
+  };
+}
+
+/**
+ * 当 registry 中同时存在 MCP 插件和普通插件时，
+ * Tools 维度不应包含 MCP 工具，MCP Tools 维度不应包含普通工具。
+ */
+it('analyzeContextUsage: Tools and MCP Tools dimensions are mutually exclusive', async () => {
+  const r = new PluginRegistry();
+  await r.register(makePlugin('mcp:codebase-memory', ['search_code', 'query_graph']));
+  await r.register(makePlugin('mcp:filesystem', ['read_file', 'write_file']));
+  await r.register(makePlugin('my-tools', ['list_files', 'delete_file']));
+
+  const mockAgent = { getHistory: () => [] } as any;
+  const mockConfig: NanoConfig = {
+    configVersion: 1,
+    core: { maxTokens: 128000, defaultTimeout: 30000 },
+    plugins: {},
+  };
+
+  const analysis = analyzeContextUsage(mockAgent, r, mockConfig);
+
+  const toolsDim = analysis.dimensions.find(d => d.name === 'Tools');
+  const mcpDim = analysis.dimensions.find(d => d.name === 'MCP Tools');
+
+  assert.ok(toolsDim, 'Tools dimension should exist');
+  assert.ok(mcpDim, 'MCP Tools dimension should exist');
+
+  const toolNames = new Set(toolsDim.items.map(i => i.name));
+  const mcpNames = new Set(mcpDim.items.map(i => i.name));
+
+  // Verify no overlap
+  const overlap = [...toolNames].filter(n => mcpNames.has(n));
+  assert.equal(overlap.length, 0, `Tools and MCP Tools should not overlap, but found: ${overlap.join(', ')}`);
+
+  // Verify MCP tools are in MCP dimension
+  assert.ok(mcpNames.has('search_code'), 'MCP tool search_code should be in MCP Tools');
+  assert.ok(mcpNames.has('query_graph'), 'MCP tool query_graph should be in MCP Tools');
+  assert.ok(mcpNames.has('read_file'), 'MCP tool read_file should be in MCP Tools');
+
+  // Verify non-MCP tools are in Tools dimension
+  assert.ok(toolNames.has('list_files'), 'non-MCP tool list_files should be in Tools');
+  assert.ok(toolNames.has('delete_file'), 'non-MCP tool delete_file should be in Tools');
+});
