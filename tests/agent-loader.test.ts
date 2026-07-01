@@ -3,7 +3,7 @@ import * as assert from 'node:assert/strict';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { loadAgentDefinitions } from '../src/agent-loader.js';
+import { loadAgentDefinitions } from '../src/plugins/coordinator/agent-loader.js';
 
 function tmpDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'nc-agent-loader-'));

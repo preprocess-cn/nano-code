@@ -1,5 +1,6 @@
 import { PluginRegistry } from './core/plugin.js';
 import type { NanoConfig } from './core/config.js';
+import type { ToolStatus, AgentDisplay } from './core/contract.js';
 import type { ContextAnalysis } from './plugins/token-budget/analyzer.js';
 
 // ════════════════════════════════════════════
@@ -42,7 +43,7 @@ export interface ToolCallEvent extends AgentEvent {
 }
 
 export interface ToolResultEvent extends AgentEvent {
-  status: 'success' | 'error' | 'rejected_by_user';
+  status: ToolStatus;
   message?: string;
 }
 
@@ -241,6 +242,9 @@ export class DisplayManager implements DisplayPlugin {
     }
     return false;
   }
-}
 
-// printPluginList 已移至 plugin-cli.ts
+  /** 返回 AgentDisplay 适配器，供 NanoCodeAgent 使用（代替完整的 DisplayPlugin） */
+  asAgentDisplay(): AgentDisplay {
+    return this;
+  }
+}

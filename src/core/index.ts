@@ -25,6 +25,7 @@ export type {
   CommandOutputHandler,
   CommandInterceptResult,
   InjectedMessage,
+  AgentDisplay,
 } from './contract.js';
 export { isMainAgent } from './contract.js';
 
@@ -53,6 +54,10 @@ export type { AgentModeInfo } from './store-keys.js';
 
 // ── 版本 ──
 export { getPackageVersion, getPackageName } from './version.js';
+
+// ── 重试工具 ──
+export { withRetry } from './retry.js';
+export type { RetryOptions } from './retry.js';
 
 // ── 日志 ──
 export { logManager } from './logger.js';

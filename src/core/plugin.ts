@@ -61,6 +61,7 @@ export class PluginRegistry {
   private agentName: string = 'main';
   private _confirmCallback?: (req: PermissionConfirmRequest) => Promise<PermissionConfirmResponse>;
   private _outputHandler?: CommandOutputHandler;
+  private _schemaCache: ToolDefinition[] | null = null;
 
   /** 插件间共享状态通道。核心只做透传，不知晓任何 key 的业务含义 */
   store: IStore = new InMemoryStore();
@@ -134,6 +135,7 @@ export class PluginRegistry {
       this.toolIndex.set(tool.function.name, plugin.name);
       this.toolSideEffects.set(tool.function.name, tool.function.sideEffect ?? true);
     }
+    this._schemaCache = null;
 
     try {
       if (plugin.onInit) {
@@ -158,6 +160,7 @@ export class PluginRegistry {
     this.toolSideEffects.clear();
     this.configs.clear();
     this._allowlist.clear();
+    this._schemaCache = null;
   }
 
   async unregister(name: string): Promise<void> {
@@ -180,13 +183,16 @@ export class PluginRegistry {
     }
     this.plugins.delete(name);
     this.configs.delete(name);
+    this._schemaCache = null;
   }
 
   getAllSchemas(): ToolDefinition[] {
+    if (this._schemaCache) return this._schemaCache;
     const schemas: ToolDefinition[] = [];
     for (const plugin of this.plugins.values()) {
       schemas.push(...plugin.getTools());
     }
+    this._schemaCache = schemas;
     return schemas;
   }
 
@@ -355,7 +361,6 @@ export class PluginRegistry {
     return this.configs.get(name) ?? {};
   }
 
-  // ─── Reserved: plugin marketplace API stubs ───
 }
 
 // ── Builtin plugin loaders ──

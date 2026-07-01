@@ -183,44 +183,14 @@ MCP 和 agent 工具都是"主 agent 委托能力给外部"，区别在：
 
 两者互补：agent 工具适合轻量、同进程的委派；MCP 适合重量、异构、独立部署的服务。
 
-## 已实现功能
+### Agent 协调层
 
-- ReAct Agent 循环 + 流式 LLM 通信
-- 插件注册中心（PluginRegistry）：注册、注销、工具路由、钩子链
-- 内置插件：fs（文件读写 + patch）、command（bash 执行 + 安全黑名单）、**memory（记忆存储/检索）**
-- MCP 集成：通过 stdio/HTTP JSON-RPC 加载任意 MCP Server
-- Token-budget 插件：会话/请求级别 token 用量跟踪与限制，使用 API 精确 token 统计
-- 无工具时自动降级为纯对话模式
-- agent 角色和启动提示可配置化
-- **Agent Profile 系统**：通过 `--profile <name>` 直接进入特定角色模式，支持三层配置覆盖
-- **动态系统提示词**：根据实际注册的工具列表生成工具描述，适配任意角色
-- **插件引导文件系统（Guides）**：分阶段 markdown 引导文件，让 AI 编程工具按步骤创建插件
-- **YAML 全局配置系统**：`~/.nano-code/config.yaml`，支持系统插件白名单、环境变量、提示词模板
-- **系统插件白名单**：白名单内插件 CLI 不可操作，仅通过配置文件管理
-- **`plugin` CLI 子命令**：`install`（npm/git/本地路径）、`list`、`enable`、`disable`
-- **npm 插件加载器**：通过 `type: "npm"` 加载 npm 包为 NanoPlugin
-- **Agent 身份系统**：`NanoCodeAgent` + `PluginRegistry` 均持有 agent name，输出按名带前缀
-- **Agent 定义加载器**：自动扫描 `~/.nano-code/agents/*.yaml`，校验必填字段
-- **子 agent 工具系统**：agent 定义为 tool 注册，调用时创建独立 `NanoCodeAgent` 实例独立执行
-- **输出分层**：子 agent 输出带 `[name]` 前缀，主 agent 无前缀
-- **展示层插件系统**：`DisplayPlugin` 接口 + `DisplayManager` 多插件管理器，结构化事件传递，`display.plugin` 配置加载
-- **展示层插件引导**：`plugin-guides/display-plugin.md`，面向 AI 编程工具的开发文档
-- **DisplayPlugin 生命周期事件**：`onAgentTurnStart/End`、`onStateSnapshot`，插件可感知 agent 任务开始/结束
-- **额外参数注入（extraParams）**：`NanoPlugin.onExtraParams()` 钩子，`PluginRegistry.collectExtraParams()` 收集，agent 自动透传 LLM API
-- **usage 剥离**：`LLMResponse` 不再包含 usage，改为 `onMeta` 回调 + `rawMeta` 参数由插件自行解析（`token-budget` 插件已适配）
-- **插件间共享状态（IStore）**：`IStore` 接口（`get/set/subscribe`），默认 `InMemoryStore` 实现，位于 `src/core/store.ts`，可替换为任何后端存储；`IStore.set<T>()` 类型安全（`value: T` 而非 `value: unknown`）
-- **Ink 斜杠命令建议弹出**：输入 `/` 开头时自动弹出技能/命令列表，实时过滤，键盘导航 ↑↓ Tab Enter Esc，Tab 补全命令名
-- **Ink 输入框模式变色**：`!` 开头边框变粉色（`#ff0087`）、`/` 开头变紫色（`#7c3aed`），正常灰色（`#6b7280`）
-- **Ink Plan Mode 状态指示器**：底栏黄色 `● plan on` 徽标 + 任务数量显示
-- **Plan Mode 系统**：`enter_plan_mode`/`exit_plan_mode` 工具 + 3 阶段工作流系统提示注入 + 用户确认弹窗
-- **任务/清单系统**：`task_create`/`task_list`/`task_update`/`task_stop` 工具，`.nano-code/tasks/` JSON 文件持久化
-- **技能/命令桥接层**（`skills-bridge.ts`）：独立文件管理跨插件依赖（skills + commands），通过 provider 模式注入 Ink 显示层
-- **核心边界清理**：`InMemoryStore` 从 `plugins/store/` 移至 `src/core/store.ts`；`IStore.set<T>()` 类型签名修复（`value: unknown` → `value: T`）；`handleExit` 改为 `async` 优雅等待 `registry.destroy()` 完成
-- **核心层独立打包**：核心文件移至 `src/core/`，只暴露接口层；`agent.ts` 依赖 `DisplayPlugin` 接口而非 `DisplayManager`；`src/core/index.ts` 公共 API 导出
-- **display-strings.ts 消除**：集中式字符串文件已删除，所有字符串分散到各所属模块；核心模块（llm.ts）不再包含展示字符串，改为原始诊断日志
-- **StatusEvent level 协议**：新增 `MessageLevel` 类型（`status`/`info`/`warn`/`error`/`success`），`StatusEvent.level` 必填，展示层据此渲染而非猜测 `formatStatusText`
-- **Agent 协调层**：`AgentCoordinator` 统一管理 agent 注册/后台执行/通信，`BackgroundTaskManager` 调度后台任务生命周期，`MessageBus` 信箱模式 agent 间消息传递
-- **后台 agent 执行**：`run_in_background=true` 异步执行，完成后自动注入主 agent 请求
-- **Agent 间通信**：`send_message` 工具基于 MessageBus 单例，支持 agent 名称/taskId 寻址
-- **后台任务展示**：`BackgroundTaskEvent` + `onBackgroundTask` 回调，Ink `BackgroundTaskBar` 底栏组件实时展示
-- **cli-display 展示插件**：非交互式 CLI 展示层，`display.enabled: false` 时自动启用，AI 响应输出到 stdout，状态/错误到 stderr
+Agent 协调功能集中在 `src/plugins/coordinator/`：
+- `coordinator.ts` — AgentCoordinator 插件，统一注册和管理所有 agent 工具
+- `agent-loader.ts` — 扫描 `~/.nano-code/agents/*.yaml`，校验并加载 agent 定义
+- `agent-tool.ts` — 包装 agent 定义为 NanoPlugin 工具，每个调用创建独立子 agent
+- `task-manager.ts` — 后台任务调度（依赖 AgentLifecycle 真实中止子 agent）
+- `lifecycle.ts` — AgentLifecycle 单例，管理 AbortController 层次结构
+- `message-bus.ts` — MessageBus 单例，信箱模式 agent 间消息传递
+- `messaging-plugins.ts` — send_message 和消息投递插件
+

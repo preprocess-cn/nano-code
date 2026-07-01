@@ -16,10 +16,6 @@ export interface InjectedMessage {
  * newMessages: inline skill 展开时注入主循环的消息。
  *   主 agent 的 executeToolCall 检测到此字段后，
  *   将消息追加到 messageHistory 中。
- *
- * contextModifier: 保留字段，用于未来 ToolUseContext 设计。
- *   工具可返回修改器改变后续工具调用的执行环境
- *   （如限制可用工具集、覆盖模型、调整 effort 级别）。
  */
 export interface ToolResponse {
   status: ToolStatus;
@@ -27,8 +23,6 @@ export interface ToolResponse {
   message?: string;
   /** 额外消息注入主循环（inline skill 展开用） */
   newMessages?: InjectedMessage[];
-  /** 保留：执行上下文修改器（用于未来 ToolUseContext） */
-  contextModifier?: unknown;
 }
 
 export interface ToolDefinition {
@@ -106,5 +100,20 @@ export interface CommandInterceptResult {
 
 export function isMainAgent(agentName: string): boolean {
   return agentName === 'main';
+}
+
+/**
+ * Agent 对展示层的窄接口。
+ * NanoCodeAgent 只依赖这个子集接口，不依赖完整的 DisplayPlugin。
+ * 展示层通过 DisplayManager.asAgentDisplay() 适配。
+ */
+export interface AgentDisplay {
+  onStatus?(event: { message: string; agentName: string; level: string }): void;
+  onStreamChunk?(event: { text: string; agentName: string }): void;
+  onToolCall?(event: { toolName: string; args: any; agentName: string }): void;
+  onToolResult?(event: { status: ToolStatus; message?: string; agentName: string }): void;
+  onStateSnapshot?(snapshot: { agentName: string; messageCount: number }): void;
+  onAgentTurnStart?(event: { agentName: string }): void;
+  onAgentTurnEnd?(event: { agentName: string }): void;
 }
 

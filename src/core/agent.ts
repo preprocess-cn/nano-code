@@ -1,9 +1,8 @@
-import { LLMClient, ChatMessage } from './llm.js';
+import { LLMClient, ChatMessage, AssembledToolCall } from './llm.js';
 import { PluginRegistry, ToolCall } from './plugin.js';
 import { SystemPromptConfig } from './config.js';
 import { buildSystemPrompt, formatToolResponse } from './prompt.js';
-import type { DisplayPlugin } from '../display.js';
-import { ToolResponse, ToolContext, InjectedMessage, isMainAgent } from './contract.js';
+import { ToolResponse, ToolContext, InjectedMessage, isMainAgent, AgentDisplay } from './contract.js';
 import { SK } from './store-keys.js';
 
 export interface NanoCodeAgentOptions {
@@ -12,7 +11,7 @@ export interface NanoCodeAgentOptions {
   agentRole?: string;
   promptConfig?: SystemPromptConfig;
   name?: string;
-  display?: DisplayPlugin;
+  display?: AgentDisplay;
   /** 外部注入的 AbortController。子 agent 通过此控制器接收父 agent 的取消信号。 */
   abortController?: AbortController;
 }
@@ -24,7 +23,7 @@ export class NanoCodeAgent {
   private agentRole?: string;
   private promptConfig?: SystemPromptConfig;
   private name: string;
-  private display?: DisplayPlugin;
+  private display?: AgentDisplay;
   private abortController?: AbortController;
 
   constructor(options: NanoCodeAgentOptions) {
@@ -184,7 +183,7 @@ export class NanoCodeAgent {
       this.registry.store.set(SK.AgentMessages, this.getHistory());
 
       this.display?.onStateSnapshot?.({ agentName: this.name, messageCount: this.messageHistory.length });
-	      this.registry.store.set(SK.AgentStatus, { agentName: this.name, status: "running", messageCount: this.messageHistory.length });
+      this.registry.store.set(SK.AgentStatus, { agentName: this.name, status: "running", messageCount: this.messageHistory.length });
     }
 
     this.registry.store.set(SK.AgentStatus, { agentName: this.name, status: 'idle', messageCount: this.messageHistory.length });
@@ -197,7 +196,7 @@ export class NanoCodeAgent {
     return undefined;
   }
 
-  private async executeToolCall(rawToolCall: any): Promise<{ status: 'rejected' | 'ok'; toolMessages: ChatMessage[] }> {
+  private async executeToolCall(rawToolCall: AssembledToolCall): Promise<{ status: 'rejected' | 'ok'; toolMessages: ChatMessage[] }> {
     const toolName = rawToolCall.function.name;
     const toolMessages: ChatMessage[] = [];
 

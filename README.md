@@ -403,8 +403,9 @@ send_message({ to: "main", summary: "查询结果", message: "users 表有 3 个
 │  fs │ command │ memory │ MCP │ token-budget │ …  │
 ├───────────────────────────────────────────────────┤
 │           Agent Coordinator                       │
-│  Agent 注册 / 后台任务管理 / send_message 通信     │
-│  BackgroundTaskManager │ MessageBus               │
+│  src/plugins/coordinator/                         │
+│  Agent 注册 / 后台执行 / send_message agent 间通信 │
+│  AgentLifecycle / TaskManager / MessageBus        │
 ├───────────────────────────────────────────────────┤
 │            Agent 工具（~/.nano-code/agents/）      │
 │  agent:dba  │  agent:reviewer  │  …              │
@@ -414,8 +415,8 @@ send_message({ to: "main", summary: "查询结果", message: "users 表有 3 个
 - **Core** (`src/core/`) — 核心引擎，零 UI 依赖。Agent 循环、LLM 通信、插件编排、配置管理、会话持久化、类型定义。通过 `src/core/index.ts` 暴露公共 API。
 - **Display** (`src/display.ts`) — `DisplayPlugin` 接口 + `DisplayManager` 编排。核心层只依赖 `DisplayPlugin` 接口，不耦合具体实现。
 - **Plugins** — 所有功能通过插件提供，Core 不内置任何业务工具。插件间通过 `IStore` 共享状态，无需互相依赖
-- **Agent Coordinator** — 统一管理所有 agent 工具的注册、后台执行生命周期和 agent 间消息传递（`BackgroundTaskManager` + `MessageBus` 单例）
-- **Agent 工具** — 领域专家子 agent，通过 YAML 定义，自动注册为工具，独立上下文执行
+- **Agent Coordinator** (`src/plugins/coordinator/`) — 统一管理 agent 工具注册、后台执行生命周期和 agent 间消息传递（`AgentLifecycle` / `TaskManager` / `MessageBus` 单例）
+- **Agent 工具** — 领域专家子 agent，通过 `~/.nano-code/agents/*.yaml` 定义，自动注册为工具，独立上下文执行
 
 ### 内置插件
 

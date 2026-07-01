@@ -1,11 +1,12 @@
 import { describe, it, afterEach } from 'node:test';
 import * as assert from 'node:assert/strict';
-import { createAgentToolPlugin } from '../src/agent-tool.js';
+import { createAgentToolPlugin } from '../src/plugins/coordinator/agent-tool.js';
 import { PluginRegistry } from '../src/core/plugin.js';
-import { AgentDefinition } from '../src/agent-loader.js';
+import { AgentDefinition } from '../src/plugins/coordinator/agent-loader.js';
 import { LLMClient } from '../src/core/llm.js';
-import { BackgroundTaskManager } from '../src/background-task-manager.js';
-import { MessageBus } from '../src/agent-message-bus.js';
+import { BackgroundTaskManager } from '../src/plugins/coordinator/task-manager.js';
+import { MessageBus } from '../src/plugins/coordinator/message-bus.js';
+import { AgentLifecycle } from '../src/plugins/coordinator/lifecycle.js';
 
 function mockLLMClient() {
   return {
@@ -19,6 +20,7 @@ describe('createAgentToolPlugin', () => {
   afterEach(() => {
     BackgroundTaskManager.resetInstance();
     MessageBus.resetInstance();
+    AgentLifecycle.resetInstance();
   });
 
   const baseDef: AgentDefinition = {
@@ -84,47 +86,6 @@ describe('createAgentToolPlugin', () => {
     assert.equal(params.run_in_background.type, 'boolean');
   });
 
-  it('onSystemPrompt adds header and entry when no header exists', () => {
-    const plugin = createAgentToolPlugin(baseDef, mockLLMClient());
-    const result = plugin.onSystemPrompt!('You are a helpful assistant.');
-    assert.ok(result.includes('## Specialist Agents'));
-    assert.ok(result.includes('agent-test-agent'));
-    assert.ok(result.includes('A test agent for unit testing'));
-  });
-
-  it('onSystemPrompt appends entry when header already exists', () => {
-    const plugin = createAgentToolPlugin(baseDef, mockLLMClient());
-    const existingPrompt = 'Some prompt\n\n## Specialist Agents\nyou can delegate tasks.';
-    const result = plugin.onSystemPrompt!(existingPrompt);
-    // Should NOT add duplicate header
-    const headerCount = result.match(/## Specialist Agents/g)?.length || 0;
-    assert.equal(headerCount, 1);
-    assert.ok(result.includes('agent-test-agent'));
-  });
-
-  it('onSystemPrompt skips if own entry already exists', () => {
-    const plugin = createAgentToolPlugin(baseDef, mockLLMClient());
-    const existingPrompt = `Prompt with agent-test-agent already mentioned`;
-    const result = plugin.onSystemPrompt!(existingPrompt);
-    assert.equal(result, existingPrompt);
-  });
-
-  it('multiple agent plugins registered in same registry do not produce duplicate headers', () => {
-    const defA: AgentDefinition = { name: 'agent-a', description: 'Agent A', role: 'role a' };
-    const defB: AgentDefinition = { name: 'agent-b', description: 'Agent B', role: 'role b' };
-    const pluginA = createAgentToolPlugin(defA, mockLLMClient());
-    const pluginB = createAgentToolPlugin(defB, mockLLMClient());
-
-    let prompt = 'You are a helpful assistant.';
-    prompt = pluginA.onSystemPrompt!(prompt);
-    prompt = pluginB.onSystemPrompt!(prompt);
-
-    const headerCount = prompt.match(/## Specialist Agents/g)?.length || 0;
-    assert.equal(headerCount, 1);
-    assert.ok(prompt.includes('agent-agent-a'));
-    assert.ok(prompt.includes('agent-agent-b'));
-  });
-
   it('background execution returns success with taskId', async () => {
     const plugin = createAgentToolPlugin(baseDef, mockLLMClient());
     const result = await plugin.execute('agent-test-agent', {
@@ -173,6 +134,28 @@ describe('createAgentToolPlugin', () => {
 
     const bus = MessageBus.getInstance();
     assert.equal(bus.resolveRecipient('test-agent'), taskId);
+  });
+
+  it('AgentLifecycle cancelTask aborts the task controller', () => {
+    const lifecycle = AgentLifecycle.getInstance();
+    const controller = lifecycle.createTaskController('test-cancel');
+    assert.equal(controller.signal.aborted, false);
+
+    const cancelled = lifecycle.cancelTask('test-cancel');
+    assert.equal(cancelled, true);
+    assert.equal(controller.signal.aborted, true);
+  });
+
+  it('cancelTask on unknown taskId returns false', () => {
+    const lifecycle = AgentLifecycle.getInstance();
+    assert.equal(lifecycle.cancelTask('nonexistent'), false);
+  });
+
+  it('cancelTask on already cancelled taskId returns false', () => {
+    const lifecycle = AgentLifecycle.getInstance();
+    lifecycle.createTaskController('test-already');
+    lifecycle.cancelTask('test-already');
+    assert.equal(lifecycle.cancelTask('test-already'), false);
   });
 
   it('background execution unregisters agent from MessageBus on completion', async () => {

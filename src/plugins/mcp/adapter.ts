@@ -7,6 +7,7 @@ import { NanoPlugin } from '../../core/plugin.js';
 import { ToolDefinition, ToolResponse, ToolContext } from '../../core/contract.js';
 import { NanoConfig } from '../../core/config.js';
 import { getPackageVersion } from '../../core/version.js';
+import { withRetry } from '../../core/retry.js';
 
 // ── JSON-RPC types ──
 
@@ -24,37 +25,21 @@ interface JSONRPCResponse {
   error?: { code: number; message: string; data?: any };
 }
 
-// ── Retry helper ──
+// ── Retry config for MCP transport startup ──
 
-const MAX_START_RETRIES = 2;
-const START_RETRY_DELAYS = [500, 1500];
-
-function isTransientStartError(err: Error): boolean {
-  const msg = err.message.toLowerCase();
-  if (msg.includes('refused') || msg.includes('econnreset')) return true;
-  if (msg.includes('timeout') || msg.includes('init timeout')) return true;
-  if (msg.includes('process exited')) return true;
-  if (/http (5\d\d)/.test(msg)) return true;
-  return false;
-}
-
-async function withRetry<T>(fn: () => Promise<T>, label: string): Promise<T> {
-  let lastErr!: Error;
-  for (let attempt = 0; attempt <= MAX_START_RETRIES; attempt++) {
-    try {
-      return await fn();
-    } catch (err) {
-      lastErr = err instanceof Error ? err : new Error(String(err));
-      if (attempt < MAX_START_RETRIES && isTransientStartError(lastErr)) {
-        console.warn(`[mcp] ${label} 失败（第 ${attempt + 1}/${MAX_START_RETRIES + 1} 次），${START_RETRY_DELAYS[attempt]}ms 后重试: ${lastErr.message}`);
-        await new Promise(r => setTimeout(r, START_RETRY_DELAYS[attempt]));
-        continue;
-      }
-      throw lastErr;
-    }
-  }
-  throw lastErr;
-}
+const MCP_RETRY_OPTIONS = {
+  maxRetries: 2,
+  delaysMs: [500, 1500],
+  label: 'mcp',
+  isTransient: (err: unknown) => {
+    const msg = err instanceof Error ? err.message.toLowerCase() : '';
+    if (msg.includes('refused') || msg.includes('econnreset')) return true;
+    if (msg.includes('timeout') || msg.includes('init timeout')) return true;
+    if (msg.includes('process exited')) return true;
+    if (/http (5\d\d)/.test(msg)) return true;
+    return false;
+  },
+};
 
 // ── Cleanup helper for abort controller ──
 
@@ -102,7 +87,7 @@ export class MCPStdioTransport implements MCPTransport {
   async start(): Promise<void> {
     return withRetry(async () => {
       await this.startInner();
-    }, `启动 MCP stdio 服务器 "${this.command}"`);
+    }, MCP_RETRY_OPTIONS);
   }
 
   private async startInner(): Promise<void> {
@@ -278,7 +263,7 @@ export class MCPHTTPTransport implements MCPTransport {
   async start(): Promise<void> {
     return withRetry(async () => {
       await this.startInner();
-    }, `连接 MCP HTTP 服务器 "${this.url}"`);
+    }, MCP_RETRY_OPTIONS);
   }
 
   private async startInner(): Promise<void> {

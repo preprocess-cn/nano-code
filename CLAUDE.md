@@ -88,3 +88,4 @@ CLI (cac) → Agent Loop → PluginRegistry → LLM Client (OpenAI API)
 - **Config layering**: Shell env > `$CWD/.env` > `~/.nano-code/.env` > project `.nano-code.yaml` > global `~/.nano-code/config.yaml` > defaults.
 - **ThinkStream**: The REPL display uses `ThinkStream` to strip `<think>...</think>` tags from stream output unless `--think` is on.
 - **MCP transport**: Supports both stdio (child process) and HTTP transports, with exponential backoff retry, timeout per request, and cleanup on destroy.
+- 当要求浏览代码时候，优先使用codebase-memory-mcp工具进行

@@ -3,6 +3,7 @@ import * as dotenv from 'dotenv';
 import * as path from 'path';
 import * as os from 'os';
 import type { ToolDefinition } from './contract.js';
+import { withRetry } from './retry.js';
 
 // 加载环境变量：项目 .env 优先于全局 ~/.nano-code/.env，shell 环境变量优先于两者
 dotenv.config();                                                                  // $CWD/.env
@@ -104,14 +105,10 @@ export class LLMClient {
     onMeta?: (meta: Record<string, unknown>) => void,
     signal?: AbortSignal,
   ) {
-    // ── Retry loop with exponential backoff ──
-    let lastError: unknown;
-
-    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-      try {
+    try {
+      return await withRetry(async () => {
         if (signal?.aborted) throw new Error('CANCELLED');
 
-        // 请求 OpenAI 的流式接口
         const stream = await this.openai.chat.completions.create({
           model: this.model,
           ...extraParams,
@@ -127,7 +124,6 @@ export class LLMClient {
         let finalMeta: Record<string, unknown> | undefined;
 
         for await (const chunk of stream) {
-          // Capture usage from the final chunk (present when stream_options.include_usage is true)
           if (chunk.usage) {
             finalMeta = {
               promptTokens: chunk.usage.prompt_tokens ?? 0,
@@ -139,31 +135,24 @@ export class LLMClient {
           const delta = chunk.choices[0]?.delta;
           if (!delta) continue;
 
-          // 1. 处理流式文本片段
           if (delta.content) {
             fullText += delta.content;
             if (onChunk) onChunk(delta.content);
           }
 
-          // 2. 处理流式返回的工具调用（OpenAI 的工具调用在流中是分段拼接的）
           if (delta.tool_calls) {
             for (const toolCallDelta of delta.tool_calls) {
               const index = toolCallDelta.index;
-
-              // 如果这个索引的工具调用还没初始化，先初始化
               if (!finalToolCalls[index]) {
                 finalToolCalls[index] = {
                   id: toolCallDelta.id || '',
                   type: 'function',
-                  function: { name: '', arguments: '' }
+                  function: { name: '', arguments: '' },
                 };
               }
-
-              // 拼接工具名
               if (toolCallDelta.function?.name) {
                 finalToolCalls[index].function.name += toolCallDelta.function.name;
               }
-              // 拼接参数字符串
               if (toolCallDelta.function?.arguments) {
                 finalToolCalls[index].function.arguments += toolCallDelta.function.arguments;
               }
@@ -171,9 +160,7 @@ export class LLMClient {
           }
         }
 
-        // 过滤掉可能存在的空数据
         const validToolCalls = finalToolCalls.filter(tc => tc && tc.function.name);
-
         if (finalMeta && onMeta) onMeta(finalMeta);
 
         return {
@@ -181,28 +168,18 @@ export class LLMClient {
           toolCalls: validToolCalls.length > 0 ? validToolCalls : undefined,
           stopReason: validToolCalls.length > 0 ? 'tool_use' : 'stop',
         };
-
-      } catch (error: any) {
-        // 用户取消操作 —— 静默透传，不重试不日志
-        if (error?.name === 'AbortError' || error?.message === 'CANCELLED') {
-          throw error;
-        }
-
-        lastError = error;
-
-        if (attempt < MAX_RETRIES && isTransientError(error)) {
-          const delay = RETRY_DELAYS_MS[attempt];
-          console.error(`[llm] retry ${attempt + 1}/${MAX_RETRIES + 1} (delay ${delay / 1000}s)`);
-          await new Promise(resolve => setTimeout(resolve, delay));
-          continue; // retry
-        }
-
-        // Non-transient or out of retries — give up
-        console.error('[llm] API request failed:', error);
+      }, {
+        maxRetries: MAX_RETRIES,
+        delaysMs: RETRY_DELAYS_MS,
+        label: 'llm',
+        isTransient: isTransientError,
+      });
+    } catch (error: any) {
+      if (error?.name === 'AbortError' || error?.message === 'CANCELLED') {
         throw error;
       }
+      console.error('[llm] API request failed:', error);
+      throw error;
     }
-
-    throw lastError;
   }
 }

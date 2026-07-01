@@ -1,6 +1,6 @@
 import { describe, it, afterEach } from 'node:test';
 import * as assert from 'node:assert/strict';
-import { MessageBus } from '../src/agent-message-bus.js';
+import { MessageBus } from '../src/plugins/coordinator/message-bus.js';
 
 describe('MessageBus', () => {
   afterEach(() => {

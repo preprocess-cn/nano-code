@@ -4,7 +4,7 @@ import * as os from 'os';
 import * as yaml from 'js-yaml';
 import { execSync } from 'child_process';
 import { loadConfig, getSystemWhitelist } from './core/config.js';
-import { loadAgentDefinitions } from './agent-loader.js';
+import { loadAgentDefinitions } from './plugins/coordinator/agent-loader.js';
 import {
   getProjectMcpJsonPath,
   getGlobalMcpJsonPath,

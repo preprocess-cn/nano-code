@@ -6,7 +6,7 @@ import { buildMCPPluginsFromConfig } from './plugins/mcp/adapter.js';
 import { npmLoaderPlugin } from './plugins/npm-loader.js';
 import { loadSession, saveSession } from './core/session.js';
 import { handlePluginCommand, printPluginList } from './plugin-cli.js';
-import { createAgentCoordinatorPlugin } from './agent-coordinator.js';
+import { createAgentCoordinatorPlugin } from './plugins/coordinator/coordinator.js';
 import { createSkillsPlugin } from './plugins/skills/index.js';
 import { registerAllDefaultBundledSkills, unregisterBundledSkill } from './plugins/skills/bundled/index.js';
 import { createCommandsPlugin, setCommandAgent } from './plugins/commands/index.js';
@@ -14,7 +14,7 @@ import { createSkillsSlashPlugin } from './plugins/commands/skills-slash.js';
 import { createAgentSlashPlugin, setTargetAgent } from './plugins/commands/agent-slash.js';
 import { createBangPlugin } from './plugins/commands/bang.js';
 import { taskPlanPlugin } from './plugins/tools/task-plan.js';
-import { DisplayManager } from './display.js';
+import { DisplayManager, DisplayPlugin } from './display.js';
 import { replDisplay } from './plugins/display/repl.js';
 import { cliDisplay } from './plugins/display/cli.js';
 import { resolveDisplayPlugin } from './plugins/display/loader.js';
@@ -62,6 +62,25 @@ async function handleExit(displayMgr?: DisplayManager, registry?: PluginRegistry
   process.exit(0);
 }
 
+// ── Helper: resolve display plugin ──
+
+async function resolveDisplayPluginByName(config: ReturnType<typeof loadConfig>): Promise<DisplayPlugin> {
+  if (config.display?.enabled === false) {
+    return config.display.plugin
+      ? (await resolveDisplayPlugin(config.display.plugin)) ?? cliDisplay
+      : cliDisplay;
+  }
+  if (config.display?.plugin) {
+    const plugin = await resolveDisplayPlugin(config.display.plugin);
+    if (!plugin) {
+      console.error(`Display plugin "${config.display.plugin}" not found`);
+      process.exit(1);
+    }
+    return plugin;
+  }
+  return replDisplay;
+}
+
 // ── Helper: create and populate the plugin registry ──
 
 async function initializePlugins(
@@ -77,19 +96,33 @@ async function initializePlugins(
     defaultTimeout: config.core.defaultTimeout,
   });
 
-  const npmEntries: Record<string, { spec?: string; enabled?: boolean }> = {};
-  const systemWhitelist = getSystemWhitelist(config);
+  injectTokenBudgetRuntime(config, registry, llmClient, displayMgr);
 
-  // 预注入运行时引用到 token-budget 配置（自动压缩需要 llmClient + displayMgr），
-  // 使其在 onInit 阶段可读。同时适用于 config.plugins 和 systemWhitelist 两个注册路径。
+  const npmEntries = await registerConfigPlugins(config, registry);
+  await registerMCPPlugins(config, registry);
+
+  registry.setPluginConfig('npm-loader', npmEntries);
+  await registry.register(npmLoaderPlugin);
+
+  await registerSystemPlugins(config, registry);
+
+  const disabledSkills = await registerFeaturePlugins(config, registry, llmClient, displayMgr);
+  await lazyInitSkillsBridge(disabledSkills);
+  await displayMgr.init(registry);
+}
+
+// ── Sub-functions for initializePlugins ──
+
+function injectTokenBudgetRuntime(config: ReturnType<typeof loadConfig>, registry: PluginRegistry, llmClient: LLMClient, displayMgr: DisplayManager): void {
   const tbSettings = config.plugins['token-budget']?.settings;
   registry.setPluginConfig('token-budget', { ...(tbSettings ?? {}), llmClient, displayMgr });
+}
 
+async function registerConfigPlugins(config: ReturnType<typeof loadConfig>, registry: PluginRegistry): Promise<Record<string, { spec?: string; enabled?: boolean }>> {
+  const npmEntries: Record<string, { spec?: string; enabled?: boolean }> = {};
   for (const [name, pluginCfg] of Object.entries(config.plugins)) {
     if (pluginCfg.enabled === false) continue;
-
     if (pluginCfg.settings && name !== 'token-budget') registry.setPluginConfig(name, pluginCfg.settings);
-
     if (pluginCfg.type === 'npm') {
       npmEntries[name] = { spec: pluginCfg.spec, enabled: pluginCfg.enabled };
     } else if (pluginCfg.type === 'mcp') {
@@ -98,44 +131,49 @@ async function initializePlugins(
       await registerBuiltinPlugin(registry, name, pluginCfg.settings);
     }
   }
+  return npmEntries;
+}
 
+async function registerMCPPlugins(config: ReturnType<typeof loadConfig>, registry: PluginRegistry): Promise<void> {
   for (const mcpPlugin of buildMCPPluginsFromConfig(config)) {
     await registry.register(mcpPlugin);
   }
+}
 
-  registry.setPluginConfig('npm-loader', npmEntries);
-  await registry.register(npmLoaderPlugin);
-
+async function registerSystemPlugins(config: ReturnType<typeof loadConfig>, registry: PluginRegistry): Promise<void> {
+  const systemWhitelist = getSystemWhitelist(config);
   for (const name of systemWhitelist) {
     if (config.plugins[name]) continue;
     await registerBuiltinPlugin(registry, name);
   }
+}
 
-  registerAllDefaultBundledSkills();
+async function registerFeaturePlugins(config: ReturnType<typeof loadConfig>, registry: PluginRegistry, llmClient: LLMClient, displayMgr: DisplayManager): Promise<string[]> {
   const disabledSkills = config.skills?.disabled ?? [];
+  registerAllDefaultBundledSkills();
   for (const name of disabledSkills) unregisterBundledSkill(name);
 
   await registry.register(createSkillsPlugin(llmClient, displayMgr, {
     disabled: disabledSkills,
     disableSkillTool: config.skills?.disableSkillTool ?? false,
   }));
-
   await registry.register(createAgentCoordinatorPlugin(llmClient, displayMgr));
-
   await registry.register(createCommandsPlugin(displayMgr, registry, config));
   await registry.register(createAgentSlashPlugin(displayMgr));
   await registry.register(createSkillsSlashPlugin(llmClient, displayMgr));
   await registry.register(createBangPlugin(displayMgr));
   await registry.register(taskPlanPlugin);
 
-  // 懒加载 skills-bridge（位于 Ink 目录下，其依赖为可选）
+  return disabledSkills;
+}
+
+async function lazyInitSkillsBridge(disabledSkills: string[]): Promise<void> {
   try {
     const { initCommandSuggestions } = await import('./plugins/display/claude-code-ink/skills-bridge.js');
     initCommandSuggestions(disabledSkills);
   } catch {
     // Ink 可选依赖未安装时静默跳过
   }
-  await displayMgr.init(registry);
 }
 
 // ── Helper: restore previous session ──
@@ -236,21 +274,7 @@ async function startCLI(options: { debug?: boolean; think?: boolean; skipPermiss
 
   // ── Load display plugin ──
   const displayMgr = new DisplayManager();
-  if (config.display?.enabled === false) {
-    displayMgr.addPlugin(config.display.plugin
-      ? (await resolveDisplayPlugin(config.display.plugin)) ?? cliDisplay
-      : cliDisplay);
-  } else if (config.display?.plugin) {
-    try {
-      const plugin = await resolveDisplayPlugin(config.display.plugin);
-      displayMgr.addPlugin(plugin ?? replDisplay);
-    } catch (err: any) {
-      console.error(err.message);
-      process.exit(1);
-    }
-  } else {
-    displayMgr.addPlugin(replDisplay);
-  }
+  displayMgr.addPlugin(await resolveDisplayPluginByName(config));
 
   // ── LLM Client ──
   let llmClient: LLMClient;
@@ -310,7 +334,7 @@ async function startCLI(options: { debug?: boolean; think?: boolean; skipPermiss
   else if (options.think) displayMgr.onStatus({ message: MSG_THINK_MODE, agentName: 'main', level: 'info' });
   if (options.skipPermission) displayMgr.onStatus({ message: MSG_SKIP_PERMISSION, agentName: 'main', level: 'info' });
 
-  const agent = new NanoCodeAgent({ registry, llmClient, agentRole: config.agent?.role, promptConfig: config.systemPrompt, name: 'main', display: displayMgr });
+  const agent = new NanoCodeAgent({ registry, llmClient, agentRole: config.agent?.role, promptConfig: config.systemPrompt, name: 'main', display: displayMgr.asAgentDisplay() });
   setCommandAgent(agent);
   setTargetAgent(agent, displayMgr);
 

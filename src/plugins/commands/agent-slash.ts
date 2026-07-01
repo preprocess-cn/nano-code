@@ -2,7 +2,7 @@ import { NanoPlugin, PluginRegistry } from '../../core/plugin.js';
 import { CommandInterceptResult } from '../../core/contract.js';
 import { NanoCodeAgent } from '../../core/agent.js';
 import { DisplayManager } from '../../display.js';
-import { loadAgentDefinitions } from '../../agent-loader.js';
+import { loadAgentDefinitions } from '../../plugins/coordinator/agent-loader.js';
 import type { SystemPromptConfig } from '../../core/config.js';
 import { SK, type AgentModeInfo } from '../../core/store-keys.js';
 

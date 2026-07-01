@@ -592,10 +592,28 @@ function loadProjectYAMLConfig(): Record<string, unknown> | null {
  *   1. `~/.nano-code/config.yaml` — 全局 YAML（system_plugins + env + 服务商+插件配置）
  *   2. `$CWD/.nano-code.yaml`     — 项目配置（覆盖全局）
  */
+function convertSystemPromptConfig(raw: unknown): SystemPromptConfig | undefined {
+  if (!isNonEmptyObject(raw)) return undefined;
+  const sp = raw as Record<string, unknown>;
+  return {
+    withTools: typeof sp.with_tools === 'string' ? sp.with_tools : undefined,
+    noTools: typeof sp.no_tools === 'string' ? sp.no_tools : undefined,
+    projectFiles: Array.isArray(sp.project_files) ? sp.project_files.map(String) : undefined,
+  };
+}
+
 export function loadConfig(): NanoConfig {
   ensureDefaultYAML();
 
   const yamlData = loadYAMLConfig();
+  if (yamlData) {
+    // system_plugins/system_prompt/env/skills 是 YAML 特有字段，validateConfigObject 不认识它们
+    const KNOWN_YAML_KEYS = new Set(['system_plugins', 'system_prompt', 'env', 'skills']);
+    const warnings = validateConfigObject(yamlData).filter(w => !KNOWN_YAML_KEYS.has(w.path));
+    for (const w of warnings) {
+      console.warn(`[config] Warning: ${getGlobalYAMLConfigPath()} — ${w.path}: ${w.message}`);
+    }
+  }
   applyYAMLEnv(yamlData);
 
   // 从 YAML 提取 system_plugins 和 system_prompt
@@ -605,14 +623,7 @@ export function loadConfig(): NanoConfig {
     if (Array.isArray(yamlData.system_plugins)) {
       systemPlugins = yamlData.system_plugins.map(String);
     }
-    if (isNonEmptyObject(yamlData.system_prompt)) {
-      const sp = yamlData.system_prompt as Record<string, unknown>;
-      systemPrompt = {
-        withTools: typeof sp.with_tools === 'string' ? sp.with_tools : undefined,
-        noTools: typeof sp.no_tools === 'string' ? sp.no_tools : undefined,
-        projectFiles: Array.isArray(sp.project_files) ? sp.project_files.map(String) : undefined,
-      };
-    }
+    systemPrompt = convertSystemPromptConfig(yamlData.system_prompt);
   }
 
   // 只取合并系统认识的三个字段，新加 YAML 字段无需修改此处

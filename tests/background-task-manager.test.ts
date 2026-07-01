@@ -1,10 +1,12 @@
 import { describe, it, afterEach } from 'node:test';
 import * as assert from 'node:assert/strict';
-import { BackgroundTaskManager } from '../src/background-task-manager.js';
+import { BackgroundTaskManager } from '../src/plugins/coordinator/task-manager.js';
+import { AgentLifecycle } from '../src/plugins/coordinator/lifecycle.js';
 
 describe('BackgroundTaskManager', () => {
   afterEach(() => {
     BackgroundTaskManager.resetInstance();
+    AgentLifecycle.resetInstance();
   });
 
   it('returns the same singleton instance', () => {
@@ -140,6 +142,20 @@ describe('BackgroundTaskManager', () => {
     // Should only appear once in completed queue
     const completed = mgr.getCompletedTasks();
     assert.equal(completed.length, 1);
+  });
+
+  it('cancelTask aborts AgentLifecycle controller', () => {
+    const mgr = BackgroundTaskManager.getInstance();
+    const lifecycle = AgentLifecycle.getInstance();
+
+    // Register controller in lifecycle with the taskId that startTask will generate
+    const id = mgr.startTask('test', 'running', () => new Promise(() => {}));
+    const controller = lifecycle.createTaskController(id);
+    assert.equal(controller.signal.aborted, false);
+
+    mgr.cancelTask(id);
+    assert.equal(controller.signal.aborted, true);
+    assert.equal(mgr.getTask(id)?.status, 'error');
   });
 
   it('runner .then() does not double-push when cancelTask fires first', () => {

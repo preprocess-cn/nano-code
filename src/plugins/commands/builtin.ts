@@ -13,7 +13,7 @@ import type { BuiltinCommand } from './types.js';
 import { readAllTasks, getPlanFilePath } from '../tools/task-plan.js';
 import { SK } from '../../core/store-keys.js';
 import { runDoctor, formatDoctorResults } from '../../core/doctor.js';
-import { loadAgentDefinitions } from '../../agent-loader.js';
+import { loadAgentDefinitions } from '../../plugins/coordinator/agent-loader.js';
 import { readMcpJson, getProjectMcpJsonPath, getGlobalMcpJsonPath, getClaudeMcpJsonPath } from '../mcp/config-writer.js';
 
 export interface BuiltinContext {

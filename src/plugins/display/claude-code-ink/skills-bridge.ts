@@ -1,7 +1,7 @@
 import { getBundledSkills } from '../../skills/bundled/index.js';
 import { loadAllSkills } from '../../skills/loader.js';
 import { getBuiltinCommands } from '../../commands/builtin.js';
-import { loadAgentDefinitions } from '../../../agent-loader.js';
+import { loadAgentDefinitions } from '../../../plugins/coordinator/agent-loader.js';
 import { setSuggestionProvider, type CommandSuggestion } from './index.js';
 
 /**
