@@ -409,10 +409,20 @@ describe('shouldShowStderr', () => {
     assert.equal(shouldShowStderr('error: something broke', 'warn'), true);
   });
 
-  it('falls back to log levels array order for unknown level names', () => {
-    // "trace"/"fatal" are not in LOG_LEVELS, should default to lowest (debug=0) or highest
-    assert.equal(shouldShowStderr('level=trace msg="detail"', 'warn'), false);   // unknown → default 0 < warn threshold
-    assert.equal(shouldShowStderr('level=fatal msg="dead"', 'warn'), false);     // unknown → default 0 < warn threshold
-    assert.equal(shouldShowStderr('level=critical msg="!"', 'warn'), false);     // unknown → default 0
+  it('passes fatal/critical/panic as high severity (above error)', () => {
+    assert.equal(shouldShowStderr('level=fatal msg="crash"', 'warn'), true);
+    assert.equal(shouldShowStderr('level=critical msg="!"', 'warn'), true);
+    assert.equal(shouldShowStderr('level=panic msg="boom"', 'warn'), true);
+  });
+
+  it('filters trace level with warn threshold', () => {
+    // trace=0 < warn=3, filtered
+    assert.equal(shouldShowStderr('level=trace msg="detail"', 'warn'), false);
+  });
+
+  it('defaults unrecognized level names to trace (filtered)', () => {
+    // "notice"/"alert" not in LOG_LEVELS → default 0 < warn=3
+    assert.equal(shouldShowStderr('level=notice msg="update"', 'warn'), false);
+    assert.equal(shouldShowStderr('level=alert msg="!"', 'warn'), false);
   });
 });
