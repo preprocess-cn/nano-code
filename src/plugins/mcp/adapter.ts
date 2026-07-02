@@ -44,8 +44,8 @@ const MCP_RETRY_OPTIONS = {
 // ── MCP stderr log level filtering ──
 
 const LOG_LEVELS: Record<string, number> = {
-  trace: 0, debug: 1, info: 2, warn: 3, error: 4,
-  fatal: 5, critical: 5, panic: 5,
+  trace: 0, debug: 0, info: 1, warn: 2, error: 3,
+  fatal: 4, critical: 4, panic: 4,
 };
 
 /**
@@ -57,7 +57,7 @@ const LOG_LEVELS: Record<string, number> = {
  *  - 未知格式：放行（保守策略，宁可过曝不丢信息）
  */
 export function shouldShowStderr(text: string, threshold: string): boolean {
-  const thresholdNum = LOG_LEVELS[threshold] ?? 3; // default warn
+  const thresholdNum = LOG_LEVELS[threshold] ?? 2; // default warn
   let lvl: string | undefined;
 
   // Go slog/logrus: level=info msg="..."
