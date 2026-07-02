@@ -16,5 +16,7 @@ plugins:
     enabled: true
   web:
     enabled: true
+  codebase-memory-mcp:
+    enabled: true
   token-budget:
     enabled: true

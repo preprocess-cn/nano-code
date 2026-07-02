@@ -100,8 +100,9 @@ describe('MCPStdioTransport', () => {
 
   it('logs stderr from child process', async () => {
     const captured: string[] = [];
-    const origError = console.error;
-    console.error = (...args: any[]) => captured.push(args.join(' '));
+    const { logManager } = await import('../src/core/logger.js');
+    const capturePlugin = { name: 'test-capture', onLog: (entry: any) => captured.push(entry.message) };
+    logManager.register(capturePlugin);
 
     try {
       const scriptPath = createTestScript(stderrServerScript());
@@ -109,10 +110,10 @@ describe('MCPStdioTransport', () => {
       await transport.start();
       await transport.stop();
     } finally {
-      console.error = origError;
+      logManager.unregister('test-capture');
     }
 
-    assert.ok(captured.some(m => m.includes('[mcp:stderr]') && m.includes('starting up')), 'should capture stderr output');
+    assert.ok(captured.some(m => m.includes('starting up')), 'should capture stderr output');
   });
 
   it('propagates transport start error through plugin wrapper', async () => {
@@ -326,7 +327,10 @@ describe('buildMCPPluginsFromConfig', () => {
     const config: NanoConfig = {
       configVersion: 1,
       core: { model: 'gpt-4o', temperature: 0, maxTokens: 4096, defaultTimeout: 120000 },
-      plugins: {},
+      // 现在 .mcp.json 的服务器必须在 plugins 中显式声明才加载
+      plugins: {
+        'test-mcp': {},
+      },
     };
 
     const plugins = buildMCPPluginsFromConfig(config);
@@ -356,6 +360,29 @@ describe('buildMCPPluginsFromConfig', () => {
 
     const plugins = buildMCPPluginsFromConfig(config);
     assert.equal(plugins.length, 0);
+  });
+
+  it('does not auto-load .mcp.json servers without config entry', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mcp-json-test-'));
+    tmpScripts.push(dir);
+    const mcpJsonPath = join(dir, '.mcp.json');
+    writeFileSync(mcpJsonPath, JSON.stringify({
+      mcpServers: {
+        'auto-server': { command: 'echo', args: ['test'] },
+      },
+    }));
+
+    setMcpJsonPaths([mcpJsonPath]);
+
+    // 不将 auto-server 加入 plugins — 它不应被加载
+    const config: NanoConfig = {
+      configVersion: 1,
+      core: { model: 'gpt-4o', temperature: 0, maxTokens: 4096, defaultTimeout: 120000 },
+      plugins: {},
+    };
+
+    const plugins = buildMCPPluginsFromConfig(config);
+    assert.equal(plugins.length, 0, 'should not load .mcp.json servers without plugins entry');
   });
 });
 

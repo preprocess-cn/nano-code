@@ -8,6 +8,7 @@ import { ToolDefinition, ToolResponse, ToolContext } from '../../core/contract.j
 import { NanoConfig } from '../../core/config.js';
 import { getPackageVersion } from '../../core/version.js';
 import { withRetry } from '../../core/retry.js';
+import { logManager } from '../../core/logger.js';
 
 // ── JSON-RPC types ──
 
@@ -156,7 +157,7 @@ export class MCPStdioTransport implements MCPTransport {
       this.process.stderr?.on('data', (data: Buffer) => {
         const text = data.toString().trimEnd();
         if (text && shouldShowStderr(text, this.stderrLevel)) {
-          console.error(`[mcp:stderr] ${text}`);
+          logManager.warn('mcp', text);
         }
       });
 
@@ -167,7 +168,7 @@ export class MCPStdioTransport implements MCPTransport {
 
       this.process.on('close', (code, signal) => {
         if (code !== null && code !== 0) {
-          console.warn(`[mcp] 进程 "${this.command}" 已退出，退出码: ${code} (信号: ${signal || 'none'})`);
+          logManager.warn('mcp', `"${this.command}" 已退出，退出码: ${code} (信号: ${signal || 'none'})`);
         }
         this.clearPending(new Error(`MCP process exited with code ${code}`));
       });
@@ -564,9 +565,10 @@ export function buildMCPPluginsFromConfig(config: NanoConfig, debug = false): Na
       if (seenByEntry.has(name)) continue;
       seenByEntry.add(name);
 
-      // 用户通过 nano-code config 显式禁用 → 跳过
+      // .mcp.json 中的服务器必须先在 config.plugins 中显式声明才加载
+      // （包含在 profile 中声明）。这确保 profile 或主配置对 MCP 服务器有完全控制权。
       const override = config.plugins[name];
-      if (override?.enabled === false) continue;
+      if (!override || override.enabled === false) continue;
 
       let mcpTransport: MCPTransport;
 

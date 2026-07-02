@@ -303,12 +303,14 @@ async function startCLI(options: { debug?: boolean; think?: boolean; skipPermiss
   // 全局错误边界（registry + display 就绪后注册）
   setupGlobalErrorHandlers(displayMgr, registry);
 
-  // 注册 display bridge LogPlugin：将 Warn/Error 级别日志转发到界面显示
+  // 注册 display bridge LogPlugin：将日志转发到界面显示（不直接写 stderr）
   logManager.register({
     name: 'display-bridge',
     onLog(entry) {
       if (entry.level === 'error') {
         displayMgr.onError({ message: `[${entry.module}] ${entry.message}`, agentName: 'system', stack: entry.error?.stack });
+      } else if (entry.level === 'warn') {
+        displayMgr.onStatus({ message: `[${entry.module}] ${entry.message}`, agentName: 'system', level: 'warn' });
       }
     },
   });

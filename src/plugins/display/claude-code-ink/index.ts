@@ -7,6 +7,7 @@ import type { PluginRegistry } from '../../../core/plugin.js';
 import type { AgentModeInfo } from '../../../core/store-keys.js';
 
 import { SK } from '../../../core/store-keys.js';
+import { logManager } from '../../../core/logger.js';
 import React from 'react';
 
 /** 为常用工具生成简洁的参数预览，避免大 JSON 刷屏 */
@@ -234,6 +235,8 @@ function createPlugin(): DisplayPlugin {
         stdout(_chunk: string) {},
         stderr(_chunk: string) {},
       });
+      // Ink owns the terminal — suppress direct stderr writes
+      logManager.unregister('stderr');
     },
 
     onStart(config: StartConfig): void {
