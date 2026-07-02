@@ -364,36 +364,55 @@ describe('buildMCPPluginsFromConfig', () => {
 describe('shouldShowStderr', () => {
   const THRESHOLD = 'warn'; // default
 
+  // ── Threshold matrix: each threshold against every defined level ──
+
   it('passes through unknown format (no level indicator)', () => {
-    assert.equal(shouldShowStderr('starting up...', THRESHOLD), true);
-    assert.equal(shouldShowStderr('some random text', THRESHOLD), true);
-    assert.equal(shouldShowStderr('', THRESHOLD), true);
+    assert.equal(shouldShowStderr('starting up...', 'warn'), true);
+    assert.equal(shouldShowStderr('some random text', 'warn'), true);
+    assert.equal(shouldShowStderr('', 'warn'), true);
   });
 
-  it('filters info level with warn threshold', () => {
-    assert.equal(shouldShowStderr('level=info msg="mem.init"', 'warn'), false);
-    assert.equal(shouldShowStderr('{"level":"info","msg":"init ok"}', 'warn'), false);
-    assert.equal(shouldShowStderr('{"level":"debug","msg":"verbose"}', 'warn'), false);
+  function levelText(level: string): string[] {
+    return [
+      `level=${level} msg="test"`,
+      `{"level":"${level}","msg":"test"}`,
+    ];
+  }
+
+  it('threshold=debug: shows all levels including trace/debug', () => {
+    for (const text of levelText('trace')) assert.equal(shouldShowStderr(text, 'debug'), true, `debug threshold should show: ${text}`);
+    for (const text of levelText('debug')) assert.equal(shouldShowStderr(text, 'debug'), true, `debug threshold should show: ${text}`);
+    for (const text of levelText('info')) assert.equal(shouldShowStderr(text, 'debug'), true, `debug threshold should show: ${text}`);
+    for (const text of levelText('warn')) assert.equal(shouldShowStderr(text, 'debug'), true, `debug threshold should show: ${text}`);
+    for (const text of levelText('error')) assert.equal(shouldShowStderr(text, 'debug'), true, `debug threshold should show: ${text}`);
+    for (const text of levelText('fatal')) assert.equal(shouldShowStderr(text, 'debug'), true, `debug threshold should show: ${text}`);
   });
 
-  it('passes warn and error level with warn threshold', () => {
-    assert.equal(shouldShowStderr('level=warn msg="slow query"', 'warn'), true);
-    assert.equal(shouldShowStderr('level=error msg="connection lost"', 'warn'), true);
-    assert.equal(shouldShowStderr('{"level":"warn","msg":"timeout"}', 'warn'), true);
-    assert.equal(shouldShowStderr('{"level":"error","msg":"crash"}', 'warn'), true);
+  it('threshold=info: hides trace/debug, shows info+', () => {
+    for (const text of levelText('trace')) assert.equal(shouldShowStderr(text, 'info'), false, `info threshold should hide: ${text}`);
+    for (const text of levelText('debug')) assert.equal(shouldShowStderr(text, 'info'), false, `info threshold should hide: ${text}`);
+    for (const text of levelText('info'))  assert.equal(shouldShowStderr(text, 'info'), true, `info threshold should show: ${text}`);
+    for (const text of levelText('warn'))  assert.equal(shouldShowStderr(text, 'info'), true, `info threshold should show: ${text}`);
+    for (const text of levelText('error')) assert.equal(shouldShowStderr(text, 'info'), true, `info threshold should show: ${text}`);
+    for (const text of levelText('fatal')) assert.equal(shouldShowStderr(text, 'info'), true, `info threshold should show: ${text}`);
   });
 
-  it('filters by debug threshold (shows all)', () => {
-    assert.equal(shouldShowStderr('level=debug msg="enter loop"', 'debug'), true);
-    assert.equal(shouldShowStderr('level=info msg="ready"', 'debug'), true);
-    assert.equal(shouldShowStderr('level=error msg="fail"', 'debug'), true);
+  it('threshold=warn: hides trace/debug/info, shows warn+', () => {
+    for (const text of levelText('trace')) assert.equal(shouldShowStderr(text, 'warn'), false, `warn threshold should hide: ${text}`);
+    for (const text of levelText('debug')) assert.equal(shouldShowStderr(text, 'warn'), false, `warn threshold should hide: ${text}`);
+    for (const text of levelText('info'))  assert.equal(shouldShowStderr(text, 'warn'), false, `warn threshold should hide: ${text}`);
+    for (const text of levelText('warn'))  assert.equal(shouldShowStderr(text, 'warn'), true, `warn threshold should show: ${text}`);
+    for (const text of levelText('error')) assert.equal(shouldShowStderr(text, 'warn'), true, `warn threshold should show: ${text}`);
+    for (const text of levelText('fatal')) assert.equal(shouldShowStderr(text, 'warn'), true, `warn threshold should show: ${text}`);
   });
 
-  it('filters by error threshold (only error)', () => {
-    assert.equal(shouldShowStderr('level=info msg="noop"', 'error'), false);
-    assert.equal(shouldShowStderr('level=warn msg="risky"', 'error'), false);
-    assert.equal(shouldShowStderr('level=error msg="crash"', 'error'), true);
-    assert.equal(shouldShowStderr('{"level":"error","msg":"panic"}', 'error'), true);
+  it('threshold=error: only shows error and above', () => {
+    for (const text of levelText('trace')) assert.equal(shouldShowStderr(text, 'error'), false, `error threshold should hide: ${text}`);
+    for (const text of levelText('debug')) assert.equal(shouldShowStderr(text, 'error'), false, `error threshold should hide: ${text}`);
+    for (const text of levelText('info'))  assert.equal(shouldShowStderr(text, 'error'), false, `error threshold should hide: ${text}`);
+    for (const text of levelText('warn'))  assert.equal(shouldShowStderr(text, 'error'), false, `error threshold should hide: ${text}`);
+    for (const text of levelText('error')) assert.equal(shouldShowStderr(text, 'error'), true, `error threshold should show: ${text}`);
+    for (const text of levelText('fatal')) assert.equal(shouldShowStderr(text, 'error'), true, `error threshold should show: ${text}`);
   });
 
   it('recognizes case-insensitive level field', () => {
@@ -409,19 +428,16 @@ describe('shouldShowStderr', () => {
     assert.equal(shouldShowStderr('error: something broke', 'warn'), true);
   });
 
-  it('passes fatal/critical/panic as high severity (above error)', () => {
+  it('passes fatal/critical/panic as high severity', () => {
     assert.equal(shouldShowStderr('level=fatal msg="crash"', 'warn'), true);
     assert.equal(shouldShowStderr('level=critical msg="!"', 'warn'), true);
     assert.equal(shouldShowStderr('level=panic msg="boom"', 'warn'), true);
+    assert.equal(shouldShowStderr('level=fatal msg="die"', 'error'), true);
+    assert.equal(shouldShowStderr('level=critical msg="die"', 'error'), true);
   });
 
-  it('filters trace level with warn threshold', () => {
-    // trace=0 < warn=3, filtered
-    assert.equal(shouldShowStderr('level=trace msg="detail"', 'warn'), false);
-  });
-
-  it('defaults unrecognized level names to trace (filtered)', () => {
-    // "notice"/"alert" not in LOG_LEVELS → default 0 < warn=3
+  it('defaults unrecognized level names to lowest (filtered)', () => {
+    // "notice"/"alert" not in LOG_LEVELS → default 0
     assert.equal(shouldShowStderr('level=notice msg="update"', 'warn'), false);
     assert.equal(shouldShowStderr('level=alert msg="!"', 'warn'), false);
   });
