@@ -10,6 +10,7 @@ const CONFIG_TOP_KEYS = new Set(['core', 'plugins', 'agent', 'display', 'configV
 export interface AgentConfig {
   role?: string;     // agent 角色描述，用于系统提示（如"终端 AI 编程助手"）
   greeting?: string; // 启动时向用户显示的能力提示
+  goodbye?: string;  // 退出时显示的消息（如"祝您编码愉快"）
 }
 
 export interface SystemPromptConfig {
@@ -138,21 +139,13 @@ function getProjectConfigPath(): string {
   return path.join(process.cwd(), '.nano-code.yaml');
 }
 
-function getGlobalProfilePath(name: string): string {
-  return path.join(os.homedir(), '.nano-code', 'profiles', `${name}.json`);
-}
-
-function getProjectProfilePath(name: string): string {
-  return path.join(process.cwd(), '.nano-code', 'profiles', `${name}.json`);
-}
-
 /**
  * Load an agent profile configuration file.
  *
  * - If `name` is a file path (contains `/` or starts with `.`/`~`),
  *   loads it directly.
- * - Otherwise searches project dir first (`.nano-code/profiles/<name>.json`),
- *   then global (`~/.nano-code/profiles/<name>.json`).
+ * - Otherwise searches project dir first (`.nano-code/profiles/`),
+ *   then global (`~/.nano-code/profiles/`), trying `.yaml` then `.json`.
  *
  * Returns `null` if not found.
  */
@@ -168,26 +161,44 @@ export function loadProfileConfig(name: string): Record<string, unknown> | null 
   }
 
   // Plain name: search predefined directories
-  const projectPath = getProjectProfilePath(name);
-  const projectProfile = tryLoadConfigFile(projectPath);
-  if (projectProfile) return projectProfile;
+  const searchDirs = [
+    path.join(process.cwd(), '.nano-code', 'profiles'),
+    path.join(os.homedir(), '.nano-code', 'profiles'),
+  ];
+  for (const dir of searchDirs) {
+    for (const ext of ['.yaml', '.yml', '.json']) {
+      const profile = tryLoadConfigFile(path.join(dir, `${name}${ext}`));
+      if (profile) return profile;
+    }
+  }
 
-  const globalPath = getGlobalProfilePath(name);
-  return tryLoadConfigFile(globalPath);
+  return null;
 }
 
 // ── Single file loading ──
 
 /**
- * Attempt to load a config file from disk. Returns the parsed object on
- * success, logs a warning and returns null on failure.
+ * Attempt to load a config file from disk. Supports JSON (.json)
+ * and YAML (.yaml / .yml). Returns the parsed object on success,
+ * logs a warning and returns null on failure.
  */
 function tryLoadConfigFile(filePath: string): Record<string, unknown> | null {
   try {
     const raw = fs.readFileSync(filePath, 'utf-8');
-    const parsed = JSON.parse(raw);
+    const ext = path.extname(filePath).toLowerCase();
+    let parsed: unknown;
+
+    if (ext === '.yaml' || ext === '.yml') {
+      parsed = yaml.load(raw);
+    } else if (ext === '.json') {
+      parsed = JSON.parse(raw);
+    } else {
+      console.warn(`[config] Warning: ${filePath} has unsupported extension "${ext}", skipping.`);
+      return null;
+    }
+
     if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-      console.warn(`[config] Warning: ${filePath} must contain a JSON object, skipping.`);
+      console.warn(`[config] Warning: ${filePath} must contain an object, skipping.`);
       return null;
     }
     const obj = parsed as Record<string, unknown>;
@@ -325,7 +336,7 @@ export function validateConfigObject(raw: Record<string, unknown>): ConfigValida
   // agent.*
   if (isNonEmptyObject(raw.agent)) {
     for (const key of Object.keys(raw.agent)) {
-      if (key !== 'role' && key !== 'greeting') {
+      if (key !== 'role' && key !== 'greeting' && key !== 'goodbye') {
         warnings.push({ path: `agent.${key}`, message: `未知的 agent 配置项 "${key}"` });
       }
     }
@@ -334,6 +345,9 @@ export function validateConfigObject(raw: Record<string, unknown>): ConfigValida
     }
     if ('greeting' in raw.agent && !validateType(raw.agent.greeting, 'string')) {
       warnings.push({ path: 'agent.greeting', message: 'greeting 必须为字符串' });
+    }
+    if ('goodbye' in raw.agent && !validateType(raw.agent.goodbye, 'string')) {
+      warnings.push({ path: 'agent.goodbye', message: 'goodbye 必须为字符串' });
     }
   }
 
@@ -467,7 +481,9 @@ function mergeAgentConfig(
   const o = override as Record<string, unknown>;
   const role = typeof o.role === 'string' ? o.role : base?.role;
   const greeting = typeof o.greeting === 'string' ? o.greeting : base?.greeting;
-  return (role !== undefined || greeting !== undefined) ? { role, greeting } : undefined;
+  const goodbye = typeof o.goodbye === 'string' ? o.goodbye : base?.goodbye;
+  return (role !== undefined || greeting !== undefined || goodbye !== undefined)
+    ? { role, greeting, goodbye } : undefined;
 }
 
 function mergePluginEntries(
@@ -651,8 +667,8 @@ function pickMergeKeys(data: Record<string, unknown>): Record<string, unknown> {
  * Apply an agent profile on top of a base configuration.
  * The profile's values override all base values.
  *
- * Profile lookup: `.nano-code/profiles/<name>.json` (project) first,
- * then `~/.nano-code/profiles/<name>.json` (global).
+ * Profile lookup: `.nano-code/profiles/<name>.yaml` or `.json` (project) first,
+ * then `~/.nano-code/profiles/<name>.yaml` or `.json` (global).
  *
  * Returns the merged config, or the base unchanged if the profile
  * was not found (a warning is printed).
@@ -665,7 +681,27 @@ export function applyProfile(base: NanoConfig, profileName: string): NanoConfig 
   }
 
   const baseRaw = JSON.parse(JSON.stringify(base)) as Record<string, unknown>;
-  return mergeConfigs(baseRaw, profileConfig);
+  const merged = mergeConfigs(baseRaw, profileConfig);
+
+  // mergeConfigs doesn't handle systemPrompt (it's not in CONFIG_TOP_KEYS),
+  // but profiles can override it via the YAML system_prompt field.
+  // Always restore base systemPrompt first, then apply profile override if any.
+  merged.systemPrompt = base.systemPrompt ? { ...base.systemPrompt } : undefined;
+
+  if (profileConfig.system_prompt && typeof profileConfig.system_prompt === 'object') {
+    const sp = profileConfig.system_prompt as Record<string, unknown>;
+    const existing = merged.systemPrompt ?? {};
+    const withTools = typeof sp.with_tools === 'string' ? sp.with_tools : existing.withTools;
+    const noTools = typeof sp.no_tools === 'string' ? sp.no_tools : existing.noTools;
+    const projectFiles = Array.isArray(sp.project_files)
+      ? sp.project_files.map(String)
+      : existing.projectFiles;
+    if (withTools || noTools || projectFiles) {
+      merged.systemPrompt = { withTools, noTools, projectFiles };
+    }
+  }
+
+  return merged;
 }
 
 /**

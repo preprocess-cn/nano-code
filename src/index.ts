@@ -26,7 +26,7 @@ import { runDoctor, formatDoctorResults } from './core/doctor.js';
 
 // ── CLI messages ──
 
-const EXIT_MESSAGE = '** 感谢使用 nano-code，祝您编码愉快！';
+let exitMessage = '** 感谢使用 nano-code，祝您编码愉快！';
 const MSG_DEBUG_MODE = (model: string | undefined) => `#  当前已开启 [DEBUG 调试模式]，模型: ${model}`;
 const MSG_THINK_MODE = ' <-> 当前已开启 [思考过程显示]，将输出 AI 思考过程。';
 const MSG_SKIP_PERMISSION = ' [!] 当前已开启 [免确认模式]，系统底层安全拦截仍然生效。';
@@ -50,7 +50,7 @@ function setupGlobalErrorHandlers(displayMgr?: DisplayManager, registry?: Plugin
     logManager.error('main', 'Uncaught exception', error);
     displayMgr?.onError({ message: `未捕获的异常：${error.message}`, agentName: 'system', stack: error.stack });
     registry?.destroy().finally(() => {
-      displayMgr?.stop(EXIT_MESSAGE);
+      displayMgr?.stop(exitMessage);
       process.exit(1);
     });
   });
@@ -58,7 +58,7 @@ function setupGlobalErrorHandlers(displayMgr?: DisplayManager, registry?: Plugin
 
 async function handleExit(displayMgr?: DisplayManager, registry?: PluginRegistry): Promise<void> {
   await registry?.destroy();
-  displayMgr?.stop(EXIT_MESSAGE);
+  displayMgr?.stop(exitMessage);
   process.exit(0);
 }
 
@@ -272,6 +272,11 @@ async function startCLI(options: { debug?: boolean; think?: boolean; skipPermiss
   const config = options.profile
     ? applyProfile(loadConfig(), options.profile)
     : loadConfig();
+
+  // Allow profiles to override the exit message
+  if (config.agent?.goodbye) {
+    exitMessage = config.agent.goodbye;
+  }
 
   // ── Load display plugin ──
   const displayMgr = new DisplayManager();
