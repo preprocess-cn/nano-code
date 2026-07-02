@@ -61,6 +61,11 @@ export interface NanoConfig {
     plugin?: string;
     enabled?: boolean;
   };
+  /** MCP 服务器配置。 */
+  mcp?: {
+    /** 默认 stderr 日志过滤级别。只显示 >= 此级别的日志。--debug 时强制为 debug（全部放行）。默认 "warn"。 */
+    stderrLevel?: 'debug' | 'info' | 'warn' | 'error';
+  };
   /** 技能系统配置。对齐 Claude Code skill_listing / disableModelInvocation 机制。 */
   skills?: {
     /** 禁用的技能名列表。启动时检查，运行时修改需要重启生效 */

@@ -41,6 +41,45 @@ const MCP_RETRY_OPTIONS = {
   },
 };
 
+// ── MCP stderr log level filtering ──
+
+const LOG_LEVELS: Record<string, number> = {
+  debug: 0, info: 1, warn: 2, error: 3,
+};
+
+/**
+ * 判断 MCP 子进程的 stderr 文本是否应该显示给用户。
+ *
+ * 识别的格式：
+ *  - Go slog/logrus: level=info msg="..."
+ *  - JSON: {"level":"info",...}
+ *  - 未知格式：放行（保守策略，宁可过曝不丢信息）
+ */
+function shouldShowStderr(text: string, threshold: string): boolean {
+  const thresholdNum = LOG_LEVELS[threshold] ?? 2; // default warn
+  let lvl: string | undefined;
+
+  // Go slog/logrus: level=info msg="..."
+  const m = text.match(/\blevel=(\w+)\b/i);
+  if (m) lvl = m[1].toLowerCase();
+
+  // JSON: {"level":"info",...}
+  if (!lvl) {
+    try {
+      const j = JSON.parse(text);
+      if (j?.level) lvl = String(j.level).toLowerCase();
+    } catch { /* not JSON */ }
+  }
+
+  if (lvl) {
+    const lvlNum = LOG_LEVELS[lvl] ?? 0;
+    return lvlNum >= thresholdNum;
+  }
+
+  // Unknown format — pass through
+  return true;
+}
+
 // ── Cleanup helper for abort controller ──
 
 function delaySignal(ms: number): { signal: AbortSignal; clear: () => void } {
@@ -79,6 +118,7 @@ export class MCPStdioTransport implements MCPTransport {
     private env: Record<string, string> = {},
     private initTimeout: number = 10000,
     private requestTimeout: number = 60000,
+    private stderrLevel: string = 'warn',
   ) {
     this._name = `mcp:${command}`;
     this._description = `MCP server: ${command} ${args.join(' ')}`;
@@ -114,7 +154,7 @@ export class MCPStdioTransport implements MCPTransport {
 
       this.process.stderr?.on('data', (data: Buffer) => {
         const text = data.toString().trimEnd();
-        if (text) {
+        if (text && shouldShowStderr(text, this.stderrLevel)) {
           console.error(`[mcp:stderr] ${text}`);
         }
       });
@@ -472,7 +512,8 @@ function getMcpJsonPaths(): string[] {
 
 // ── Load MCP plugins from config + .mcp.json ──
 
-export function buildMCPPluginsFromConfig(config: NanoConfig): NanoPlugin[] {
+export function buildMCPPluginsFromConfig(config: NanoConfig, debug = false): NanoPlugin[] {
+  const stderrLevel = debug ? 'debug' : (config.mcp?.stderrLevel || 'warn');
   const plugins: NanoPlugin[] = [];
 
   // Phase 1: From nano-code config.plugins
@@ -499,6 +540,8 @@ export function buildMCPPluginsFromConfig(config: NanoConfig): NanoPlugin[] {
         entry.args || [],
         entry.env || {},
         entry.initTimeout ?? 10000,
+        60000,
+        stderrLevel,
       );
     }
 
@@ -529,7 +572,7 @@ export function buildMCPPluginsFromConfig(config: NanoConfig): NanoPlugin[] {
       if (cfg.url) {
         mcpTransport = new MCPHTTPTransport(cfg.url, 10000);
       } else if (cfg.command) {
-        mcpTransport = new MCPStdioTransport(cfg.command, cfg.args || [], cfg.env || {}, 10000);
+        mcpTransport = new MCPStdioTransport(cfg.command, cfg.args || [], cfg.env || {}, 10000, 60000, stderrLevel);
       } else {
         console.warn(`[mcp] .mcp.json "${name}" 缺少 command 或 url，跳过。`);
         continue;

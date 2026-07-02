@@ -89,6 +89,7 @@ async function initializePlugins(
   llmClient: LLMClient,
   displayMgr: DisplayManager,
   skipPermission: boolean,
+  debug = false,
 ): Promise<void> {
   registry.setAgentName('main');
   registry.setDefaultContext({
@@ -99,7 +100,7 @@ async function initializePlugins(
   injectTokenBudgetRuntime(config, registry, llmClient, displayMgr);
 
   const npmEntries = await registerConfigPlugins(config, registry);
-  await registerMCPPlugins(config, registry);
+  await registerMCPPlugins(config, registry, debug);
 
   registry.setPluginConfig('npm-loader', npmEntries);
   await registry.register(npmLoaderPlugin);
@@ -134,8 +135,8 @@ async function registerConfigPlugins(config: ReturnType<typeof loadConfig>, regi
   return npmEntries;
 }
 
-async function registerMCPPlugins(config: ReturnType<typeof loadConfig>, registry: PluginRegistry): Promise<void> {
-  for (const mcpPlugin of buildMCPPluginsFromConfig(config)) {
+async function registerMCPPlugins(config: ReturnType<typeof loadConfig>, registry: PluginRegistry, debug = false): Promise<void> {
+  for (const mcpPlugin of buildMCPPluginsFromConfig(config, debug)) {
     await registry.register(mcpPlugin);
   }
 }
@@ -292,7 +293,7 @@ async function startCLI(options: { debug?: boolean; think?: boolean; skipPermiss
 
   // ── Plugin registry & initialization ──
   const registry = new PluginRegistry();
-  await initializePlugins(config, registry, llmClient, displayMgr, options.skipPermission ?? false);
+  await initializePlugins(config, registry, llmClient, displayMgr, options.skipPermission ?? false, options.debug);
 
   // 全局错误边界（registry + display 就绪后注册）
   setupGlobalErrorHandlers(displayMgr, registry);
