@@ -1,8 +1,8 @@
 // @ts-nocheck
 import { c as _c } from "react/compiler-runtime";
 import React from 'react';
-import { Text } from '../ink.js';
-import type { Theme } from '../stubs/theme.js';
+import { Text } from '#src/plugins/display/claude-code-ink/ink.js';
+import type { Theme } from '#src/plugins/display/claude-code-ink/stubs/theme.js';
 type Props = {
   /**
    * How much progress to display, between 0 and 1 inclusive

@@ -5,12 +5,12 @@
  */
 
 // ── 插件体系 ──
-export { NanoPlugin, PluginRegistry, registerBuiltinPlugin } from './plugin.js';
-export type { LLMResponse, ToolCall } from './plugin.js';
+export { NanoPlugin, PluginRegistry, registerBuiltinPlugin } from '#src/core/plugin.js';
+export type { LLMResponse, ToolCall } from '#src/core/plugin.js';
 
 // ── Agent ──
-export { NanoCodeAgent } from './agent.js';
-export type { NanoCodeAgentOptions } from './agent.js';
+export { NanoCodeAgent } from '#src/core/agent.js';
+export type { NanoCodeAgentOptions } from '#src/core/agent.js';
 
 // ── 合约类型 ──
 export type {
@@ -26,43 +26,43 @@ export type {
   CommandInterceptResult,
   InjectedMessage,
   AgentDisplay,
-} from './contract.js';
-export { isMainAgent } from './contract.js';
+} from '#src/core/contract.js';
+export { isMainAgent } from '#src/core/contract.js';
 
 // ── LLM 客户端 ──
-export { LLMClient } from './llm.js';
-export type { LLMConfig, ChatMessage, ToolCallDelta, AssembledToolCall } from './llm.js';
+export { LLMClient } from '#src/core/llm.js';
+export type { LLMConfig, ChatMessage, ToolCallDelta, AssembledToolCall } from '#src/core/llm.js';
 
 // ── 提示词构建 ──
-export { buildSystemPrompt, formatToolResponse } from './prompt.js';
+export { buildSystemPrompt, formatToolResponse } from '#src/core/prompt.js';
 
 // ── 配置 ──
-export { loadConfig, applyProfile, getSystemWhitelist } from './config.js';
-export type { NanoConfig, SystemPromptConfig, AgentConfig, PluginConfigEntry } from './config.js';
+export { loadConfig, applyProfile, getSystemWhitelist } from '#src/core/config.js';
+export type { NanoConfig, SystemPromptConfig, AgentConfig, PluginConfigEntry } from '#src/core/config.js';
 
 // ── 会话 ──
-export { saveSession, loadSession, hasSession } from './session.js';
-export type { SessionData } from './session.js';
+export { saveSession, loadSession, hasSession } from '#src/core/session.js';
+export type { SessionData } from '#src/core/session.js';
 
 // ── 存储 ──
-export { InMemoryStore } from './store.js';
-export type { IStore } from './store.js';
+export { InMemoryStore } from '#src/core/store.js';
+export type { IStore } from '#src/core/store.js';
 
 // ── 常量 ──
-export { SK } from './store-keys.js';
-export type { AgentModeInfo } from './store-keys.js';
+export { SK } from '#src/core/store-keys.js';
+export type { AgentModeInfo } from '#src/core/store-keys.js';
 
 // ── 版本 ──
-export { getPackageVersion, getPackageName } from './version.js';
+export { getPackageVersion, getPackageName } from '#src/core/version.js';
 
 // ── 重试工具 ──
-export { withRetry } from './retry.js';
-export type { RetryOptions } from './retry.js';
+export { withRetry } from '#src/core/retry.js';
+export type { RetryOptions } from '#src/core/retry.js';
 
 // ── 日志 ──
-export { logManager } from './logger.js';
-export type { LogPlugin, LogEntry, LogLevel } from './logger.js';
+export { logManager } from '#src/core/logger.js';
+export type { LogPlugin, LogEntry, LogLevel } from '#src/core/logger.js';
 
 // ── 诊断 ──
-export { runDoctor, formatDoctorResults } from './doctor.js';
-export type { DoctorResult } from './doctor.js';
+export { runDoctor, formatDoctorResults } from '#src/core/doctor.js';
+export type { DoctorResult } from '#src/core/doctor.js';

@@ -10,7 +10,7 @@
  * - userInvocable: false → 从斜杠命令 UI 隐藏
  * - whenToUse: 追加到描述后，帮助 LLM 判断调用时机
  */
-import type { PluginRegistry } from '../../../core/plugin.js';
+import type { PluginRegistry } from '#src/core/plugin.js';
 
 export interface BundledSkillContext {
   cwd: string;
@@ -69,17 +69,17 @@ export function clearBundledSkills(): void {
 
 // ── Imports from individual skill files ──
 
-import { createSimplifySkill } from './simplify.js';
-import { createVerifySkill } from './verify.js';
-import { createLoremIpsumSkill } from './lorem-ipsum.js';
-import { createDebugSkill } from './debug.js';
-import { createBatchSkill } from './batch.js';
-import { createUpdateConfigSkill } from './update-config.js';
-import { createRememberSkill } from './remember.js';
-import { createStuckSkill } from './stuck.js';
-import { createSkillifySkill } from './skillify.js';
-import { createKeybindingsSkill } from './keybindings.js';
-import { createReviewSkill } from './review.js';
+import { createSimplifySkill } from '#src/plugins/skills/bundled/simplify.js';
+import { createVerifySkill } from '#src/plugins/skills/bundled/verify.js';
+import { createLoremIpsumSkill } from '#src/plugins/skills/bundled/lorem-ipsum.js';
+import { createDebugSkill } from '#src/plugins/skills/bundled/debug.js';
+import { createBatchSkill } from '#src/plugins/skills/bundled/batch.js';
+import { createUpdateConfigSkill } from '#src/plugins/skills/bundled/update-config.js';
+import { createRememberSkill } from '#src/plugins/skills/bundled/remember.js';
+import { createStuckSkill } from '#src/plugins/skills/bundled/stuck.js';
+import { createSkillifySkill } from '#src/plugins/skills/bundled/skillify.js';
+import { createKeybindingsSkill } from '#src/plugins/skills/bundled/keybindings.js';
+import { createReviewSkill } from '#src/plugins/skills/bundled/review.js';
 
 export function registerAllDefaultBundledSkills(): void {
   // Phase 2 — Tier 1

@@ -1,10 +1,10 @@
 import React from 'react';
 import type { Token, Tokens } from 'marked';
 import stripAnsi from 'strip-ansi';
-import { stringWidth } from '../engine/stringWidth.js';
-import { wrapAnsi } from '../engine/wrapAnsi.js';
-import { Ansi } from '../engine/Ansi.js';
-import { formatToken, padAligned } from '../utils/markdown.js';
+import { stringWidth } from '#src/plugins/display/claude-code-ink/engine/stringWidth.js';
+import { wrapAnsi } from '#src/plugins/display/claude-code-ink/engine/wrapAnsi.js';
+import { Ansi } from '#src/plugins/display/claude-code-ink/engine/Ansi.js';
+import { formatToken, padAligned } from '#src/plugins/display/claude-code-ink/utils/markdown.js';
 
 /** Margin to prevent overflow from layout race conditions. */
 const SAFETY_MARGIN = 4;

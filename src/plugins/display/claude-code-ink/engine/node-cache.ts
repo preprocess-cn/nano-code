@@ -1,5 +1,5 @@
-import type { DOMElement } from './dom.js'
-import type { Rectangle } from './layout/geometry.js'
+import type { DOMElement } from '#src/plugins/display/claude-code-ink/engine/dom.js'
+import type { Rectangle } from '#src/plugins/display/claude-code-ink/engine/layout/geometry.js'
 
 /**
  * Cached layout bounds for each rendered node (used for blit + clearing).

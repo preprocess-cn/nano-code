@@ -2,10 +2,10 @@ import * as fs from 'fs/promises';
 import * as fsSync from 'fs';
 import * as path from 'path';
 import { confirm } from '@clack/prompts';
-import { NanoPlugin, PluginRegistry } from '../../core/plugin.js';
-import { ToolDefinition, ToolResponse, ToolContext } from '../../core/contract.js';
-import { SK } from '../../core/store-keys.js';
-import { getPatchForDisplay, newFileHunk } from '../../utils/diff.js';
+import { NanoPlugin, PluginRegistry } from '#src/core/plugin.js';
+import { ToolDefinition, ToolResponse, ToolContext } from '#src/core/contract.js';
+import { SK } from '#src/core/store-keys.js';
+import { getPatchForDisplay, newFileHunk } from '#src/utils/diff.js';
 
 // ── 文件读取缓存（用于压缩后恢复上下文）──
 // 模块级缓存，但写入时校验 ctx.skipPermission 以避免子 agent 污染主 agent 缓存

@@ -1,28 +1,28 @@
-import { NanoCodeAgent } from './core/agent.js';
-import { PluginRegistry, registerBuiltinPlugin } from './core/plugin.js';
-import { loadConfig, applyProfile, getSystemWhitelist } from './core/config.js';
-import { LLMClient } from './core/llm.js';
-import { buildMCPPluginsFromConfig } from './plugins/mcp/adapter.js';
-import { npmLoaderPlugin } from './plugins/npm-loader.js';
-import { loadSession, saveSession } from './core/session.js';
-import { handlePluginCommand, printPluginList } from './plugin-cli.js';
-import { createAgentCoordinatorPlugin } from './plugins/coordinator/coordinator.js';
-import { createSkillsPlugin } from './plugins/skills/index.js';
-import { registerAllDefaultBundledSkills, unregisterBundledSkill } from './plugins/skills/bundled/index.js';
-import { createCommandsPlugin, setCommandAgent } from './plugins/commands/index.js';
-import { createSkillsSlashPlugin } from './plugins/commands/skills-slash.js';
-import { createAgentSlashPlugin, setTargetAgent } from './plugins/commands/agent-slash.js';
-import { createBangPlugin } from './plugins/commands/bang.js';
-import { taskPlanPlugin } from './plugins/tools/task-plan.js';
-import { DisplayManager, DisplayPlugin } from './display.js';
-import { replDisplay } from './plugins/display/repl.js';
-import { cliDisplay } from './plugins/display/cli.js';
-import { resolveDisplayPlugin } from './plugins/display/loader.js';
-import { SK } from './core/store-keys.js';
+import { NanoCodeAgent } from '#src/core/agent.js';
+import { PluginRegistry, registerBuiltinPlugin } from '#src/core/plugin.js';
+import { loadConfig, applyProfile, getSystemWhitelist } from '#src/core/config.js';
+import { LLMClient } from '#src/core/llm.js';
+import { buildMCPPluginsFromConfig } from '#src/plugins/mcp/adapter.js';
+import { npmLoaderPlugin } from '#src/plugins/npm-loader.js';
+import { loadSession, saveSession } from '#src/core/session.js';
+import { handlePluginCommand, printPluginList } from '#src/plugin-cli.js';
+import { createAgentCoordinatorPlugin } from '#src/plugins/coordinator/coordinator.js';
+import { createSkillsPlugin } from '#src/plugins/skills/index.js';
+import { registerAllDefaultBundledSkills, unregisterBundledSkill } from '#src/plugins/skills/bundled/index.js';
+import { createCommandsPlugin, setCommandAgent } from '#src/plugins/commands/index.js';
+import { createSkillsSlashPlugin } from '#src/plugins/commands/skills-slash.js';
+import { createAgentSlashPlugin, setTargetAgent } from '#src/plugins/commands/agent-slash.js';
+import { createBangPlugin } from '#src/plugins/commands/bang.js';
+import { taskPlanPlugin } from '#src/plugins/tools/task-plan.js';
+import { DisplayManager, DisplayPlugin } from '#src/display.js';
+import { replDisplay } from '#src/plugins/display/repl.js';
+import { cliDisplay } from '#src/plugins/display/cli.js';
+import { resolveDisplayPlugin } from '#src/plugins/display/loader.js';
+import { SK } from '#src/core/store-keys.js';
 import { cac } from 'cac';
-import { getPackageVersion } from './core/version.js';
-import { logManager } from './core/logger.js';
-import { runDoctor, formatDoctorResults } from './core/doctor.js';
+import { getPackageVersion } from '#src/core/version.js';
+import { logManager } from '#src/core/logger.js';
+import { runDoctor, formatDoctorResults } from '#src/core/doctor.js';
 
 // ── CLI messages ──
 
@@ -170,7 +170,7 @@ async function registerFeaturePlugins(config: ReturnType<typeof loadConfig>, reg
 
 async function lazyInitSkillsBridge(disabledSkills: string[]): Promise<void> {
   try {
-    const { initCommandSuggestions } = await import('./plugins/display/claude-code-ink/skills-bridge.js');
+    const { initCommandSuggestions } = await import('#src/plugins/display/claude-code-ink/skills-bridge.js');
     initCommandSuggestions(disabledSkills);
   } catch {
     // Ink 可选依赖未安装时静默跳过
@@ -192,7 +192,7 @@ async function restoreSession(
 
   agent.loadHistory(session.messages);
 
-  const { countMessagesTokens } = await import('./plugins/token-budget/counter.js');
+  const { countMessagesTokens } = await import('#src/plugins/token-budget/counter.js');
   registry.store.set(SK.TokenBudgetInitialAccumulated, countMessagesTokens(session.messages));
 
   for (const msg of session.messages) {

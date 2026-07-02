@@ -1,4 +1,4 @@
-import { Event } from './event.js'
+import { Event } from '#src/plugins/display/claude-code-ink/engine/events/event.js'
 
 export type TerminalFocusEventType = 'terminalfocus' | 'terminalblur'
 

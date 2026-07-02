@@ -1,12 +1,12 @@
-import { NanoCodeAgent } from '../../core/agent.js';
-import { PluginRegistry } from '../../core/plugin.js';
-import { NanoConfig } from '../../core/config.js';
-import { buildSystemPrompt } from '../../core/prompt.js';
-import { loadAgentDefinitions } from '../../plugins/coordinator/agent-loader.js';
-import { loadAllSkills } from '../skills/loader.js';
+import { NanoCodeAgent } from '#src/core/agent.js';
+import { PluginRegistry } from '#src/core/plugin.js';
+import { NanoConfig } from '#src/core/config.js';
+import { buildSystemPrompt } from '#src/core/prompt.js';
+import { loadAgentDefinitions } from '#src/plugins/coordinator/agent-loader.js';
+import { loadAllSkills } from '#src/plugins/skills/loader.js';
 import * as fs from 'fs';
 import * as path from 'path';
-import { countTokens, countMessagesTokens } from './counter.js';
+import { countTokens, countMessagesTokens } from '#src/plugins/token-budget/counter.js';
 
 // ── Types ──
 

@@ -55,7 +55,7 @@ import {
   PositionType,
   Unit,
   Wrap,
-} from './enums.js'
+} from '#src/plugins/display/claude-code-ink/yoga-layout/enums.js'
 
 export {
   Align,

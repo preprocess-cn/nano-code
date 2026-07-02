@@ -3,12 +3,12 @@ import { c as _c } from "react/compiler-runtime";
 /// <reference path='../global.d.ts' />
 import React, { type PropsWithChildren, type Ref } from 'react';
 import type { Except } from 'type-fest';
-import type { DOMElement } from '../dom.js';
-import type { ClickEvent } from '../events/click-event.js';
-import type { FocusEvent } from '../events/focus-event.js';
-import type { KeyboardEvent } from '../events/keyboard-event.js';
-import type { Styles } from '../styles.js';
-import * as warn from '../warn.js';
+import type { DOMElement } from '#src/plugins/display/claude-code-ink/engine/dom.js';
+import type { ClickEvent } from '#src/plugins/display/claude-code-ink/engine/events/click-event.js';
+import type { FocusEvent } from '#src/plugins/display/claude-code-ink/engine/events/focus-event.js';
+import type { KeyboardEvent } from '#src/plugins/display/claude-code-ink/engine/events/keyboard-event.js';
+import type { Styles } from '#src/plugins/display/claude-code-ink/engine/styles.js';
+import * as warn from '#src/plugins/display/claude-code-ink/engine/warn.js';
 export type Props = Except<Styles, 'textWrap'> & {
   ref?: Ref<DOMElement>;
   /**

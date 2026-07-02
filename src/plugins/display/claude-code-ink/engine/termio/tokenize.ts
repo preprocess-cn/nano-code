@@ -6,8 +6,8 @@
  * identifies boundaries for use by keyboard input parsing.
  */
 
-import { C0, ESC_TYPE, isEscFinal } from './ansi.js'
-import { isCSIFinal, isCSIIntermediate, isCSIParam } from './csi.js'
+import { C0, ESC_TYPE, isEscFinal } from '#src/plugins/display/claude-code-ink/engine/termio/ansi.js'
+import { isCSIFinal, isCSIIntermediate, isCSIParam } from '#src/plugins/display/claude-code-ink/engine/termio/csi.js'
 
 export type Token =
   | { type: 'text'; value: string }

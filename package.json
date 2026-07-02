@@ -2,6 +2,9 @@
   "name": "nano-code",
   "version": "0.1.0",
   "description": "A lightweight, CLI-based AI coding assistant with file operations.",
+  "imports": {
+    "#src/*": "./src/*"
+  },
   "main": "dist/index.js",
   "type": "module",
   "bin": {

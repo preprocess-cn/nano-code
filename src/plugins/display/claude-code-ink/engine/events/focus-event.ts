@@ -1,4 +1,4 @@
-import { type EventTarget, TerminalEvent } from './terminal-event.js'
+import { type EventTarget, TerminalEvent } from '#src/plugins/display/claude-code-ink/engine/events/terminal-event.js'
 
 /**
  * Focus event for component focus changes.

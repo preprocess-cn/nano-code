@@ -5,11 +5,11 @@ import {
   styledCharsFromTokens,
   tokenize,
 } from '@alcalzone/ansi-tokenize'
-import { logForDebugging } from '../utils/debug.js'
-import { getGraphemeSegmenter } from '../utils/intl.js'
-import sliceAnsi from '../utils/sliceAnsi.js'
-import { reorderBidi } from './bidi.js'
-import { type Rectangle, unionRect } from './layout/geometry.js'
+import { logForDebugging } from '#src/plugins/display/claude-code-ink/utils/debug.js'
+import { getGraphemeSegmenter } from '#src/plugins/display/claude-code-ink/utils/intl.js'
+import sliceAnsi from '#src/plugins/display/claude-code-ink/utils/sliceAnsi.js'
+import { reorderBidi } from '#src/plugins/display/claude-code-ink/engine/bidi.js'
+import { type Rectangle, unionRect } from '#src/plugins/display/claude-code-ink/engine/layout/geometry.js'
 import {
   blitRegion,
   CellWidth,
@@ -22,9 +22,9 @@ import {
   type StylePool,
   setCellAt,
   shiftRows,
-} from './screen.js'
-import { stringWidth } from './stringWidth.js'
-import { widestLine } from './widest-line.js'
+} from '#src/plugins/display/claude-code-ink/engine/screen.js'
+import { stringWidth } from '#src/plugins/display/claude-code-ink/engine/stringWidth.js'
+import { widestLine } from '#src/plugins/display/claude-code-ink/engine/widest-line.js'
 
 /**
  * A grapheme cluster with precomputed terminal width, styleId, and hyperlink.

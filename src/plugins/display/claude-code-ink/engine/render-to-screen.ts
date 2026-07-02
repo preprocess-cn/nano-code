@@ -2,14 +2,14 @@
 import noop from 'lodash-es/noop.js'
 import type { ReactElement } from 'react'
 import { LegacyRoot } from 'react-reconciler/constants.js'
-import { logForDebugging } from '../utils/debug.js'
-import { createNode, type DOMElement } from './dom.js'
-import { FocusManager } from './focus.js'
-import Output from './output.js'
-import reconciler from './reconciler.js'
+import { logForDebugging } from '#src/plugins/display/claude-code-ink/utils/debug.js'
+import { createNode, type DOMElement } from '#src/plugins/display/claude-code-ink/engine/dom.js'
+import { FocusManager } from '#src/plugins/display/claude-code-ink/engine/focus.js'
+import Output from '#src/plugins/display/claude-code-ink/engine/output.js'
+import reconciler from '#src/plugins/display/claude-code-ink/engine/reconciler.js'
 import renderNodeToOutput, {
   resetLayoutShifted,
-} from './render-node-to-output.js'
+} from '#src/plugins/display/claude-code-ink/engine/render-node-to-output.js'
 import {
   CellWidth,
   CharPool,
@@ -19,7 +19,7 @@ import {
   type Screen,
   StylePool,
   setCellStyleId,
-} from './screen.js'
+} from '#src/plugins/display/claude-code-ink/engine/screen.js'
 
 /** Position of a match within a rendered message, relative to the message's
  *  own bounding box (row 0 = message top). Stable across scroll — to

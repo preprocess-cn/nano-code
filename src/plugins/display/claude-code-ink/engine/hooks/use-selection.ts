@@ -1,11 +1,11 @@
 import { useContext, useMemo, useSyncExternalStore } from 'react'
-import StdinContext from '../components/StdinContext.js'
-import instances from '../instances.js'
+import StdinContext from '#src/plugins/display/claude-code-ink/engine/components/StdinContext.js'
+import instances from '#src/plugins/display/claude-code-ink/engine/instances.js'
 import {
   type FocusMove,
   type SelectionState,
   shiftAnchor,
-} from '../selection.js'
+} from '#src/plugins/display/claude-code-ink/engine/selection.js'
 
 /**
  * Access to text selection operations on the Ink instance (fullscreen only).

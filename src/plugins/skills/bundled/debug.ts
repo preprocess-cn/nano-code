@@ -1,4 +1,4 @@
-import type { BundledSkillDef } from './index.js';
+import type { BundledSkillDef } from '#src/plugins/skills/bundled/index.js';
 
 /**
  * Debug 技能 — 调试诊断。

@@ -1,8 +1,8 @@
 import { marked, type Token, type Tokens } from 'marked';
 import stripAnsi from 'strip-ansi';
-import { color } from '../design-system/color.js';
-import { stringWidth } from '../engine/stringWidth.js';
-import { supportsHyperlinks } from '../engine/supports-hyperlinks.js';
+import { color } from '#src/plugins/display/claude-code-ink/design-system/color.js';
+import { stringWidth } from '#src/plugins/display/claude-code-ink/engine/stringWidth.js';
+import { supportsHyperlinks } from '#src/plugins/display/claude-code-ink/engine/supports-hyperlinks.js';
 
 const EOL = '\n';
 

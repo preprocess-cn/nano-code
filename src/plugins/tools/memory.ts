@@ -1,9 +1,9 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { NanoPlugin, PluginRegistry, LLMResponse } from '../../core/plugin.js';
-import { ToolDefinition, ToolResponse, ToolContext } from '../../core/contract.js';
-import { ChatMessage } from '../../core/llm.js';
+import { NanoPlugin, PluginRegistry, LLMResponse } from '#src/core/plugin.js';
+import { ToolDefinition, ToolResponse, ToolContext } from '#src/core/contract.js';
+import { ChatMessage } from '#src/core/llm.js';
 
 // ── Memory storage types ──
 

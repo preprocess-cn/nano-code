@@ -1,11 +1,11 @@
 // @ts-nocheck
 import { c as _c } from "react/compiler-runtime";
 import React, { type PropsWithChildren, useContext, useInsertionEffect } from 'react';
-import instances from '../instances.js';
-import { DISABLE_MOUSE_TRACKING, ENABLE_MOUSE_TRACKING, ENTER_ALT_SCREEN, EXIT_ALT_SCREEN } from '../termio/dec.js';
-import { TerminalWriteContext } from '../useTerminalNotification.js';
-import Box from './Box.js';
-import { TerminalSizeContext } from './TerminalSizeContext.js';
+import instances from '#src/plugins/display/claude-code-ink/engine/instances.js';
+import { DISABLE_MOUSE_TRACKING, ENABLE_MOUSE_TRACKING, ENTER_ALT_SCREEN, EXIT_ALT_SCREEN } from '#src/plugins/display/claude-code-ink/engine/termio/dec.js';
+import { TerminalWriteContext } from '#src/plugins/display/claude-code-ink/engine/useTerminalNotification.js';
+import Box from '#src/plugins/display/claude-code-ink/engine/components/Box.js';
+import { TerminalSizeContext } from '#src/plugins/display/claude-code-ink/engine/components/TerminalSizeContext.js';
 type Props = PropsWithChildren<{
   /** Enable SGR mouse tracking (wheel + click/drag). Default true. */
   mouseTracking?: boolean;

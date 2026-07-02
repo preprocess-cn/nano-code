@@ -1,7 +1,7 @@
-import { NanoPlugin } from '../../core/plugin.js';
-import { ToolResponse, ToolContext, ToolDefinition } from '../../core/contract.js';
-import { ChatMessage } from '../../core/llm.js';
-import { MessageBus } from './message-bus.js';
+import { NanoPlugin } from '#src/core/plugin.js';
+import { ToolResponse, ToolContext, ToolDefinition } from '#src/core/contract.js';
+import { ChatMessage } from '#src/core/llm.js';
+import { MessageBus } from '#src/plugins/coordinator/message-bus.js';
 
 export interface AgentIdentity {
   taskId: string;

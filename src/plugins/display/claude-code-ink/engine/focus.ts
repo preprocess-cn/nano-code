@@ -1,5 +1,5 @@
-import type { DOMElement } from './dom.js'
-import { FocusEvent } from './events/focus-event.js'
+import type { DOMElement } from '#src/plugins/display/claude-code-ink/engine/dom.js'
+import { FocusEvent } from '#src/plugins/display/claude-code-ink/engine/events/focus-event.js'
 
 const MAX_FOCUS_STACK = 32
 

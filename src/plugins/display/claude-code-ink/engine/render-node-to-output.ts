@@ -1,21 +1,21 @@
 import indentString from 'indent-string'
-import { applyTextStyles } from './colorize.js'
-import type { DOMElement } from './dom.js'
-import getMaxWidth from './get-max-width.js'
-import type { Rectangle } from './layout/geometry.js'
-import { LayoutDisplay, LayoutEdge, type LayoutNode } from './layout/node.js'
-import { nodeCache, pendingClears } from './node-cache.js'
-import type Output from './output.js'
-import renderBorder from './render-border.js'
-import type { Screen } from './screen.js'
+import { applyTextStyles } from '#src/plugins/display/claude-code-ink/engine/colorize.js'
+import type { DOMElement } from '#src/plugins/display/claude-code-ink/engine/dom.js'
+import getMaxWidth from '#src/plugins/display/claude-code-ink/engine/get-max-width.js'
+import type { Rectangle } from '#src/plugins/display/claude-code-ink/engine/layout/geometry.js'
+import { LayoutDisplay, LayoutEdge, type LayoutNode } from '#src/plugins/display/claude-code-ink/engine/layout/node.js'
+import { nodeCache, pendingClears } from '#src/plugins/display/claude-code-ink/engine/node-cache.js'
+import type Output from '#src/plugins/display/claude-code-ink/engine/output.js'
+import renderBorder from '#src/plugins/display/claude-code-ink/engine/render-border.js'
+import type { Screen } from '#src/plugins/display/claude-code-ink/engine/screen.js'
 import {
   type StyledSegment,
   squashTextNodesToSegments,
-} from './squash-text-nodes.js'
-import type { Color } from './styles.js'
-import { isXtermJs } from './terminal.js'
-import { widestLine } from './widest-line.js'
-import wrapText from './wrap-text.js'
+} from '#src/plugins/display/claude-code-ink/engine/squash-text-nodes.js'
+import type { Color } from '#src/plugins/display/claude-code-ink/engine/styles.js'
+import { isXtermJs } from '#src/plugins/display/claude-code-ink/engine/terminal.js'
+import { widestLine } from '#src/plugins/display/claude-code-ink/engine/widest-line.js'
+import wrapText from '#src/plugins/display/claude-code-ink/engine/wrap-text.js'
 
 // Matches detectXtermJsWheel() in ScrollKeybindingHandler.tsx — the curve
 // and drain must agree on terminal detection. TERM_PROGRAM check is the sync

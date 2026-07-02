@@ -1,6 +1,6 @@
 import { createContext } from 'react'
-import { EventEmitter } from '../events/emitter.js'
-import type { TerminalQuerier } from '../terminal-querier.js'
+import { EventEmitter } from '#src/plugins/display/claude-code-ink/engine/events/emitter.js'
+import type { TerminalQuerier } from '#src/plugins/display/claude-code-ink/engine/terminal-querier.js'
 
 export type Props = {
   /**

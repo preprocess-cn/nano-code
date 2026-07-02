@@ -1,8 +1,8 @@
 import React, { useMemo, useRef } from 'react';
 import { marked, type Token, type Tokens } from 'marked';
-import { Ansi, Box } from '../ink.js';
-import { configureMarked, formatToken } from '../utils/markdown.js';
-import { MarkdownTable } from './MarkdownTable.js';
+import { Ansi, Box } from '#src/plugins/display/claude-code-ink/ink.js';
+import { configureMarked, formatToken } from '#src/plugins/display/claude-code-ink/utils/markdown.js';
+import { MarkdownTable } from '#src/plugins/display/claude-code-ink/components/MarkdownTable.js';
 
 // React.memo wrapping breaks JSX prop inference for Ansi
 const AnsiBox = Ansi as React.FC<{ children?: string; dimColor?: boolean }>;

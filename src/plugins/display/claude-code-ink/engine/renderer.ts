@@ -1,17 +1,17 @@
 // @ts-nocheck
-import { logForDebugging } from '../stubs/debug.js'
-import { type DOMElement, markDirty } from './dom.js'
-import type { Frame } from './frame.js'
-import { consumeAbsoluteRemovedFlag } from './node-cache.js'
-import Output from './output.js'
+import { logForDebugging } from '#src/plugins/display/claude-code-ink/stubs/debug.js'
+import { type DOMElement, markDirty } from '#src/plugins/display/claude-code-ink/engine/dom.js'
+import type { Frame } from '#src/plugins/display/claude-code-ink/engine/frame.js'
+import { consumeAbsoluteRemovedFlag } from '#src/plugins/display/claude-code-ink/engine/node-cache.js'
+import Output from '#src/plugins/display/claude-code-ink/engine/output.js'
 import renderNodeToOutput, {
   getScrollDrainNode,
   getScrollHint,
   resetLayoutShifted,
   resetScrollDrainNode,
   resetScrollHint,
-} from './render-node-to-output.js'
-import { createScreen, type StylePool } from './screen.js'
+} from '#src/plugins/display/claude-code-ink/engine/render-node-to-output.js'
+import { createScreen, type StylePool } from '#src/plugins/display/claude-code-ink/engine/screen.js'
 
 export type RenderOptions = {
   frontFrame: Frame

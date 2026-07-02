@@ -3,8 +3,8 @@
 
 import { appendFileSync } from 'fs'
 import createReconciler from 'react-reconciler'
-import { getYogaCounters } from '../yoga-layout/index.js'
-import { isEnvTruthy } from '../utils/envUtils.js'
+import { getYogaCounters } from '#src/plugins/display/claude-code-ink/yoga-layout/index.js'
+import { isEnvTruthy } from '#src/plugins/display/claude-code-ink/utils/envUtils.js'
 import {
   appendChildNode,
   clearYogaNodeReferences,
@@ -21,12 +21,12 @@ import {
   setTextNodeValue,
   setTextStyles,
   type TextNode,
-} from './dom.js'
-import { Dispatcher } from './events/dispatcher.js'
-import { EVENT_HANDLER_PROPS } from './events/event-handlers.js'
-import { getFocusManager, getRootNode } from './focus.js'
-import { LayoutDisplay } from './layout/node.js'
-import applyStyles, { type Styles, type TextStyles } from './styles.js'
+} from '#src/plugins/display/claude-code-ink/engine/dom.js'
+import { Dispatcher } from '#src/plugins/display/claude-code-ink/engine/events/dispatcher.js'
+import { EVENT_HANDLER_PROPS } from '#src/plugins/display/claude-code-ink/engine/events/event-handlers.js'
+import { getFocusManager, getRootNode } from '#src/plugins/display/claude-code-ink/engine/focus.js'
+import { LayoutDisplay } from '#src/plugins/display/claude-code-ink/engine/layout/node.js'
+import applyStyles, { type Styles, type TextStyles } from '#src/plugins/display/claude-code-ink/engine/styles.js'
 
 // We need to conditionally perform devtools connection to avoid
 // accidentally breaking other third-party code.
@@ -34,7 +34,7 @@ import applyStyles, { type Styles, type TextStyles } from './styles.js'
 if (process.env.NODE_ENV === 'development') {
   try {
     // eslint-disable-next-line custom-rules/no-top-level-dynamic-import -- dev-only; NODE_ENV check is DCE'd in production
-    void import('./devtools.js')
+    void import('#src/plugins/display/claude-code-ink/engine/devtools.js')
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } catch (error: any) {
     if (error.code === 'ERR_MODULE_NOT_FOUND') {

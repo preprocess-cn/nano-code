@@ -1,4 +1,4 @@
-import { ToolResponse } from '../../core/contract.js';
+import { ToolResponse } from '#src/core/contract.js';
 
 export interface AgentMessage {
   from: string;

@@ -3,9 +3,9 @@ import {
   ansiCodesToString,
   diffAnsiCodes,
 } from '@alcalzone/ansi-tokenize'
-import { logForDebugging } from '../utils/debug.js'
-import type { Diff, FlickerReason, Frame } from './frame.js'
-import type { Point } from './layout/geometry.js'
+import { logForDebugging } from '#src/plugins/display/claude-code-ink/utils/debug.js'
+import type { Diff, FlickerReason, Frame } from '#src/plugins/display/claude-code-ink/engine/frame.js'
+import type { Point } from '#src/plugins/display/claude-code-ink/engine/layout/geometry.js'
 import {
   type Cell,
   CellWidth,
@@ -18,15 +18,15 @@ import {
   type StylePool,
   shiftRows,
   visibleCellAtIndex,
-} from './screen.js'
+} from '#src/plugins/display/claude-code-ink/engine/screen.js'
 import {
   CURSOR_HOME,
   scrollDown as csiScrollDown,
   scrollUp as csiScrollUp,
   RESET_SCROLL_REGION,
   setScrollRegion,
-} from './termio/csi.js'
-import { LINK_END, link as oscLink } from './termio/osc.js'
+} from '#src/plugins/display/claude-code-ink/engine/termio/csi.js'
+import { LINK_END, link as oscLink } from '#src/plugins/display/claude-code-ink/engine/termio/osc.js'
 
 type State = {
   previousOutput: string

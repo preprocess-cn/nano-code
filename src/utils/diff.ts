@@ -1,5 +1,5 @@
 import { structuredPatch } from 'diff';
-import type { DiffHunk, DiffLine } from '../core/contract.js';
+import type { DiffHunk, DiffLine } from '#src/core/contract.js';
 
 const AMPERSAND_TOKEN = '<<:AMPERSAND_TOKEN:>>';
 const DOLLAR_TOKEN = '<<:DOLLAR_TOKEN:>>';

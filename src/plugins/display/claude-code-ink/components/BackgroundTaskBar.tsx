@@ -1,6 +1,6 @@
 import React from 'react';
-import { Box, Text } from '../ink.js';
-import type { BackgroundTaskInfo } from '../InkApp.js';
+import { Box, Text } from '#src/plugins/display/claude-code-ink/ink.js';
+import type { BackgroundTaskInfo } from '#src/plugins/display/claude-code-ink/InkApp.js';
 
 interface BackgroundTaskBarProps {
   tasks: BackgroundTaskInfo[];

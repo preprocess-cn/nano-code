@@ -4,10 +4,10 @@
  */
 
 import { Buffer } from 'buffer'
-import { env } from '../../utils/env.js'
-import { execFileNoThrow } from '../../utils/execFileNoThrow.js'
-import { BEL, ESC, ESC_TYPE, SEP } from './ansi.js'
-import type { Action, Color, TabStatusAction } from './types.js'
+import { env } from '#src/plugins/display/claude-code-ink/utils/env.js'
+import { execFileNoThrow } from '#src/plugins/display/claude-code-ink/utils/execFileNoThrow.js'
+import { BEL, ESC, ESC_TYPE, SEP } from '#src/plugins/display/claude-code-ink/engine/termio/ansi.js'
+import type { Action, Color, TabStatusAction } from '#src/plugins/display/claude-code-ink/engine/termio/types.js'
 
 export const OSC_PREFIX = ESC + String.fromCharCode(ESC_TYPE.OSC)
 

@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { logForDebugging } from '../utils/debug.js'
+import { logForDebugging } from '#src/plugins/display/claude-code-ink/utils/debug.js'
 
 export function ifNotInteger(value: number | undefined, name: string): void {
   if (value === undefined) return

@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
-import { Box, Text, useInput, useStdin, ThemeProvider, stringWidth, RawAnsi } from './ink.js';
-import { AlternateScreen } from './engine/components/AlternateScreen.js';
-import ScrollBox, { type ScrollBoxHandle } from './engine/components/ScrollBox.js';
-import { useDeclaredCursor } from './engine/hooks/use-declared-cursor.js';
-import { ColorDiff } from './color-diff.js';
-import { Markdown, StreamingMarkdown } from './components/Markdown.js';
-import { BackgroundTaskBar } from './components/BackgroundTaskBar.js';
-import type { DiffHunk } from '../../../core/contract.js';
-import type { ContextAnalysis } from '../../token-budget/analyzer.js';
+import { Box, Text, useInput, useStdin, ThemeProvider, stringWidth, RawAnsi } from '#src/plugins/display/claude-code-ink/ink.js';
+import { AlternateScreen } from '#src/plugins/display/claude-code-ink/engine/components/AlternateScreen.js';
+import ScrollBox, { type ScrollBoxHandle } from '#src/plugins/display/claude-code-ink/engine/components/ScrollBox.js';
+import { useDeclaredCursor } from '#src/plugins/display/claude-code-ink/engine/hooks/use-declared-cursor.js';
+import { ColorDiff } from '#src/plugins/display/claude-code-ink/color-diff.js';
+import { Markdown, StreamingMarkdown } from '#src/plugins/display/claude-code-ink/components/Markdown.js';
+import { BackgroundTaskBar } from '#src/plugins/display/claude-code-ink/components/BackgroundTaskBar.js';
+import type { DiffHunk } from '#src/core/contract.js';
+import type { ContextAnalysis } from '#src/plugins/token-budget/analyzer.js';
 
 export type PermissionResponse = 'allow_once' | 'always_allow' | 'deny';
 

@@ -1,4 +1,4 @@
-import type { BundledSkillDef } from './index.js';
+import type { BundledSkillDef } from '#src/plugins/skills/bundled/index.js';
 
 /**
  * Stuck 技能 — 卡住会话诊断。

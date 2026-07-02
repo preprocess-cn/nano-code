@@ -9,8 +9,8 @@ import {
   LayoutOverflow,
   LayoutPositionType,
   LayoutWrap,
-} from './layout/node.js'
-import type { BorderStyle, BorderTextOptions } from './render-border.js'
+} from '#src/plugins/display/claude-code-ink/engine/layout/node.js'
+import type { BorderStyle, BorderTextOptions } from '#src/plugins/display/claude-code-ink/engine/render-border.js'
 
 export type RGBColor = `rgb(${number},${number},${number})`
 export type HexColor = `#${string}`

@@ -1,13 +1,13 @@
-import type { DisplayPlugin, StartConfig, StatusEvent, StreamEvent, ToolCallEvent, ToolResultEvent, ErrorEvent, AgentEvent, BackgroundTaskEvent, StateSnapshot, MessageLevel } from '../../../display.js';
-import type { ContextAnalysis } from '../../token-budget/analyzer.js';
-import { inkRender, type Instance } from './ink.js';
-import { InkApp, type UIMessage, type TextSegment, type PermissionPrompt, type PermissionResponse, type BackgroundTaskInfo } from './InkApp.js';
-import { ThinkStream } from '../think-stream.js';
-import type { PluginRegistry } from '../../../core/plugin.js';
-import type { AgentModeInfo } from '../../../core/store-keys.js';
+import type { DisplayPlugin, StartConfig, StatusEvent, StreamEvent, ToolCallEvent, ToolResultEvent, ErrorEvent, AgentEvent, BackgroundTaskEvent, StateSnapshot, MessageLevel } from '#src/display.js';
+import type { ContextAnalysis } from '#src/plugins/token-budget/analyzer.js';
+import { inkRender, type Instance } from '#src/plugins/display/claude-code-ink/ink.js';
+import { InkApp, type UIMessage, type TextSegment, type PermissionPrompt, type PermissionResponse, type BackgroundTaskInfo } from '#src/plugins/display/claude-code-ink/InkApp.js';
+import { ThinkStream } from '#src/plugins/display/think-stream.js';
+import type { PluginRegistry } from '#src/core/plugin.js';
+import type { AgentModeInfo } from '#src/core/store-keys.js';
 
-import { SK } from '../../../core/store-keys.js';
-import { logManager } from '../../../core/logger.js';
+import { SK } from '#src/core/store-keys.js';
+import { logManager } from '#src/core/logger.js';
 import React from 'react';
 
 /** 为常用工具生成简洁的参数预览，避免大 JSON 刷屏 */
@@ -475,7 +475,7 @@ function createPlugin(): DisplayPlugin {
       if (!inkInstance) return false;
 
       // 渲染 PluginManager 覆盖主界面
-      const { PluginManager } = await import('./PluginManager.js');
+      const { PluginManager } = await import('#src/plugins/display/claude-code-ink/PluginManager.js');
       inkInstance.rerender(
         React.createElement(PluginManager, {
           registry: r,

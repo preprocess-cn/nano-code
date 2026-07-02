@@ -1,4 +1,4 @@
-import { AgentLifecycle } from './lifecycle.js';
+import { AgentLifecycle } from '#src/plugins/coordinator/lifecycle.js';
 
 export interface BackgroundTaskInfo {
   taskId: string;

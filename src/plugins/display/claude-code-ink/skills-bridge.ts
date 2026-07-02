@@ -1,8 +1,8 @@
-import { getBundledSkills } from '../../skills/bundled/index.js';
-import { loadAllSkills } from '../../skills/loader.js';
-import { getBuiltinCommands } from '../../commands/builtin.js';
-import { loadAgentDefinitions } from '../../../plugins/coordinator/agent-loader.js';
-import { setSuggestionProvider, type CommandSuggestion } from './index.js';
+import { getBundledSkills } from '#src/plugins/skills/bundled/index.js';
+import { loadAllSkills } from '#src/plugins/skills/loader.js';
+import { getBuiltinCommands } from '#src/plugins/commands/builtin.js';
+import { loadAgentDefinitions } from '#src/plugins/coordinator/agent-loader.js';
+import { setSuggestionProvider, type CommandSuggestion } from '#src/plugins/display/claude-code-ink/index.js';
 
 /**
  * 初始化命令/技能建议列表。

@@ -2,8 +2,8 @@ import OpenAI from 'openai';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
 import * as os from 'os';
-import type { ToolDefinition } from './contract.js';
-import { withRetry } from './retry.js';
+import type { ToolDefinition } from '#src/core/contract.js';
+import { withRetry } from '#src/core/retry.js';
 
 // 加载环境变量：项目 .env 优先于全局 ~/.nano-code/.env，shell 环境变量优先于两者
 dotenv.config();                                                                  // $CWD/.env

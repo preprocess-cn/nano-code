@@ -11,7 +11,7 @@ import Yoga, {
   PositionType,
   Wrap,
   type Node as YogaNode,
-} from '../../yoga-layout/index.js'
+} from '#src/plugins/display/claude-code-ink/yoga-layout/index.js'
 import {
   type LayoutAlign,
   LayoutDisplay,
@@ -25,7 +25,7 @@ import {
   type LayoutOverflow,
   type LayoutPositionType,
   type LayoutWrap,
-} from './node.js'
+} from '#src/plugins/display/claude-code-ink/engine/layout/node.js'
 
 // --
 // Edge/Gutter mapping

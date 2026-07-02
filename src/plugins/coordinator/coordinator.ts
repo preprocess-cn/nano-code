@@ -1,12 +1,12 @@
-import { NanoPlugin, PluginRegistry } from '../../core/plugin.js';
-import { ToolResponse, ToolContext, ToolDefinition } from '../../core/contract.js';
-import { LLMClient, ChatMessage } from '../../core/llm.js';
-import { DisplayManager } from '../../display.js';
-import { loadAgentDefinitions, AgentDefinition } from './agent-loader.js';
-import { createAgentToolPlugin } from './agent-tool.js';
-import { BackgroundTaskManager } from './task-manager.js';
-import { MessageBus } from './message-bus.js';
-import { validateSendMessageArgs } from './messaging-plugins.js';
+import { NanoPlugin, PluginRegistry } from '#src/core/plugin.js';
+import { ToolResponse, ToolContext, ToolDefinition } from '#src/core/contract.js';
+import { LLMClient, ChatMessage } from '#src/core/llm.js';
+import { DisplayManager } from '#src/display.js';
+import { loadAgentDefinitions, AgentDefinition } from '#src/plugins/coordinator/agent-loader.js';
+import { createAgentToolPlugin } from '#src/plugins/coordinator/agent-tool.js';
+import { BackgroundTaskManager } from '#src/plugins/coordinator/task-manager.js';
+import { MessageBus } from '#src/plugins/coordinator/message-bus.js';
+import { validateSendMessageArgs } from '#src/plugins/coordinator/messaging-plugins.js';
 
 export function createAgentCoordinatorPlugin(
   llmClient: LLMClient,

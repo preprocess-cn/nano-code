@@ -1,9 +1,9 @@
 import type { ReactNode } from 'react'
-import { logForDebugging } from '../stubs/debug.js'
+import { logForDebugging } from '#src/plugins/display/claude-code-ink/stubs/debug.js'
 import { Stream } from 'stream'
-import type { FrameEvent } from './frame.js'
-import Ink, { type Options as InkOptions } from './ink.js'
-import instances from './instances.js'
+import type { FrameEvent } from '#src/plugins/display/claude-code-ink/engine/frame.js'
+import Ink, { type Options as InkOptions } from '#src/plugins/display/claude-code-ink/engine/ink.js'
+import instances from '#src/plugins/display/claude-code-ink/engine/instances.js'
 
 export type RenderOptions = {
   /**

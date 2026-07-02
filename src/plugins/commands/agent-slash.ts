@@ -1,10 +1,10 @@
-import { NanoPlugin, PluginRegistry } from '../../core/plugin.js';
-import { CommandInterceptResult } from '../../core/contract.js';
-import { NanoCodeAgent } from '../../core/agent.js';
-import { DisplayManager } from '../../display.js';
-import { loadAgentDefinitions } from '../../plugins/coordinator/agent-loader.js';
-import type { SystemPromptConfig } from '../../core/config.js';
-import { SK, type AgentModeInfo } from '../../core/store-keys.js';
+import { NanoPlugin, PluginRegistry } from '#src/core/plugin.js';
+import { CommandInterceptResult } from '#src/core/contract.js';
+import { NanoCodeAgent } from '#src/core/agent.js';
+import { DisplayManager } from '#src/display.js';
+import { loadAgentDefinitions } from '#src/plugins/coordinator/agent-loader.js';
+import type { SystemPromptConfig } from '#src/core/config.js';
+import { SK, type AgentModeInfo } from '#src/core/store-keys.js';
 
 let _agent: NanoCodeAgent | null = null;
 let _display: DisplayManager | null = null;

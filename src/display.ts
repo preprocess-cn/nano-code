@@ -1,7 +1,7 @@
-import { PluginRegistry } from './core/plugin.js';
-import type { NanoConfig } from './core/config.js';
-import type { ToolStatus, AgentDisplay } from './core/contract.js';
-import type { ContextAnalysis } from './plugins/token-budget/analyzer.js';
+import { PluginRegistry } from '#src/core/plugin.js';
+import type { NanoConfig } from '#src/core/config.js';
+import type { ToolStatus, AgentDisplay } from '#src/core/contract.js';
+import type { ContextAnalysis } from '#src/plugins/token-budget/analyzer.js';
 
 // ════════════════════════════════════════════
 // 结构化事件类型

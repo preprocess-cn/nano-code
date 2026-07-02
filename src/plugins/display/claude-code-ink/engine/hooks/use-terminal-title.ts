@@ -1,7 +1,7 @@
 import { useContext, useEffect } from 'react'
 import stripAnsi from 'strip-ansi'
-import { OSC, osc } from '../termio/osc.js'
-import { TerminalWriteContext } from '../useTerminalNotification.js'
+import { OSC, osc } from '#src/plugins/display/claude-code-ink/engine/termio/osc.js'
+import { TerminalWriteContext } from '#src/plugins/display/claude-code-ink/engine/useTerminalNotification.js'
 
 /**
  * Declaratively set the terminal tab/window title.

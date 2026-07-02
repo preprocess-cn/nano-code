@@ -1,9 +1,9 @@
 // @ts-nocheck
 import { c as _c } from "react/compiler-runtime";
 import React, { useCallback, useLayoutEffect, useRef, useState } from 'react';
-import { useTerminalSize } from '../stubs/hooks.js';
-import { useTerminalViewport } from '../engine/hooks/use-terminal-viewport.js';
-import { Box, type DOMElement, measureElement } from '../ink.js';
+import { useTerminalSize } from '#src/plugins/display/claude-code-ink/stubs/hooks.js';
+import { useTerminalViewport } from '#src/plugins/display/claude-code-ink/engine/hooks/use-terminal-viewport.js';
+import { Box, type DOMElement, measureElement } from '#src/plugins/display/claude-code-ink/ink.js';
 type Props = {
   children: React.ReactNode;
   lock?: 'always' | 'offscreen';

@@ -1,14 +1,14 @@
 // @ts-nocheck
 import { c as _c } from "react/compiler-runtime";
 import React from 'react';
-import { type ExitState, useExitOnCtrlCDWithKeybindings } from '../stubs/hooks.js';
-import { Box, Text } from '../ink.js';
-import { useKeybinding } from '../stubs/keybindings.js';
-import type { Theme } from '../stubs/theme.js';
-import { ConfigurableShortcutHint } from '../ConfigurableShortcutHint.js';
-import { Byline } from './Byline.js';
-import { KeyboardShortcutHint } from './KeyboardShortcutHint.js';
-import { Pane } from './Pane.js';
+import { type ExitState, useExitOnCtrlCDWithKeybindings } from '#src/plugins/display/claude-code-ink/stubs/hooks.js';
+import { Box, Text } from '#src/plugins/display/claude-code-ink/ink.js';
+import { useKeybinding } from '#src/plugins/display/claude-code-ink/stubs/keybindings.js';
+import type { Theme } from '#src/plugins/display/claude-code-ink/stubs/theme.js';
+import { ConfigurableShortcutHint } from '#src/plugins/display/claude-code-ink/ConfigurableShortcutHint.js';
+import { Byline } from '#src/plugins/display/claude-code-ink/design-system/Byline.js';
+import { KeyboardShortcutHint } from '#src/plugins/display/claude-code-ink/design-system/KeyboardShortcutHint.js';
+import { Pane } from '#src/plugins/display/claude-code-ink/design-system/Pane.js';
 type DialogProps = {
   title: React.ReactNode;
   subtitle?: React.ReactNode;

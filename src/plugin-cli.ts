@@ -3,8 +3,8 @@ import * as path from 'path';
 import * as os from 'os';
 import * as yaml from 'js-yaml';
 import { execSync } from 'child_process';
-import { loadConfig, getSystemWhitelist } from './core/config.js';
-import { loadAgentDefinitions } from './plugins/coordinator/agent-loader.js';
+import { loadConfig, getSystemWhitelist } from '#src/core/config.js';
+import { loadAgentDefinitions } from '#src/plugins/coordinator/agent-loader.js';
 import {
   getProjectMcpJsonPath,
   getGlobalMcpJsonPath,
@@ -13,7 +13,7 @@ import {
   removeMcpServer,
   readMcpJson,
   importFromClaudeConfig,
-} from './plugins/mcp/config-writer.js';
+} from '#src/plugins/mcp/config-writer.js';
 
 const GLOBAL_DIR = path.join(os.homedir(), '.nano-code');
 const PROJECT_CONFIG = path.join(process.cwd(), '.nano-code.yaml');
@@ -123,7 +123,7 @@ async function detectAndInstallFromDir(dir: string, name: string, source: string
 
   // MCP 模式：package.json 有 bin 字段 → 写入项目 .mcp.json
   if (pkg.bin) {
-    const { addMcpServer, getProjectMcpJsonPath } = await import('./plugins/mcp/config-writer.js');
+    const { addMcpServer, getProjectMcpJsonPath } = await import('#src/plugins/mcp/config-writer.js');
     const binName = typeof pkg.bin === 'string' ? name : Object.keys(pkg.bin)[0];
     const binPath = typeof pkg.bin === 'string'
       ? path.join(dir, pkg.bin)
@@ -584,7 +584,7 @@ async function setEnabled(name: string, enabled: boolean): Promise<void> {
  * 打印运行中注册表的所有插件及其工具（--list-plugins 模式使用）。
  * 与上方 listPlugins() 不同，此函数操作运行时的 PluginRegistry 实例。
  */
-export function printPluginList(registry: import('./core/plugin.js').PluginRegistry): void {
+export function printPluginList(registry: import('#src/core/plugin.js').PluginRegistry): void {
   const plugins = registry.listPlugins();
   if (plugins.length === 0) {
     console.log('\n  当前没有注册任何插件。\n');

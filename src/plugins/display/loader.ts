@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { DisplayPlugin } from '../../display.js';
+import { DisplayPlugin } from '#src/display.js';
 
 const DISPLAY_DIR = path.join(os.homedir(), '.nano-code', 'presentations');
 
@@ -17,7 +17,7 @@ export async function resolveDisplayPlugin(spec: string): Promise<DisplayPlugin 
   // Built-in ink display plugin
   if (spec === 'claude-code-ink') {
     try {
-      const { inkDisplayPlugin } = await import('./claude-code-ink/index.js');
+      const { inkDisplayPlugin } = await import('#src/plugins/display/claude-code-ink/index.js');
       return inkDisplayPlugin;
     } catch (err: any) {
       if (err?.code === 'ERR_MODULE_NOT_FOUND' || err?.message?.includes('Cannot find package')) {

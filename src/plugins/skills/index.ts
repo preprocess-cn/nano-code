@@ -1,14 +1,14 @@
-import { NanoPlugin, PluginRegistry } from '../../core/plugin.js';
-import { ToolDefinition, ToolResponse, ToolContext } from '../../core/contract.js';
-import { LLMClient } from '../../core/llm.js';
-import { NanoCodeAgent } from '../../core/agent.js';
-import { DisplayManager } from '../../display.js';
-import { loadAllSkills, findSkill, listSkillFiles, readSkillFile, getSkillsDir, substituteArgs, SkillDefinition } from './loader.js';
+import { NanoPlugin, PluginRegistry } from '#src/core/plugin.js';
+import { ToolDefinition, ToolResponse, ToolContext } from '#src/core/contract.js';
+import { LLMClient } from '#src/core/llm.js';
+import { NanoCodeAgent } from '#src/core/agent.js';
+import { DisplayManager } from '#src/display.js';
+import { loadAllSkills, findSkill, listSkillFiles, readSkillFile, getSkillsDir, substituteArgs, SkillDefinition } from '#src/plugins/skills/loader.js';
 import {
   findBundledSkill,
   getBundledSkills,
   buildSkillsPromptSection,
-} from './bundled/index.js';
+} from '#src/plugins/skills/bundled/index.js';
 
 export interface SkillsPluginOptions {
   disabled?: string[];
@@ -292,7 +292,7 @@ async function executeForkedSkill(
   subRegistry.setAgentName(skill.name);
   subRegistry.setDefaultContext({ skipPermission: true, defaultTimeout: 120000 });
 
-  const { registerBuiltinPlugin } = await import('../../core/plugin.js');
+  const { registerBuiltinPlugin } = await import('#src/core/plugin.js');
   await registerBuiltinPlugin(subRegistry, 'fs');
   await registerBuiltinPlugin(subRegistry, 'command');
   await registerBuiltinPlugin(subRegistry, 'memory');
@@ -327,7 +327,7 @@ async function handleRunAgent(
   subRegistry.setAgentName('run_agent');
   subRegistry.setDefaultContext({ skipPermission: true, defaultTimeout: 120000 });
 
-  const { registerBuiltinPlugin } = await import('../../core/plugin.js');
+  const { registerBuiltinPlugin } = await import('#src/core/plugin.js');
   await registerBuiltinPlugin(subRegistry, 'fs');
   await registerBuiltinPlugin(subRegistry, 'command');
   await registerBuiltinPlugin(subRegistry, 'memory');

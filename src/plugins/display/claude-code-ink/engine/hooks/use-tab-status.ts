@@ -4,9 +4,9 @@ import {
   supportsTabStatus,
   tabStatus,
   wrapForMultiplexer,
-} from '../termio/osc.js'
-import type { Color } from '../termio/types.js'
-import { TerminalWriteContext } from '../useTerminalNotification.js'
+} from '#src/plugins/display/claude-code-ink/engine/termio/osc.js'
+import type { Color } from '#src/plugins/display/claude-code-ink/engine/termio/types.js'
+import { TerminalWriteContext } from '#src/plugins/display/claude-code-ink/engine/useTerminalNotification.js'
 
 export type TabStatusKind = 'idle' | 'busy' | 'waiting'
 

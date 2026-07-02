@@ -1,14 +1,14 @@
 // @ts-nocheck
 import { c as _c } from "react/compiler-runtime";
 import React, { type PropsWithChildren, type Ref } from 'react';
-import Box from '../engine/components/Box.js';
-import type { DOMElement } from '../engine/dom.js';
-import type { ClickEvent } from '../engine/events/click-event.js';
-import type { FocusEvent } from '../engine/events/focus-event.js';
-import type { KeyboardEvent } from '../engine/events/keyboard-event.js';
-import type { Color, Styles } from '../engine/styles.js';
-import { getTheme, type Theme } from '../stubs/theme.js';
-import { useTheme } from './ThemeProvider.js';
+import Box from '#src/plugins/display/claude-code-ink/engine/components/Box.js';
+import type { DOMElement } from '#src/plugins/display/claude-code-ink/engine/dom.js';
+import type { ClickEvent } from '#src/plugins/display/claude-code-ink/engine/events/click-event.js';
+import type { FocusEvent } from '#src/plugins/display/claude-code-ink/engine/events/focus-event.js';
+import type { KeyboardEvent } from '#src/plugins/display/claude-code-ink/engine/events/keyboard-event.js';
+import type { Color, Styles } from '#src/plugins/display/claude-code-ink/engine/styles.js';
+import { getTheme, type Theme } from '#src/plugins/display/claude-code-ink/stubs/theme.js';
+import { useTheme } from '#src/plugins/display/claude-code-ink/design-system/ThemeProvider.js';
 
 // Color props that accept theme keys
 type ThemedColorProps = {

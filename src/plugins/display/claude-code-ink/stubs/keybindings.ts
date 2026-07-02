@@ -1,5 +1,5 @@
-import { useInput } from '../ink.js';
-import type { Key } from '../engine/events/input-event.js';
+import { useInput } from '#src/plugins/display/claude-code-ink/ink.js';
+import type { Key } from '#src/plugins/display/claude-code-ink/engine/events/input-event.js';
 
 export function createMatcher(keySpec: string): (input: string, key: Key) => boolean {
   const parts = keySpec.toLowerCase().split('+');

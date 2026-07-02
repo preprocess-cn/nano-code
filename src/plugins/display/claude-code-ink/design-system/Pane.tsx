@@ -1,10 +1,10 @@
 // @ts-nocheck
 import { c as _c } from "react/compiler-runtime";
 import React from 'react';
-import { useIsInsideModal } from '../stubs/hooks.js';
-import { Box } from '../ink.js';
-import type { Theme } from '../stubs/theme.js';
-import { Divider } from './Divider.js';
+import { useIsInsideModal } from '#src/plugins/display/claude-code-ink/stubs/hooks.js';
+import { Box } from '#src/plugins/display/claude-code-ink/ink.js';
+import type { Theme } from '#src/plugins/display/claude-code-ink/stubs/theme.js';
+import { Divider } from '#src/plugins/display/claude-code-ink/design-system/Divider.js';
 type PaneProps = {
   children: React.ReactNode;
   /**

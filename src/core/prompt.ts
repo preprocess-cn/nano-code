@@ -1,11 +1,11 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { PluginRegistry } from './plugin.js';
-import { ChatMessage } from './llm.js';
-import { SystemPromptConfig } from './config.js';
-import { ToolResponse } from './contract.js';
-import { SK } from './store-keys.js';
+import { PluginRegistry } from '#src/core/plugin.js';
+import { ChatMessage } from '#src/core/llm.js';
+import { SystemPromptConfig } from '#src/core/config.js';
+import { ToolResponse } from '#src/core/contract.js';
+import { SK } from '#src/core/store-keys.js';
 
 const PLAN_MODE_PROMPT = `\n\n## Plan Mode Active
 

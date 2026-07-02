@@ -1,4 +1,4 @@
-import type { BundledSkillDef } from './index.js';
+import type { BundledSkillDef } from '#src/plugins/skills/bundled/index.js';
 
 /**
  * Remember 技能 — 记忆管理。

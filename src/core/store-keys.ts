@@ -9,7 +9,7 @@
  * 2. 所有 get/set 使用 store.get(SK.XXX) / store.set(SK.XXX, value)
  */
 
-import type { ChatMessage } from './llm.js';
+import type { ChatMessage } from '#src/core/llm.js';
 
 export const SK = {
   /** 当前 agent 状态快照 */

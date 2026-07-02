@@ -1,5 +1,5 @@
-import { nonAlphanumericKeys, type ParsedKey } from '../parse-keypress.js'
-import { Event } from './event.js'
+import { nonAlphanumericKeys, type ParsedKey } from '#src/plugins/display/claude-code-ink/engine/parse-keypress.js'
+import { Event } from '#src/plugins/display/claude-code-ink/engine/events/event.js'
 
 export type Key = {
   upArrow: boolean

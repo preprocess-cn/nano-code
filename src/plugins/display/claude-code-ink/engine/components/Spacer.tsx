@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { c as _c } from "react/compiler-runtime";
 import React from 'react';
-import Box from './Box.js';
+import Box from '#src/plugins/display/claude-code-ink/engine/components/Box.js';
 
 /**
  * A flexible space that expands along the major axis of its containing layout.

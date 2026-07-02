@@ -1,7 +1,7 @@
 import { spawn } from 'child_process';
-import { NanoPlugin } from '../../core/plugin.js';
-import { CommandInterceptResult } from '../../core/contract.js';
-import { DisplayManager } from '../../display.js';
+import { NanoPlugin } from '#src/core/plugin.js';
+import { CommandInterceptResult } from '#src/core/contract.js';
+import { DisplayManager } from '#src/display.js';
 
 /**
  * 危险命令黑名单（复用 command.ts 中的模式）

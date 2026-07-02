@@ -1,4 +1,4 @@
-import { Event } from './event.js'
+import { Event } from '#src/plugins/display/claude-code-ink/engine/events/event.js'
 
 /**
  * Mouse click event. Fired on left-button release without drag, only when

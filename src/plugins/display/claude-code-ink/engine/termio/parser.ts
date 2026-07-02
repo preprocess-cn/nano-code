@@ -12,16 +12,16 @@
  * - Style tracking: maintains current text style state
  */
 
-import { getGraphemeSegmenter } from '../../utils/intl.js'
-import { C0 } from './ansi.js'
-import { CSI, CURSOR_STYLES, ERASE_DISPLAY, ERASE_LINE_REGION } from './csi.js'
-import { DEC } from './dec.js'
-import { parseEsc } from './esc.js'
-import { parseOSC } from './osc.js'
-import { applySGR } from './sgr.js'
-import { createTokenizer, type Token, type Tokenizer } from './tokenize.js'
-import type { Action, Grapheme, TextStyle } from './types.js'
-import { defaultStyle } from './types.js'
+import { getGraphemeSegmenter } from '#src/plugins/display/claude-code-ink/utils/intl.js'
+import { C0 } from '#src/plugins/display/claude-code-ink/engine/termio/ansi.js'
+import { CSI, CURSOR_STYLES, ERASE_DISPLAY, ERASE_LINE_REGION } from '#src/plugins/display/claude-code-ink/engine/termio/csi.js'
+import { DEC } from '#src/plugins/display/claude-code-ink/engine/termio/dec.js'
+import { parseEsc } from '#src/plugins/display/claude-code-ink/engine/termio/esc.js'
+import { parseOSC } from '#src/plugins/display/claude-code-ink/engine/termio/osc.js'
+import { applySGR } from '#src/plugins/display/claude-code-ink/engine/termio/sgr.js'
+import { createTokenizer, type Token, type Tokenizer } from '#src/plugins/display/claude-code-ink/engine/termio/tokenize.js'
+import type { Action, Grapheme, TextStyle } from '#src/plugins/display/claude-code-ink/engine/termio/types.js'
+import { defaultStyle } from '#src/plugins/display/claude-code-ink/engine/termio/types.js'
 
 // =============================================================================
 // Grapheme Utilities

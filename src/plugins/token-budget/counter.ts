@@ -1,4 +1,4 @@
-import { ChatMessage } from '../../core/llm.js';
+import { ChatMessage } from '#src/core/llm.js';
 
 // ── Tiktoken tokenizer (lazy singleton) ──
 

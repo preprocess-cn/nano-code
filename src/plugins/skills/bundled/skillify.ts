@@ -1,4 +1,4 @@
-import type { BundledSkillDef } from './index.js';
+import type { BundledSkillDef } from '#src/plugins/skills/bundled/index.js';
 
 /**
  * Skillify 技能 — 从对话创建技能。

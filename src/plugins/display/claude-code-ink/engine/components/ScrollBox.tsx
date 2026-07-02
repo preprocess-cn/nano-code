@@ -1,13 +1,13 @@
 // @ts-nocheck
 import React, { type PropsWithChildren, type Ref, useImperativeHandle, useRef, useState } from 'react';
 import type { Except } from 'type-fest';
-import { markScrollActivity } from '../../bootstrap/state.js';
-import type { DOMElement } from '../dom.js';
-import { markDirty, scheduleRenderFrom } from '../dom.js';
-import { markCommitStart } from '../reconciler.js';
-import type { Styles } from '../styles.js';
+import { markScrollActivity } from '#src/plugins/display/claude-code-ink/bootstrap/state.js';
+import type { DOMElement } from '#src/plugins/display/claude-code-ink/engine/dom.js';
+import { markDirty, scheduleRenderFrom } from '#src/plugins/display/claude-code-ink/engine/dom.js';
+import { markCommitStart } from '#src/plugins/display/claude-code-ink/engine/reconciler.js';
+import type { Styles } from '#src/plugins/display/claude-code-ink/engine/styles.js';
 /// <reference path='../global.d.ts' />
-import Box from './Box.js';
+import Box from '#src/plugins/display/claude-code-ink/engine/components/Box.js';
 export type ScrollBoxHandle = {
   scrollTo: (y: number) => void;
   scrollBy: (dy: number) => void;

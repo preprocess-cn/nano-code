@@ -1,6 +1,6 @@
 import { useCallback, useContext, useLayoutEffect, useRef } from 'react'
-import CursorDeclarationContext from '../components/CursorDeclarationContext.js'
-import type { DOMElement } from '../dom.js'
+import CursorDeclarationContext from '#src/plugins/display/claude-code-ink/engine/components/CursorDeclarationContext.js'
+import type { DOMElement } from '#src/plugins/display/claude-code-ink/engine/dom.js'
 
 /**
  * Declares where the terminal cursor should be parked after each frame.

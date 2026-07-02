@@ -1,7 +1,7 @@
-import sliceAnsi from '../utils/sliceAnsi.js'
-import { stringWidth } from './stringWidth.js'
-import type { Styles } from './styles.js'
-import { wrapAnsi } from './wrapAnsi.js'
+import sliceAnsi from '#src/plugins/display/claude-code-ink/utils/sliceAnsi.js'
+import { stringWidth } from '#src/plugins/display/claude-code-ink/engine/stringWidth.js'
+import type { Styles } from '#src/plugins/display/claude-code-ink/engine/styles.js'
+import { wrapAnsi } from '#src/plugins/display/claude-code-ink/engine/wrapAnsi.js'
 
 const ELLIPSIS = '…'
 

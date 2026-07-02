@@ -1,17 +1,17 @@
-import { NanoPlugin, PluginRegistry, registerBuiltinPlugin } from '../../core/plugin.js';
-import { ToolResponse, ToolContext, ToolDefinition } from '../../core/contract.js';
-import { NanoCodeAgent } from '../../core/agent.js';
-import { LLMClient } from '../../core/llm.js';
-import { AgentDefinition } from './agent-loader.js';
-import { DisplayManager } from '../../display.js';
-import { BackgroundTaskManager } from './task-manager.js';
-import { AgentLifecycle } from './lifecycle.js';
-import { MessageBus } from './message-bus.js';
+import { NanoPlugin, PluginRegistry, registerBuiltinPlugin } from '#src/core/plugin.js';
+import { ToolResponse, ToolContext, ToolDefinition } from '#src/core/contract.js';
+import { NanoCodeAgent } from '#src/core/agent.js';
+import { LLMClient } from '#src/core/llm.js';
+import { AgentDefinition } from '#src/plugins/coordinator/agent-loader.js';
+import { DisplayManager } from '#src/display.js';
+import { BackgroundTaskManager } from '#src/plugins/coordinator/task-manager.js';
+import { AgentLifecycle } from '#src/plugins/coordinator/lifecycle.js';
+import { MessageBus } from '#src/plugins/coordinator/message-bus.js';
 import {
   createAgentSendMessagePlugin,
   createMessageDeliveryPlugin,
   type AgentIdentity,
-} from './messaging-plugins.js';
+} from '#src/plugins/coordinator/messaging-plugins.js';
 
 async function createSubRegistry(def: AgentDefinition): Promise<PluginRegistry> {
   const subRegistry = new PluginRegistry();

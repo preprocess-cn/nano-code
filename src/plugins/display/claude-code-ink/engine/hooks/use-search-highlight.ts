@@ -1,8 +1,8 @@
 import { useContext, useMemo } from 'react'
-import StdinContext from '../components/StdinContext.js'
-import type { DOMElement } from '../dom.js'
-import instances from '../instances.js'
-import type { MatchPosition } from '../render-to-screen.js'
+import StdinContext from '#src/plugins/display/claude-code-ink/engine/components/StdinContext.js'
+import type { DOMElement } from '#src/plugins/display/claude-code-ink/engine/dom.js'
+import instances from '#src/plugins/display/claude-code-ink/engine/instances.js'
+import type { MatchPosition } from '#src/plugins/display/claude-code-ink/engine/render-to-screen.js'
 
 /**
  * Set the search highlight query on the Ink instance. Non-empty → all

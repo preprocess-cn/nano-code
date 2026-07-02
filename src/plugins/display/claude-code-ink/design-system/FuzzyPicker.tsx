@@ -2,16 +2,16 @@
 import { c as _c } from "react/compiler-runtime";
 import * as React from 'react';
 import { useEffect, useState } from 'react';
-import { useSearchInput } from '../stubs/hooks.js';
-import { useTerminalSize } from '../stubs/hooks.js';
-import type { KeyboardEvent } from '../engine/events/keyboard-event.js';
-import { clamp } from '../engine/layout/geometry.js';
-import { Box, Text, useTerminalFocus } from '../ink.js';
-import { SearchBox } from '../SearchBox.js';
-import { Byline } from './Byline.js';
-import { KeyboardShortcutHint } from './KeyboardShortcutHint.js';
-import { ListItem } from './ListItem.js';
-import { Pane } from './Pane.js';
+import { useSearchInput } from '#src/plugins/display/claude-code-ink/stubs/hooks.js';
+import { useTerminalSize } from '#src/plugins/display/claude-code-ink/stubs/hooks.js';
+import type { KeyboardEvent } from '#src/plugins/display/claude-code-ink/engine/events/keyboard-event.js';
+import { clamp } from '#src/plugins/display/claude-code-ink/engine/layout/geometry.js';
+import { Box, Text, useTerminalFocus } from '#src/plugins/display/claude-code-ink/ink.js';
+import { SearchBox } from '#src/plugins/display/claude-code-ink/SearchBox.js';
+import { Byline } from '#src/plugins/display/claude-code-ink/design-system/Byline.js';
+import { KeyboardShortcutHint } from '#src/plugins/display/claude-code-ink/design-system/KeyboardShortcutHint.js';
+import { ListItem } from '#src/plugins/display/claude-code-ink/design-system/ListItem.js';
+import { Pane } from '#src/plugins/display/claude-code-ink/design-system/Pane.js';
 type PickerAction<T> = {
   /** Hint label shown in the byline, e.g. "mention" → "Tab to mention". */
   action: string;

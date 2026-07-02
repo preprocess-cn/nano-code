@@ -1,8 +1,8 @@
 // @ts-nocheck
 import { c as _c } from "react/compiler-runtime";
 import React from 'react';
-import { Box, Text } from '../ink.js';
-import { Spinner } from '../Spinner.js';
+import { Box, Text } from '#src/plugins/display/claude-code-ink/ink.js';
+import { Spinner } from '#src/plugins/display/claude-code-ink/Spinner.js';
 type LoadingStateProps = {
   /**
    * The loading message to display next to the spinner.

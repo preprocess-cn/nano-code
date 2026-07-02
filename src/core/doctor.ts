@@ -4,9 +4,9 @@
  * 检查运行环境健康状态：配置、API 连通性、插件加载、系统环境。
  */
 
-import { LLMClient } from './llm.js';
-import { PluginRegistry } from './plugin.js';
-import { NanoConfig } from './config.js';
+import { LLMClient } from '#src/core/llm.js';
+import { PluginRegistry } from '#src/core/plugin.js';
+import { NanoConfig } from '#src/core/config.js';
 
 export interface DoctorResult {
   name: string;

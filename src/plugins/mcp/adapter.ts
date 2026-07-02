@@ -3,12 +3,12 @@ import * as readline from 'readline';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { NanoPlugin } from '../../core/plugin.js';
-import { ToolDefinition, ToolResponse, ToolContext } from '../../core/contract.js';
-import { NanoConfig } from '../../core/config.js';
-import { getPackageVersion } from '../../core/version.js';
-import { withRetry } from '../../core/retry.js';
-import { logManager } from '../../core/logger.js';
+import { NanoPlugin } from '#src/core/plugin.js';
+import { ToolDefinition, ToolResponse, ToolContext } from '#src/core/contract.js';
+import { NanoConfig } from '#src/core/config.js';
+import { getPackageVersion } from '#src/core/version.js';
+import { withRetry } from '#src/core/retry.js';
+import { logManager } from '#src/core/logger.js';
 
 // ── JSON-RPC types ──
 

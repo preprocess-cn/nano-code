@@ -1,10 +1,10 @@
 import chalk from 'chalk'
 import cliBoxes, { type Boxes, type BoxStyle } from 'cli-boxes'
-import { applyColor } from './colorize.js'
-import type { DOMNode } from './dom.js'
-import type Output from './output.js'
-import { stringWidth } from './stringWidth.js'
-import type { Color } from './styles.js'
+import { applyColor } from '#src/plugins/display/claude-code-ink/engine/colorize.js'
+import type { DOMNode } from '#src/plugins/display/claude-code-ink/engine/dom.js'
+import type Output from '#src/plugins/display/claude-code-ink/engine/output.js'
+import { stringWidth } from '#src/plugins/display/claude-code-ink/engine/stringWidth.js'
+import type { Color } from '#src/plugins/display/claude-code-ink/engine/styles.js'
 
 export type BorderTextOptions = {
   content: string // Pre-rendered string with ANSI color codes

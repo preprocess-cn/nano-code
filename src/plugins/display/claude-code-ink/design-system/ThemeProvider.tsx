@@ -1,10 +1,10 @@
 // @ts-nocheck
 import { c as _c } from "react/compiler-runtime";
 import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
-import useStdin from '../engine/hooks/use-stdin.js';
-import { getGlobalConfig, saveGlobalConfig } from '../stubs/config.js';
-import { getSystemThemeName, type SystemTheme } from '../stubs/systemTheme.js';
-import type { ThemeName, ThemeSetting } from '../stubs/theme.js';
+import useStdin from '#src/plugins/display/claude-code-ink/engine/hooks/use-stdin.js';
+import { getGlobalConfig, saveGlobalConfig } from '#src/plugins/display/claude-code-ink/stubs/config.js';
+import { getSystemThemeName, type SystemTheme } from '#src/plugins/display/claude-code-ink/stubs/systemTheme.js';
+import type { ThemeName, ThemeSetting } from '#src/plugins/display/claude-code-ink/stubs/theme.js';
 type ThemeContextValue = {
   /** The saved user preference. May be 'auto'. */
   themeSetting: ThemeSetting;

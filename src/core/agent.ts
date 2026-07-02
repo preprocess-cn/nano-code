@@ -1,9 +1,9 @@
-import { LLMClient, ChatMessage, AssembledToolCall } from './llm.js';
-import { PluginRegistry, ToolCall } from './plugin.js';
-import { SystemPromptConfig } from './config.js';
-import { buildSystemPrompt, formatToolResponse } from './prompt.js';
-import { ToolResponse, ToolContext, InjectedMessage, isMainAgent, AgentDisplay } from './contract.js';
-import { SK } from './store-keys.js';
+import { LLMClient, ChatMessage, AssembledToolCall } from '#src/core/llm.js';
+import { PluginRegistry, ToolCall } from '#src/core/plugin.js';
+import { SystemPromptConfig } from '#src/core/config.js';
+import { buildSystemPrompt, formatToolResponse } from '#src/core/prompt.js';
+import { ToolResponse, ToolContext, InjectedMessage, isMainAgent, AgentDisplay } from '#src/core/contract.js';
+import { SK } from '#src/core/store-keys.js';
 
 export interface NanoCodeAgentOptions {
   registry: PluginRegistry;

@@ -1,13 +1,13 @@
 // @ts-nocheck
 import { coerce } from 'semver'
 import type { Writable } from 'stream'
-import { env } from '../utils/env.js'
-import { gte } from '../utils/semver.js'
-import { getClearTerminalSequence } from './clearTerminal.js'
-import type { Diff } from './frame.js'
-import { cursorMove, cursorTo, eraseLines } from './termio/csi.js'
-import { BSU, ESU, HIDE_CURSOR, SHOW_CURSOR } from './termio/dec.js'
-import { link } from './termio/osc.js'
+import { env } from '#src/plugins/display/claude-code-ink/utils/env.js'
+import { gte } from '#src/plugins/display/claude-code-ink/utils/semver.js'
+import { getClearTerminalSequence } from '#src/plugins/display/claude-code-ink/engine/clearTerminal.js'
+import type { Diff } from '#src/plugins/display/claude-code-ink/engine/frame.js'
+import { cursorMove, cursorTo, eraseLines } from '#src/plugins/display/claude-code-ink/engine/termio/csi.js'
+import { BSU, ESU, HIDE_CURSOR, SHOW_CURSOR } from '#src/plugins/display/claude-code-ink/engine/termio/dec.js'
+import { link } from '#src/plugins/display/claude-code-ink/engine/termio/osc.js'
 
 export type Progress = {
   state: 'running' | 'completed' | 'error' | 'indeterminate'

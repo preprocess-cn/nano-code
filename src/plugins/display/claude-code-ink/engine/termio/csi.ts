@@ -4,7 +4,7 @@
  * Enums and types for CSI command parameters.
  */
 
-import { ESC, ESC_TYPE, SEP } from './ansi.js'
+import { ESC, ESC_TYPE, SEP } from '#src/plugins/display/claude-code-ink/engine/termio/ansi.js'
 
 export const CSI_PREFIX = ESC + String.fromCharCode(ESC_TYPE.CSI)
 

@@ -3,8 +3,8 @@ import { c as _c } from "react/compiler-runtime";
 import figures from 'figures';
 import type { ReactNode } from 'react';
 import React from 'react';
-import { useDeclaredCursor } from '../engine/hooks/use-declared-cursor.js';
-import { Box, Text } from '../ink.js';
+import { useDeclaredCursor } from '#src/plugins/display/claude-code-ink/engine/hooks/use-declared-cursor.js';
+import { Box, Text } from '#src/plugins/display/claude-code-ink/ink.js';
 type ListItemProps = {
   /**
    * Whether this item is currently focused (keyboard selection).

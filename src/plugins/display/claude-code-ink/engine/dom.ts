@@ -1,13 +1,13 @@
-import type { FocusManager } from './focus.js'
-import { createLayoutNode } from './layout/engine.js'
-import type { LayoutNode } from './layout/node.js'
-import { LayoutDisplay, LayoutMeasureMode } from './layout/node.js'
-import measureText from './measure-text.js'
-import { addPendingClear, nodeCache } from './node-cache.js'
-import squashTextNodes from './squash-text-nodes.js'
-import type { Styles, TextStyles } from './styles.js'
-import { expandTabs } from './tabstops.js'
-import wrapText from './wrap-text.js'
+import type { FocusManager } from '#src/plugins/display/claude-code-ink/engine/focus.js'
+import { createLayoutNode } from '#src/plugins/display/claude-code-ink/engine/layout/engine.js'
+import type { LayoutNode } from '#src/plugins/display/claude-code-ink/engine/layout/node.js'
+import { LayoutDisplay, LayoutMeasureMode } from '#src/plugins/display/claude-code-ink/engine/layout/node.js'
+import measureText from '#src/plugins/display/claude-code-ink/engine/measure-text.js'
+import { addPendingClear, nodeCache } from '#src/plugins/display/claude-code-ink/engine/node-cache.js'
+import squashTextNodes from '#src/plugins/display/claude-code-ink/engine/squash-text-nodes.js'
+import type { Styles, TextStyles } from '#src/plugins/display/claude-code-ink/engine/styles.js'
+import { expandTabs } from '#src/plugins/display/claude-code-ink/engine/tabstops.js'
+import wrapText from '#src/plugins/display/claude-code-ink/engine/wrap-text.js'
 
 type InkNode = {
   parentNode: DOMElement | undefined

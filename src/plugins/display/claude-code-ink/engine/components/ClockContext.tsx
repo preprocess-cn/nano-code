@@ -1,8 +1,8 @@
 // @ts-nocheck
 import { c as _c } from "react/compiler-runtime";
 import React, { createContext, useEffect, useState } from 'react';
-import { FRAME_INTERVAL_MS } from '../constants.js';
-import { useTerminalFocus } from '../hooks/use-terminal-focus.js';
+import { FRAME_INTERVAL_MS } from '#src/plugins/display/claude-code-ink/engine/constants.js';
+import { useTerminalFocus } from '#src/plugins/display/claude-code-ink/engine/hooks/use-terminal-focus.js';
 export type Clock = {
   subscribe: (onChange: () => void, keepAlive: boolean) => () => void;
   now: () => number;

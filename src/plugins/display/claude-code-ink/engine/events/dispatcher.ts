@@ -5,9 +5,9 @@ import {
   DiscreteEventPriority,
   NoEventPriority,
 } from 'react-reconciler/constants.js'
-import { logError } from '../../utils/log.js'
-import { HANDLER_FOR_EVENT } from './event-handlers.js'
-import type { EventTarget, TerminalEvent } from './terminal-event.js'
+import { logError } from '#src/plugins/display/claude-code-ink/utils/log.js'
+import { HANDLER_FOR_EVENT } from '#src/plugins/display/claude-code-ink/engine/events/event-handlers.js'
+import type { EventTarget, TerminalEvent } from '#src/plugins/display/claude-code-ink/engine/events/terminal-event.js'
 
 // --
 

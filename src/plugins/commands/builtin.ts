@@ -1,20 +1,20 @@
-import { CommandInterceptResult, type InjectedMessage } from '../../core/contract.js';
-import { NanoCodeAgent } from '../../core/agent.js';
-import { PluginRegistry } from '../../core/plugin.js';
-import { loadConfig, NanoConfig, getSystemWhitelist } from '../../core/config.js';
-import { DisplayManager } from '../../display.js';
-import { loadAllSkills } from '../skills/loader.js';
-import { analyzeContextUsage, type ContextAnalysis } from '../token-budget/analyzer.js';
-import { CompactService } from '../compact/service.js';
-import { saveSession } from '../../core/session.js';
+import { CommandInterceptResult, type InjectedMessage } from '#src/core/contract.js';
+import { NanoCodeAgent } from '#src/core/agent.js';
+import { PluginRegistry } from '#src/core/plugin.js';
+import { loadConfig, NanoConfig, getSystemWhitelist } from '#src/core/config.js';
+import { DisplayManager } from '#src/display.js';
+import { loadAllSkills } from '#src/plugins/skills/loader.js';
+import { analyzeContextUsage, type ContextAnalysis } from '#src/plugins/token-budget/analyzer.js';
+import { CompactService } from '#src/plugins/compact/service.js';
+import { saveSession } from '#src/core/session.js';
 import * as fs from 'fs';
 import * as path from 'path';
-import type { BuiltinCommand } from './types.js';
-import { readAllTasks, getPlanFilePath } from '../tools/task-plan.js';
-import { SK } from '../../core/store-keys.js';
-import { runDoctor, formatDoctorResults } from '../../core/doctor.js';
-import { loadAgentDefinitions } from '../../plugins/coordinator/agent-loader.js';
-import { readMcpJson, getProjectMcpJsonPath, getGlobalMcpJsonPath, getClaudeMcpJsonPath } from '../mcp/config-writer.js';
+import type { BuiltinCommand } from '#src/plugins/commands/types.js';
+import { readAllTasks, getPlanFilePath } from '#src/plugins/tools/task-plan.js';
+import { SK } from '#src/core/store-keys.js';
+import { runDoctor, formatDoctorResults } from '#src/core/doctor.js';
+import { loadAgentDefinitions } from '#src/plugins/coordinator/agent-loader.js';
+import { readMcpJson, getProjectMcpJsonPath, getGlobalMcpJsonPath, getClaudeMcpJsonPath } from '#src/plugins/mcp/config-writer.js';
 
 export interface BuiltinContext {
   agent: NanoCodeAgent;
@@ -305,7 +305,7 @@ const BUILTIN_COMMANDS: BuiltinCommand[] = [
         const llmClient = ctx.agent?.getLLMClient();
         results = await runDoctor(ctx.config || { configVersion: 1, core: { maxTokens: 128000, defaultTimeout: 120000 }, plugins: {} }, ctx.registry, llmClient);
       } else {
-        const { loadConfig } = await import('../../core/config.js');
+        const { loadConfig } = await import('#src/core/config.js');
         results = await runDoctor(loadConfig(), undefined, undefined);
       }
       return { handled: true, skipAgent: true, message: formatDoctorResults(results) };

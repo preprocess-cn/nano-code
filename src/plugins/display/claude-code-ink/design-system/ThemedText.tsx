@@ -2,10 +2,10 @@
 import { c as _c } from "react/compiler-runtime";
 import type { ReactNode } from 'react';
 import React, { useContext } from 'react';
-import Text from '../engine/components/Text.js';
-import type { Color, Styles } from '../engine/styles.js';
-import { getTheme, type Theme } from '../stubs/theme.js';
-import { useTheme } from './ThemeProvider.js';
+import Text from '#src/plugins/display/claude-code-ink/engine/components/Text.js';
+import type { Color, Styles } from '#src/plugins/display/claude-code-ink/engine/styles.js';
+import { getTheme, type Theme } from '#src/plugins/display/claude-code-ink/stubs/theme.js';
+import { useTheme } from '#src/plugins/display/claude-code-ink/design-system/ThemeProvider.js';
 
 /** Colors uncolored ThemedText in the subtree. Precedence: explicit `color` >
  *  this > dimColor. Crosses Box boundaries (Ink's style cascade doesn't). */

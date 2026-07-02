@@ -1,14 +1,14 @@
 // @ts-nocheck
 import { c as _c } from "react/compiler-runtime";
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
-import { useIsInsideModal, useModalScrollRef } from '../stubs/hooks.js';
-import { useTerminalSize } from '../stubs/hooks.js';
-import ScrollBox from '../engine/components/ScrollBox.js';
-import type { KeyboardEvent } from '../engine/events/keyboard-event.js';
-import { stringWidth } from '../engine/stringWidth.js';
-import { Box, Text } from '../ink.js';
-import { useKeybindings } from '../stubs/keybindings.js';
-import type { Theme } from '../stubs/theme.js';
+import { useIsInsideModal, useModalScrollRef } from '#src/plugins/display/claude-code-ink/stubs/hooks.js';
+import { useTerminalSize } from '#src/plugins/display/claude-code-ink/stubs/hooks.js';
+import ScrollBox from '#src/plugins/display/claude-code-ink/engine/components/ScrollBox.js';
+import type { KeyboardEvent } from '#src/plugins/display/claude-code-ink/engine/events/keyboard-event.js';
+import { stringWidth } from '#src/plugins/display/claude-code-ink/engine/stringWidth.js';
+import { Box, Text } from '#src/plugins/display/claude-code-ink/ink.js';
+import { useKeybindings } from '#src/plugins/display/claude-code-ink/stubs/keybindings.js';
+import type { Theme } from '#src/plugins/display/claude-code-ink/stubs/theme.js';
 type TabsProps = {
   children: Array<React.ReactElement<TabProps>>;
   title?: string;

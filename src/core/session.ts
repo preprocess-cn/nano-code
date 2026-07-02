@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { ChatMessage } from './llm.js';
+import { ChatMessage } from '#src/core/llm.js';
 
 const SESSION_FILE = '.nano-code-session.json';
 

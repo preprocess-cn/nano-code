@@ -1,8 +1,8 @@
 // Tab expansion, inspired by Ghostty's Tabstops.zig
 // Uses 8-column intervals (POSIX default, hardcoded in terminals like Ghostty)
 
-import { stringWidth } from './stringWidth.js'
-import { createTokenizer } from './termio/tokenize.js'
+import { stringWidth } from '#src/plugins/display/claude-code-ink/engine/stringWidth.js'
+import { createTokenizer } from '#src/plugins/display/claude-code-ink/engine/termio/tokenize.js'
 
 const DEFAULT_TAB_INTERVAL = 8
 

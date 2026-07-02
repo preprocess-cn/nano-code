@@ -1,5 +1,5 @@
-import type { ParsedKey } from '../parse-keypress.js'
-import { TerminalEvent } from './terminal-event.js'
+import type { ParsedKey } from '#src/plugins/display/claude-code-ink/engine/parse-keypress.js'
+import { TerminalEvent } from '#src/plugins/display/claude-code-ink/engine/events/terminal-event.js'
 
 /**
  * Keyboard event dispatched through the DOM tree via capture/bubble.

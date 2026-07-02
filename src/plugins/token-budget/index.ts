@@ -1,11 +1,11 @@
-import { NanoPlugin, PluginRegistry, ToolCall, LLMResponse } from '../../core/plugin.js';
-import { ToolResponse, ToolContext, ToolDefinition } from '../../core/contract.js';
-import { ChatMessage } from '../../core/llm.js';
-import { countMessagesTokens } from './counter.js';
-import { initTokenizer } from './counter.js';
-import type { LLMClient } from '../../core/llm.js';
-import type { DisplayManager } from '../../display.js';
-import { SK } from '../../core/store-keys.js';
+import { NanoPlugin, PluginRegistry, ToolCall, LLMResponse } from '#src/core/plugin.js';
+import { ToolResponse, ToolContext, ToolDefinition } from '#src/core/contract.js';
+import { ChatMessage } from '#src/core/llm.js';
+import { countMessagesTokens } from '#src/plugins/token-budget/counter.js';
+import { initTokenizer } from '#src/plugins/token-budget/counter.js';
+import type { LLMClient } from '#src/core/llm.js';
+import type { DisplayManager } from '#src/display.js';
+import { SK } from '#src/core/store-keys.js';
 
 // ── Plugin ──
 
@@ -49,7 +49,7 @@ export function createTokenBudgetPlugin(config?: TokenBudgetConfig): NanoPlugin 
     const messages = reg.store.get<ChatMessage[]>(SK.AgentMessages);
     if (!messages || messages.length === 0) return;
     try {
-      const { CompactService } = await import('../../plugins/compact/service.js');
+      const { CompactService } = await import('#src/plugins/compact/service.js');
       const service = new CompactService(llm, reg, display);
       const result = await service.compactRaw(messages, { preserveCount: 2 });
       reg.store.set(SK.CompactResult, result.messages);

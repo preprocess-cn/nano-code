@@ -1,6 +1,6 @@
-import { type ColorType, colorize } from '../engine/colorize.js'
-import type { Color } from '../engine/styles.js'
-import { getTheme, type Theme, type ThemeName } from '../stubs/theme.js'
+import { type ColorType, colorize } from '#src/plugins/display/claude-code-ink/engine/colorize.js'
+import type { Color } from '#src/plugins/display/claude-code-ink/engine/styles.js'
+import { getTheme, type Theme, type ThemeName } from '#src/plugins/display/claude-code-ink/stubs/theme.js'
 
 /**
  * Curried theme-aware color function. Resolves theme keys to raw color

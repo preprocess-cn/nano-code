@@ -1,10 +1,10 @@
 import { intro, text, outro, isCancel, confirm } from '@clack/prompts';
-import { DisplayPlugin, StartConfig, StatusEvent, StreamEvent, ToolCallEvent, ToolResultEvent, ErrorEvent, DebugEvent, BackgroundTaskEvent, MessageLevel } from '../../display.js';
-import { isMainAgent } from '../../core/contract.js';
-import { ThinkStream } from './think-stream.js';
+import { DisplayPlugin, StartConfig, StatusEvent, StreamEvent, ToolCallEvent, ToolResultEvent, ErrorEvent, DebugEvent, BackgroundTaskEvent, MessageLevel } from '#src/display.js';
+import { isMainAgent } from '#src/core/contract.js';
+import { ThinkStream } from '#src/plugins/display/think-stream.js';
 
-import type { PluginRegistry } from '../../core/plugin.js';
-import { SK, type AgentModeInfo } from '../../core/store-keys.js';
+import type { PluginRegistry } from '#src/core/plugin.js';
+import { SK, type AgentModeInfo } from '#src/core/store-keys.js';
 
 /** 非主 agent 的消息加 [name] 前缀 */
 function p(agentName: string, msg: string): string {

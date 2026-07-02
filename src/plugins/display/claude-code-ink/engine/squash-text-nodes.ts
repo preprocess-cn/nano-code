@@ -1,5 +1,5 @@
-import type { DOMElement } from './dom.js'
-import type { TextStyles } from './styles.js'
+import type { DOMElement } from '#src/plugins/display/claude-code-ink/engine/dom.js'
+import type { TextStyles } from '#src/plugins/display/claude-code-ink/engine/styles.js'
 
 /**
  * A segment of text with its associated styles.

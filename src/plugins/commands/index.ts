@@ -1,10 +1,10 @@
-import { NanoPlugin, PluginRegistry } from '../../core/plugin.js';
-import { CommandInterceptResult } from '../../core/contract.js';
-import { DisplayManager } from '../../display.js';
-import { NanoCodeAgent } from '../../core/agent.js';
-import { NanoConfig } from '../../core/config.js';
-import { parseSlashCommand } from './parser.js';
-import { findBuiltinCommand, type BuiltinContext } from './builtin.js';
+import { NanoPlugin, PluginRegistry } from '#src/core/plugin.js';
+import { CommandInterceptResult } from '#src/core/contract.js';
+import { DisplayManager } from '#src/display.js';
+import { NanoCodeAgent } from '#src/core/agent.js';
+import { NanoConfig } from '#src/core/config.js';
+import { parseSlashCommand } from '#src/plugins/commands/parser.js';
+import { findBuiltinCommand, type BuiltinContext } from '#src/plugins/commands/builtin.js';
 
 let _agent: NanoCodeAgent | undefined;
 let _display: DisplayManager | undefined;

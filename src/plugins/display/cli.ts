@@ -1,5 +1,5 @@
-import type { DisplayPlugin, StartConfig, StatusEvent, StreamEvent, ToolCallEvent, ToolResultEvent, ErrorEvent, DebugEvent, MessageLevel } from '../../display.js';
-import type { PluginRegistry } from '../../core/plugin.js';
+import type { DisplayPlugin, StartConfig, StatusEvent, StreamEvent, ToolCallEvent, ToolResultEvent, ErrorEvent, DebugEvent, MessageLevel } from '#src/display.js';
+import type { PluginRegistry } from '#src/core/plugin.js';
 
 /**
  * 非交互式 CLI 展示插件 — 用于管道模式或无展示层的兜底。

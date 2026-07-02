@@ -1,16 +1,16 @@
-import { ChatMessage, LLMClient } from '../../core/llm.js';
-import { NanoCodeAgent } from '../../core/agent.js';
-import { PluginRegistry } from '../../core/plugin.js';
-import { DisplayManager } from '../../display.js';
-import { countMessagesTokens } from '../token-budget/counter.js';
-import { CompactOptions, CompactionResult } from './types.js';
-import { SK } from '../../core/store-keys.js';
+import { ChatMessage, LLMClient } from '#src/core/llm.js';
+import { NanoCodeAgent } from '#src/core/agent.js';
+import { PluginRegistry } from '#src/core/plugin.js';
+import { DisplayManager } from '#src/display.js';
+import { countMessagesTokens } from '#src/plugins/token-budget/counter.js';
+import { CompactOptions, CompactionResult } from '#src/plugins/compact/types.js';
+import { SK } from '#src/core/store-keys.js';
 import {
   COMPACT_SYSTEM_PROMPT,
   buildCompactUserPrompt,
   extractSummary,
   formatCompactSummaryMessage,
-} from './prompt.js';
+} from '#src/plugins/compact/prompt.js';
 
 /**
  * CompactService — 对话历史压缩核心编排。
