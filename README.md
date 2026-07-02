@@ -8,12 +8,25 @@
 # 安装依赖
 npm install
 
-# 配置 API Key（编辑 .env 文件）
-# 支持 OpenAI / DeepSeek / Ollama 等任何兼容 API
-
 # 直接运行（无需编译）
 npx tsx src/index.ts
+```
 
+首先在项目目录创建 `.env` 文件，配置 LLM API Key：
+
+```env
+# ── 必需 ──
+OPENAI_API_KEY=sk-xxx                      # 你的 API Key
+OPENAI_BASE_URL=https://api.openai.com/v1  # 可选，默认 OpenAI；可换为 DeepSeek / 通义千问 / Ollama 等
+OPENAI_MODEL_NAME=gpt-4o                   # 可选，默认 gpt-4o
+
+# ── 可选（按需添加）──
+TAVILY_API_KEY=tvly-xxx                    # Web 搜索功能，需要 Tavily API Key
+```
+
+不配置 `OPENAI_API_KEY` 时将无法启动。
+
+```bash
 # 编译并全局安装 release 版本（安装后可直接使用 nano-code 命令）
 npm run build
 npm install -g .
@@ -192,11 +205,16 @@ registry.store.get('agent')
 ### 环境变量（`.env`）
 
 ```env
-OPENAI_API_KEY=sk-xxx
-OPENAI_BASE_URL=https://api.openai.com/v1   # 可选，默认 OpenAI
-OPENAI_MODEL_NAME=gpt-4o                     # 可选，默认 gpt-4o
+# ── 必需 ──
+OPENAI_API_KEY=sk-xxx                      # LLM API Key
+OPENAI_BASE_URL=https://api.openai.com/v1  # 可选，默认 OpenAI
+OPENAI_MODEL_NAME=gpt-4o                   # 可选，默认 gpt-4o
+
+# ── 可选 ──
+TAVILY_API_KEY=tvly-xxx                    # Web 搜索功能（需要注册 Tavily）
 ```
 
+不配置 `OPENAI_API_KEY` 时无法启动 LLM，应用将报错退出。
 支持任何兼容 OpenAI API 格式的后端：DeepSeek、通义千问、Ollama 本地模型等。
 
 环境变量加载顺序（高优先级优先）：
