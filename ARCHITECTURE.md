@@ -398,6 +398,18 @@ Plus `--profile <name>` overlay:
 - `~/.nano-code/profiles/<name>.json` (global level)
 - Overrides: agent role, plugin enable/disable, plugin settings
 
+### MCP dual-file config
+
+MCP plugins use a separate config channel alongside the main config layering:
+
+```
+config.plugins (NanoConfig)  →  control: which MCP servers are enabled
+.mcp.json                    →  data: transport config (command/args/url)
+```
+
+At startup, `buildMCPPluginsFromConfig()` JOINs both by server name:
+enabled MCP declarations missing from `.mcp.json` trigger a startup warning (orphan detection).
+
 ### Config interface
 
 ```typescript

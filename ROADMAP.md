@@ -41,8 +41,9 @@
 | ☐ | CI/CD | GitHub Actions + 自动测试 |
 | ☐ | 发布准备 | package.json 补全、README 更新、npm publish |
 | ✅ | **MCP 自动发现** | 启动时自动扫描 `~/.nano-code/.mcp.json` + `$CWD/.mcp.json` + `~/.claude/.mcp.json`（只读兼容），零配置加载已安装的 MCP server |
-| ✅ | **`plugin mcp-add`** | 对标 `claude mcp add`，快速添加 MCP server 到 `.mcp.json`，支持 `--scope user` 写到 `~/.nano-code/.mcp.json` |
-| ✅ | **`plugin autoscan`** | 扫描 `~/.claude/.mcp.json` 将 Claude Code 已安装的 MCP 插件导入到 nano-code 自有配置 |
+| ✅ | **`plugin mcp-add`** | 对标 `claude mcp add`，同时写入 `.mcp.json` + `config.plugins` 声明，支持 `--scope user` |
+| ✅ | **`plugin autoscan`** | 扫描 `~/.claude/.mcp.json` 导入到 nano-code 自有配置并补全 `config.plugins` 声明 |
+| ✅ | **`plugin uninstall`** | 卸载插件，从所有域（项目/全局）的 `config.plugins` + `.mcp.json` 中移除，支持 `--scope` |
 | ✅ | **轻量权限系统** | PluginRegistry allowlist + agent 层 permission gate + fs/command 加固，Ink 权限弹窗三选项（批准/始终允许/拒绝），`/permissions` 查看/管理已允许工具 |
 | ✅ | **交互式 `/plugin` 命令** | 会话中通过 `/plugin list/enable/disable/manage` 管理插件；Ink 下进入全屏交互式插件管理器，`↑↓`/`Enter`/`/` 搜索/Esc 退出；REPL 回退文本列表 |
 | ☐ | 插件热加载 | 运行时开关插件无需重启 |

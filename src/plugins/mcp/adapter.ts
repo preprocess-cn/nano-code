@@ -518,71 +518,49 @@ export function buildMCPPluginsFromConfig(config: NanoConfig, debug = false): Na
   const stderrLevel = debug ? 'debug' : (config.mcp?.stderrLevel || 'warn');
   const plugins: NanoPlugin[] = [];
 
-  // Phase 1: From nano-code config.plugins
+  // ── Build .mcp.json server map ──
+  // 优先级：nano-code 全局 → 项目 → Claude Code 全局，同名先到先得
+  const mcpServers: Record<string, { command?: string; args?: string[]; url?: string; env?: Record<string, string> }> = {};
+  for (const filePath of getMcpJsonPaths()) {
+    const servers = readMcpJsonServers(filePath);
+    if (!servers) continue;
+    for (const [name, cfg] of Object.entries(servers)) {
+      if (name in mcpServers) continue; // 更高优先级的已有
+      mcpServers[name] = cfg;
+    }
+  }
+
+  // ── JOIN: config.plugins 声明 + .mcp.json 配置 ──
   for (const [name, entry] of Object.entries(config.plugins)) {
     if (entry.type !== 'mcp' || entry.enabled === false) continue;
 
-    const transport = entry.transport || 'stdio';
+    const cfg = mcpServers[name];
+    if (!cfg) {
+      logManager.warn('mcp', `MCP 插件 "${name}" 已在配置中声明但 .mcp.json 中未找到启动配置，跳过。\n` +
+        `  请运行 "nano-code plugin mcp-add ${name} -- <command>" 安装\n` +
+        `  或运行 "nano-code plugin uninstall ${name}" 移除声明`);
+      continue;
+    }
 
     let mcpTransport: MCPTransport;
 
-    if (transport === 'http') {
-      if (!entry.url) {
-        console.warn(`[mcp] HTTP MCP 插件 "${name}" 未配置 "url"，跳过。`);
-        continue;
-      }
-      mcpTransport = new MCPHTTPTransport(entry.url, entry.initTimeout ?? 10000);
-    } else {
-      if (!entry.command) {
-        console.warn(`[mcp] MCP 插件 "${name}" 未配置 "command"，跳过。`);
-        continue;
-      }
+    if (cfg.url) {
+      mcpTransport = new MCPHTTPTransport(cfg.url, entry.initTimeout ?? 10000);
+    } else if (cfg.command) {
       mcpTransport = new MCPStdioTransport(
-        entry.command,
-        entry.args || [],
-        entry.env || {},
+        cfg.command,
+        cfg.args || [],
+        cfg.env || {},
         entry.initTimeout ?? 10000,
         60000,
         stderrLevel,
       );
+    } else {
+      logManager.warn('mcp', `MCP 插件 "${name}" 在 .mcp.json 中的配置缺少 command 或 url，跳过。`);
+      continue;
     }
 
     plugins.push(createMCPPlugin(mcpTransport, entry.sideEffect ?? true));
-  }
-
-  // Phase 2: From .mcp.json 文件（nano-code 全局 → 项目 → Claude Code 全局）
-  // seenByEntry 跟踪 .mcp.json 中已注册的 server 名（防止跨文件重复）
-  const seenByEntry = new Set<string>();
-  for (const [name, entry] of Object.entries(config.plugins)) {
-    if (entry.type === 'mcp' && entry.enabled !== false) seenByEntry.add(name);
-  }
-
-  for (const filePath of getMcpJsonPaths()) {
-    const servers = readMcpJsonServers(filePath);
-    if (!servers) continue;
-
-    for (const [name, cfg] of Object.entries(servers)) {
-      if (seenByEntry.has(name)) continue;
-      seenByEntry.add(name);
-
-      // .mcp.json 中的服务器必须先在 config.plugins 中显式声明才加载
-      // （包含在 profile 中声明）。这确保 profile 或主配置对 MCP 服务器有完全控制权。
-      const override = config.plugins[name];
-      if (!override || override.enabled === false) continue;
-
-      let mcpTransport: MCPTransport;
-
-      if (cfg.url) {
-        mcpTransport = new MCPHTTPTransport(cfg.url, 10000);
-      } else if (cfg.command) {
-        mcpTransport = new MCPStdioTransport(cfg.command, cfg.args || [], cfg.env || {}, 10000, 60000, stderrLevel);
-      } else {
-        console.warn(`[mcp] .mcp.json "${name}" 缺少 command 或 url，跳过。`);
-        continue;
-      }
-
-      plugins.push(createMCPPlugin(mcpTransport, true));
-    }
   }
 
   return plugins;

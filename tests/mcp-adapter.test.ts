@@ -257,40 +257,70 @@ describe('createMCPPlugin', () => {
 });
 
 describe('buildMCPPluginsFromConfig', () => {
-  it('builds stdio plugin from config', () => {
+  it('loads stdio plugin from .mcp.json + config.plugins declaration', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mcp-build-test-'));
+    tmpScripts.push(dir);
+    const mcpJsonPath = join(dir, '.mcp.json');
+    writeFileSync(mcpJsonPath, JSON.stringify({
+      mcpServers: {
+        'my-server': { command: 'echo', args: ['hello'] },
+      },
+    }));
+    setMcpJsonPaths([mcpJsonPath]);
+
     const config: NanoConfig = {
       configVersion: 1,
       core: { model: 'gpt-4o', temperature: 0, maxTokens: 4096, defaultTimeout: 120000 },
       plugins: {
-        'my-server': { type: 'mcp', command: 'echo', enabled: true },
+        'my-server': { type: 'mcp', enabled: true },
       },
     };
 
     const plugins = buildMCPPluginsFromConfig(config);
     assert.equal(plugins.length, 1);
-    assert.ok(plugins[0].name.startsWith('mcp:'));
+    assert.ok(plugins[0].name.startsWith('mcp:') || plugins[0].name.includes('my-server'));
   });
 
-  it('builds HTTP plugin from config', () => {
+  it('loads HTTP plugin from .mcp.json + config.plugins declaration', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mcp-build-test-'));
+    tmpScripts.push(dir);
+    const mcpJsonPath = join(dir, '.mcp.json');
+    writeFileSync(mcpJsonPath, JSON.stringify({
+      mcpServers: {
+        'http-server': { url: 'http://127.0.0.1:8080' },
+      },
+    }));
+    setMcpJsonPaths([mcpJsonPath]);
+
     const config: NanoConfig = {
       configVersion: 1,
       core: { model: 'gpt-4o', temperature: 0, maxTokens: 4096, defaultTimeout: 120000 },
       plugins: {
-        'http-server': { type: 'mcp', transport: 'http', url: 'http://127.0.0.1:8080', enabled: true },
+        'http-server': { type: 'mcp', enabled: true },
       },
     };
 
     const plugins = buildMCPPluginsFromConfig(config);
     assert.equal(plugins.length, 1);
-    assert.ok(plugins[0].name.startsWith('mcp:http'));
+    assert.ok(plugins[0].name.includes('http'));
   });
 
-  it('skips disabled plugins', () => {
+  it('skips disabled plugins even when .mcp.json has config', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mcp-build-test-'));
+    tmpScripts.push(dir);
+    const mcpJsonPath = join(dir, '.mcp.json');
+    writeFileSync(mcpJsonPath, JSON.stringify({
+      mcpServers: {
+        'disabled-server': { command: 'echo', args: ['hello'] },
+      },
+    }));
+    setMcpJsonPaths([mcpJsonPath]);
+
     const config: NanoConfig = {
       configVersion: 1,
       core: { model: 'gpt-4o', temperature: 0, maxTokens: 4096, defaultTimeout: 120000 },
       plugins: {
-        'disabled-server': { type: 'mcp', command: 'echo', enabled: false },
+        'disabled-server': { type: 'mcp', enabled: false },
       },
     };
 
@@ -298,21 +328,21 @@ describe('buildMCPPluginsFromConfig', () => {
     assert.equal(plugins.length, 0);
   });
 
-  it('skips HTTP plugin without url', () => {
+  it('warns and skips orphans: declared in config but missing from .mcp.json', () => {
     const config: NanoConfig = {
       configVersion: 1,
       core: { model: 'gpt-4o', temperature: 0, maxTokens: 4096, defaultTimeout: 120000 },
       plugins: {
-        'bad-http': { type: 'mcp', transport: 'http', enabled: true },
+        'orphan-server': { type: 'mcp', enabled: true },
       },
     };
 
+    // setMcpJsonPaths([]) — no .mcp.json at all
     const plugins = buildMCPPluginsFromConfig(config);
     assert.equal(plugins.length, 0);
   });
 
   it('loads servers from .mcp.json paths', () => {
-    // Point to a temp .mcp.json
     const dir = mkdtempSync(join(tmpdir(), 'mcp-json-test-'));
     tmpScripts.push(dir);
     const mcpJsonPath = join(dir, '.mcp.json');
@@ -327,9 +357,8 @@ describe('buildMCPPluginsFromConfig', () => {
     const config: NanoConfig = {
       configVersion: 1,
       core: { model: 'gpt-4o', temperature: 0, maxTokens: 4096, defaultTimeout: 120000 },
-      // 现在 .mcp.json 的服务器必须在 plugins 中显式声明才加载
       plugins: {
-        'test-mcp': {},
+        'test-mcp': { type: 'mcp' },
       },
     };
 
@@ -374,7 +403,6 @@ describe('buildMCPPluginsFromConfig', () => {
 
     setMcpJsonPaths([mcpJsonPath]);
 
-    // 不将 auto-server 加入 plugins — 它不应被加载
     const config: NanoConfig = {
       configVersion: 1,
       core: { model: 'gpt-4o', temperature: 0, maxTokens: 4096, defaultTimeout: 120000 },

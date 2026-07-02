@@ -10,16 +10,20 @@ import {
   getGlobalMcpJsonPath,
   getClaudeMcpJsonPath,
   addMcpServer,
+  removeMcpServer,
+  readMcpJson,
   importFromClaudeConfig,
 } from './plugins/mcp/config-writer.js';
 
 const GLOBAL_DIR = path.join(os.homedir(), '.nano-code');
 const PROJECT_CONFIG = path.join(process.cwd(), '.nano-code.yaml');
+const GLOBAL_CONFIG = path.join(GLOBAL_DIR, 'config.yaml');
 
 export async function handlePluginCommand(args: string[], _globalOptions: any): Promise<void> {
   const cmd = args[0];
   switch (cmd) {
     case 'install': return installPlugin(args.slice(1));
+    case 'uninstall': return uninstallPlugin(args.slice(1), _globalOptions);
     case 'list': return listPlugins();
     case 'enable': return setEnabled(args[1], true);
     case 'disable': return setEnabled(args[1], false);
@@ -30,6 +34,7 @@ export async function handlePluginCommand(args: string[], _globalOptions: any): 
       console.log('');
       console.log('命令:');
       console.log('  install <source>      安装插件（npm 包 / git 仓库 / 本地路径）');
+      console.log('  uninstall <name>      卸载插件（从所有配置中移除）');
       console.log('  mcp-add <name> [选项] 添加 MCP server（对标 claude mcp add）');
       console.log('  autoscan              扫描 ~/.claude/.mcp.json 导入插件到 nano-code');
       console.log('  list                  列出所有已安装插件');
@@ -125,6 +130,7 @@ async function detectAndInstallFromDir(dir: string, name: string, source: string
       : path.join(dir, pkg.bin[binName]);
     const filePath = getProjectMcpJsonPath();
     addMcpServer(filePath, binName, { command: 'node', args: [binPath] });
+    addToProjectConfig(binName, { type: 'mcp' });  // 加 config.plugins 声明
     console.log(`已安装 MCP 插件 "${binName}" <- ${source}`);
     console.log(`配置已写入 ${filePath}，重启 nano-code 后生效。`);
     return true;
@@ -156,6 +162,127 @@ function addToProjectConfig(name: string, entry: Record<string, any>): void {
 
   fs.writeFileSync(PROJECT_CONFIG, JSON.stringify(cfg, null, 2), 'utf-8');
   console.log(`已写入项目配置 ${PROJECT_CONFIG}`);
+}
+
+function addToGlobalConfig(name: string, entry: Record<string, any>): void {
+  let cfg: Record<string, any> = {};
+  try {
+    const raw = fs.readFileSync(GLOBAL_CONFIG, 'utf-8');
+    const parsed = yaml.load(raw);
+    if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+      cfg = parsed as Record<string, any>;
+    }
+  } catch { /* 文件不存在或解析失败 */ }
+
+  if (!cfg.plugins) cfg.plugins = {};
+  cfg.plugins[name] = { ...entry, enabled: true };
+
+  fs.writeFileSync(GLOBAL_CONFIG, yaml.dump(cfg, { indent: 2 }), 'utf-8');
+  console.log(`已写入全局配置 ${GLOBAL_CONFIG}`);
+}
+
+/** 检查某插件名是否已在项目或全局配置的 plugins 中声明。 */
+function isDeclaredInConfig(name: string): boolean {
+  for (const filePath of [PROJECT_CONFIG, GLOBAL_CONFIG]) {
+    try {
+      const raw = fs.readFileSync(filePath, 'utf-8');
+      const parsed = yaml.load(raw);
+      if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+        const cfg = parsed as Record<string, any>;
+        if (cfg?.plugins?.[name]) return true;
+      }
+    } catch { /* ignore */ }
+  }
+  return false;
+}
+
+/** 卸载插件：按 scope 从对应域的 config + .mcp.json 中移除。
+ *  scope 未指定时搜索所有域，能找到的都删除。 */
+function uninstallPlugin(args: string[], globalOpts: Record<string, any> = {}): void {
+  // 解析 --scope
+  let scope: 'project' | 'user' | undefined;
+  let name: string | undefined;
+  let i = 0;
+  while (i < args.length) {
+    if (args[i] === '--scope') {
+      i++;
+      if (i < args.length && (args[i] === 'project' || args[i] === 'user')) {
+        scope = args[i] as 'project' | 'user';
+      } else {
+        console.error('--scope 需要参数 (project|user)');
+        return;
+      }
+    } else if (!name) {
+      name = args[i];
+    } else {
+      console.error(`未知参数: ${args[i]}`);
+      return;
+    }
+    i++;
+  }
+
+  // cac 可能将 --scope 解析为 global option
+  if (!scope && (globalOpts.scope === 'user' || globalOpts.scope === 'project')) {
+    scope = globalOpts.scope;
+  }
+
+  if (!name) {
+    console.error('请指定要卸载的插件名。');
+    console.error('用法: nano-code plugin uninstall <name> [--scope project|user]');
+    return;
+  }
+
+  const cleanProject = !scope || scope === 'project';
+  const cleanUser = !scope || scope === 'user';
+  let found = false;
+
+  if (cleanProject) {
+    try {
+      const raw = fs.readFileSync(PROJECT_CONFIG, 'utf-8');
+      const cfg = yaml.load(raw) as Record<string, any>;
+      if (cfg?.plugins?.[name]) {
+        delete cfg.plugins[name];
+        if (Object.keys(cfg.plugins).length === 0) delete cfg.plugins;
+        fs.writeFileSync(PROJECT_CONFIG, yaml.dump(cfg, { indent: 2 }), 'utf-8');
+        console.log(`  已从项目配置 ${PROJECT_CONFIG} 中移除`);
+        found = true;
+      }
+    } catch { /* 文件不存在或无需清理 */ }
+  }
+
+  if (cleanUser) {
+    try {
+      const raw = fs.readFileSync(GLOBAL_CONFIG, 'utf-8');
+      const cfg = yaml.load(raw) as Record<string, any>;
+      if (cfg?.plugins?.[name]) {
+        delete cfg.plugins[name];
+        if (Object.keys(cfg.plugins).length === 0) delete cfg.plugins;
+        fs.writeFileSync(GLOBAL_CONFIG, yaml.dump(cfg, { indent: 2 }), 'utf-8');
+        console.log(`  已从全局配置 ${GLOBAL_CONFIG} 中移除`);
+        found = true;
+      }
+    } catch { /* 文件不存在或无需清理 */ }
+  }
+
+  if (cleanProject) {
+    if (removeMcpServer(getProjectMcpJsonPath(), name)) {
+      console.log(`  已从项目 ${getProjectMcpJsonPath()} 中移除`);
+      found = true;
+    }
+  }
+
+  if (cleanUser) {
+    if (removeMcpServer(getGlobalMcpJsonPath(), name)) {
+      console.log(`  已从全局 ${getGlobalMcpJsonPath()} 中移除`);
+      found = true;
+    }
+  }
+
+  if (!found) {
+    console.log(`插件 "${name}" 未在任何配置文件中找到。`);
+  } else {
+    console.log(`插件 "${name}" 已卸载。`);
+  }
 }
 
 // ── mcp-add ──
@@ -194,6 +321,14 @@ async function mcpAddCommand(args: string[], globalOpts: Record<string, any> = {
   }
 
   addMcpServer(filePath, name, serverConfig);
+
+  // 同时在对应域的 config.plugins 中加 type: mcp 声明，使 server 能被加载
+  if (scope === 'user') {
+    addToGlobalConfig(name, { type: 'mcp' });
+  } else {
+    addToProjectConfig(name, { type: 'mcp' });
+  }
+
   console.log(`MCP server "${name}" 已添加到 ${filePath}`);
   console.log(`重启 nano-code 后生效，或运行 /reload-plugins 立即加载。`);
 }
@@ -202,19 +337,29 @@ async function mcpAddCommand(args: string[], globalOpts: Record<string, any> = {
 
 async function autoscanCommand(): Promise<void> {
   const claudePath = getClaudeMcpJsonPath();
-  const claudeCfg = (await import('./plugins/mcp/config-writer.js')).readMcpJson(claudePath);
+  const claudeCfg = readMcpJson(claudePath);
   if (!claudeCfg || Object.keys(claudeCfg.mcpServers).length === 0) {
     console.log(`~/.claude/.mcp.json 中未发现 MCP server。`);
     return;
   }
 
   const count = importFromClaudeConfig();
-  if (count === 0) {
-    console.log(`已扫描 ~/.claude/.mcp.json，全部条目已在 ~/.nano-code/.mcp.json 中，无需导入。`);
+
+  // 为新导入的 server 添加全局 config.plugins 声明（type: mcp），使其能被加载
+  let stubCount = 0;
+  for (const name of Object.keys(claudeCfg.mcpServers)) {
+    if (!isDeclaredInConfig(name)) {
+      addToGlobalConfig(name, { type: 'mcp' });
+      stubCount++;
+    }
+  }
+
+  if (count === 0 && stubCount === 0) {
+    console.log(`已扫描 ~/.claude/.mcp.json，全部条目已在对应配置中，无需操作。`);
     return;
   }
 
-  console.log(`已从 Claude Code 导入 ${count} 个 MCP server 到 ~/.nano-code/.mcp.json：`);
+  console.log(`已从 Claude Code 导入 ${count} 个 MCP server；添加 ${stubCount} 个声明：`);
   for (const [name, cfg] of Object.entries(claudeCfg.mcpServers)) {
     console.log(`  ${name.padEnd(30)} ${cfg.command || cfg.url || ''}`);
   }
@@ -334,7 +479,6 @@ async function listPlugins(): Promise<void> {
   for (const w of whitelist) names.add(w);
 
   // 扫描 .mcp.json 中的 MCP server
-  const { readMcpJson } = await import('./plugins/mcp/config-writer.js');
   const mcpJsonNames = new Set<string>();
   const claudeJsonNames = new Set<string>();
   for (const f of [getProjectMcpJsonPath(), getGlobalMcpJsonPath()]) {
@@ -349,14 +493,22 @@ async function listPlugins(): Promise<void> {
     }
   }
 
+  // 判定哪些 .mcp.json server 缺少 config.plugins 声明（实际不会被加载）
+  const undelcaredMcpNames = new Set<string>();
+  for (const name of mcpJsonNames) {
+    if (!(name in config.plugins)) undelcaredMcpNames.add(name);
+  }
+
   const rows: Array<{ name: string; status: string; tag: string }> = [];
   for (const name of names) {
-    const cfg = config.plugins[name];
-    const enabled = cfg ? cfg.enabled !== false : true;
+    const inCfg = name in config.plugins;
+    const enabled = inCfg ? config.plugins[name].enabled !== false : false;
+    const status = undelcaredMcpNames.has(name) ? '未声明'
+      : (enabled ? 'active' : 'inactive');
     const tag = whitelist.has(name) ? 'system'
-      : (cfg?.type || (mcpJsonNames.has(name) ? 'mcp'
+      : (config.plugins[name]?.type || (mcpJsonNames.has(name) ? 'mcp'
         : (claudeJsonNames.has(name) ? 'claude' : 'user')));
-    rows.push({ name, status: enabled ? 'active' : 'inactive', tag });
+    rows.push({ name, status, tag });
   }
 
   // 添加 agent 插件

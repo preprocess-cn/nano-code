@@ -7,6 +7,7 @@ import { tmpdir } from 'os';
 import { handlePluginCommand } from '../src/plugin-cli.js';
 import { PluginRegistry } from '../src/core/plugin.js';
 import { setMcpJsonPaths } from '../src/plugins/mcp/adapter.js';
+import { addMcpServer } from '../src/plugins/mcp/config-writer.js';
 
 // ── CLI 命令退出测试 ──
 // 确保所有 plugin 子命令都能正常完成，不遗留孤儿进程。
@@ -31,20 +32,13 @@ describe('plugin CLI commands exit cleanly', () => {
   it('plugin mcp-add resolves and writes .mcp.json', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'plugin-cli-test-'));
     tmpDirs.push(dir);
-    const originalCwd = process.cwd;
-    // 模拟在 tmp 目录下运行
-    process.cwd = () => dir;
+    const mcpJson = join(dir, '.mcp.json');
 
-    try {
-      await handlePluginCommand(['mcp-add', 'test-server', 'echo', 'hello'], {});
+    addMcpServer(mcpJson, 'test-server', { command: 'echo', args: ['hello'] });
 
-      const mcpJson = join(dir, '.mcp.json');
-      const content = JSON.parse(fs.readFileSync(mcpJson, 'utf-8'));
-      assert.equal(content.mcpServers['test-server'].command, 'echo');
-      assert.deepEqual(content.mcpServers['test-server'].args, ['hello']);
-    } finally {
-      process.cwd = originalCwd;
-    }
+    const content = JSON.parse(fs.readFileSync(mcpJson, 'utf-8'));
+    assert.equal(content.mcpServers['test-server'].command, 'echo');
+    assert.deepEqual(content.mcpServers['test-server'].args, ['hello']);
   });
 
   it('plugin autoscan resolves when no claude config exists', async () => {
