@@ -1,33 +1,9 @@
-import type OpenAI from 'openai';
+import OpenAI from 'openai';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
 import * as os from 'os';
 import type { ToolDefinition } from './contract.js';
 import { withRetry } from './retry.js';
-
-// ── Lazy OpenAI import ──
-// 使用动态 import() 替代静态导入，以便在 openai 包或其子依赖缺失时
-// 给出友好的中文错误提示，而不是 Node.js 的 ERR_MODULE_NOT_FOUND。
-let openaiModule: typeof import('openai') | null = null;
-let openaiLoadError: Error | null = null;
-
-async function ensureOpenAI(): Promise<typeof import('openai')> {
-  if (openaiModule) return openaiModule;
-  if (openaiLoadError) throw openaiLoadError;
-  try {
-    openaiModule = await import('openai');
-    return openaiModule;
-  } catch (err: any) {
-    if (err?.code === 'ERR_MODULE_NOT_FOUND' || err?.message?.includes('Cannot find module')) {
-      openaiLoadError = new Error(
-        '依赖 "openai" 包未找到。请运行 "npm install" 安装所有依赖。'
-      );
-    } else {
-      openaiLoadError = err;
-    }
-    throw openaiLoadError;
-  }
-}
 
 // 加载环境变量：项目 .env 优先于全局 ~/.nano-code/.env，shell 环境变量优先于两者
 dotenv.config();                                                                  // $CWD/.env
@@ -89,34 +65,26 @@ function isTransientError(error: unknown): boolean {
 }
 
 export class LLMClient {
-  private _openai: OpenAI | null = null;
-  private model = 'gpt-4o';
-  private temperature = 0;
-  private config: LLMConfig;
+  private openai: OpenAI;
+  private model: string;
+  private temperature: number;
 
   getModel(): string {
     return this.model;
   }
 
   constructor(config?: LLMConfig) {
-    // 立即验证 API Key，但延迟加载 openai 包
-    this.config = config || {};
     const apiKey = config?.apiKey || process.env.OPENAI_API_KEY;
     if (!apiKey) {
       throw new Error('未能在环境变量中找到 OPENAI_API_KEY。请在 .env 文件中配置。');
     }
-  }
 
-  private async ensureClient(): Promise<void> {
-    if (this._openai) return;
-    const { default: OpenAI } = await ensureOpenAI();
-    const apiKey = this.config?.apiKey || process.env.OPENAI_API_KEY;
-    this.model = this.config?.model || process.env.OPENAI_MODEL_NAME || 'gpt-4o';
-    this.temperature = this.config?.temperature ?? 0;
-    this._openai = new OpenAI({
+    this.openai = new OpenAI({
       apiKey,
-      baseURL: this.config?.baseURL || process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
+      baseURL: config?.baseURL || process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
     });
+    this.model = config?.model || process.env.OPENAI_MODEL_NAME || 'gpt-4o';
+    this.temperature = config?.temperature ?? 0;
   }
 
   /**
@@ -137,13 +105,11 @@ export class LLMClient {
     onMeta?: (meta: Record<string, unknown>) => void,
     signal?: AbortSignal,
   ) {
-    await this.ensureClient();
-    const openai = this._openai!;
     try {
       return await withRetry(async () => {
         if (signal?.aborted) throw new Error('CANCELLED');
 
-        const stream = await openai.chat.completions.create({
+        const stream = await this.openai.chat.completions.create({
           model: this.model,
           ...extraParams,
           messages: messages as any,
