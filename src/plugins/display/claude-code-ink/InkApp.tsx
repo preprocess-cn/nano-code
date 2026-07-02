@@ -1,6 +1,5 @@
-import React, { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
 import { Box, Text, useInput, useStdin, ThemeProvider, stringWidth, RawAnsi } from './ink.js';
-import { useKeybinding } from './stubs/keybindings.js';
 import { AlternateScreen } from './engine/components/AlternateScreen.js';
 import ScrollBox, { type ScrollBoxHandle } from './engine/components/ScrollBox.js';
 import { useDeclaredCursor } from './engine/hooks/use-declared-cursor.js';
@@ -514,10 +513,6 @@ function AppContent(props: InkAppProps): React.ReactElement {
   // when scrollHeader appears/disappears.
   const headerRow = scrollHeader ?? React.createElement(Box, { height: 1 });
 
-  // Ctrl+C: exit at prompt, cancel during execution
-  // createPlugin's onExit checks promptResolve to decide behavior
-  useKeybinding('ctrl+c', useCallback(() => onExit(), [onExit]));
-
   useInput((_input: string, key: {
     escape: boolean; ctrl: boolean; return: boolean; backspace: boolean;
     upArrow: boolean; downArrow: boolean; leftArrow: boolean; rightArrow: boolean;
@@ -530,6 +525,7 @@ function AppContent(props: InkAppProps): React.ReactElement {
       if (key.pageUp || key.pageDown || key.wheelUp || key.wheelDown) return; // allow scroll
       return; // suppress all other input — PermissionDialog handles allow/deny
     }
+
     const sb = scrollRef.current;
 
     // Page Up / Wheel Up: scroll back in history
@@ -642,7 +638,8 @@ function AppContent(props: InkAppProps): React.ReactElement {
       return;
     }
 
-    if (key.escape) {
+    // 统一管理的快捷键：Ctrl+C 和 Escape 都触发退出
+    if ((key.ctrl && _input === 'c') || key.escape) {
       onExit();
       return;
     }
