@@ -492,7 +492,42 @@ strings to each consumer module:
 - Tool plugins own their LLM-visible response strings
 - Orchestration layer (index.ts) owns startup/shutdown messages
 
-### 8.7 CLI display as fallback
+### 8.7 Plugin communication via Store, not direct imports
+
+Rationale: Plugins should never import from each other. Shared state (file paths,
+runtime configuration, computed values) passes through `registry.store` — a
+typed key-value store managed by PluginRegistry. The store acts as a
+cross-plugin channel:
+
+```
+Plugin A (e.g. memory)           Plugin B (e.g. token-budget analyzer)
+  │                                    │
+  ├─ store.set('memory:path', ...)     │
+  │                              ┌─────┤
+  │                              │ store.get('memory:path')
+  │                              ▼
+  │                        No import from Plugin A
+  │                        Key defined in store-keys.ts
+```
+
+Key principles:
+1. **Who owns a key defines its name and value type.** The writing plugin
+   owns the semantics; reading plugins just consume.
+2. **All keys are declared in `src/core/store-keys.ts`**, making the implicit
+   protocol explicit and searchable.
+3. **No plugin should `import` from another plugin** for runtime state.
+   Static data constants (e.g. prompt templates, tool schemas) are an
+   acceptable exception — they are read-only, not state.
+4. **Core modules never depend on plugins.** `store-keys.ts` lives in core
+   because it's just a string constant table; the plugins using each key
+   determine its runtime meaning.
+
+Trade-off: The store is untyped at the `IStore` interface level (keys are
+strings, values are `unknown`). Type safety relies on convention — callers
+cast `store.get<T>(key)` at the usage site. This is intentional: the core
+should not know about plugin-specific types.
+
+### 8.8 CLI display as fallback
 
 Rationale: When no interactive display is configured (e.g. pipe mode), a
 non-interactive fallback is needed. `cli-display` writes AI responses to

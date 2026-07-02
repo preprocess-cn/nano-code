@@ -58,7 +58,7 @@ npm start
 | `/clear` | 清除对话历史，重新开始 |
 | `/help` | 显示帮助信息 |
 | `/compact`, `/compress` | 压缩对话历史 — 摘要旧消息以节省上下文空间 |
-| `/context` | 查看上下文分布及用量（7 维度 + ContextVis 色块图） |
+| `/context` | 查看上下文分布及用量（8 维度 + ContextVis 色块图） |
 | `/plan` | 查看 Plan Mode 状态、当前计划内容 |
 | `/task`, `/tasks` | 查看任务列表 |
 | `/review` | 审查当前变更的正确性/性能/安全（Review 技能） |
@@ -446,7 +446,7 @@ send_message({ to: "main", summary: "查询结果", message: "users 表有 3 个
 
 - **Core** (`src/core/`) — 核心引擎，零 UI 依赖。Agent 循环、LLM 通信、插件编排、配置管理、会话持久化、类型定义。通过 `src/core/index.ts` 暴露公共 API。
 - **Display** (`src/display.ts`) — `DisplayPlugin` 接口 + `DisplayManager` 编排。核心层只依赖 `DisplayPlugin` 接口，不耦合具体实现。
-- **Plugins** — 所有功能通过插件提供，Core 不内置任何业务工具。插件间通过 `IStore` 共享状态，无需互相依赖
+- **Plugins** — 所有功能通过插件提供，Core 不内置任何业务工具。插件间通过 `IStore`（`registry.store`）共享状态，**禁止互相 import**。共享 key 集中声明于 `src/core/store-keys.ts`
 - **Agent Coordinator** (`src/plugins/coordinator/`) — 统一管理 agent 工具注册、后台执行生命周期和 agent 间消息传递（`AgentLifecycle` / `TaskManager` / `MessageBus` 单例）
 - **Agent 工具** — 领域专家子 agent，通过 `~/.nano-code/agents/*.yaml` 定义，自动注册为工具，独立上下文执行
 
@@ -457,7 +457,7 @@ send_message({ to: "main", summary: "查询结果", message: "users 表有 3 个
 | **fs** | `"fs": {}` | 文件列表、读取、写入、精准修改；文件读取缓存（最近 5 个文件，5 分钟 TTL）供 `/compact` 后恢复上下文 |
 | **search** | 系统白名单自动启用 | 文件搜索（glob）+ 内容搜索（grep），支持正则和 glob 限定范围 |
 | **command** | `"command": {}` | Bash 命令执行（含危险命令黑名单 + 权限确认弹窗） |
-| **memory** | `"memory": {}` | 记忆存储与检索，支持多会话持久化和标签查询 |
+| **memory** | `"memory": {}` | 文件化记忆系统：MEMORY.md 索引 + topic 文件，onSystemPrompt 注入行为规则和索引，save_memory/recall_memory 工具，~/.nano-code/AGENT.md 用户全局偏好 |
 | **skills** | 系统白名单自动启用 | 10 个内置 TypeScript 技能 + 文件系统 SKILL.md 技能，`skill`/`skills_list`/`skill_view`/`run_agent` 工具 |
 | **store** | 内建默认 `InMemoryStore` | 插件间共享状态通道，`IStore` 接口可替换实现 |
 | **agent** | 自动发现 `~/.nano-code/agents/*.yaml` | `agent-<name>` 子 agent 调用工具；`agent_task_status` 查询后台任务；`send_message` agent 间通信 |
@@ -643,7 +643,7 @@ interface NanoPlugin {
 }
 ```
 
-插件间共享状态通过 `IStore` 接口（`registry.store`），不直接依赖其他插件：
+**插件间共享状态通过 `IStore`（`registry.store`），禁止互相 import 运行时状态。**
 
 ```typescript
 interface IStore {
@@ -652,6 +652,11 @@ interface IStore {
   subscribe(key: string, fn: () => void): () => void;
 }
 ```
+
+- 写方插件在 `src/core/store-keys.ts` 注册 key，`onInit` 时写入
+- 读方插件从 `registry.store.get<T>(SK.KeyName)` 读取
+- 核心不定义值类型——读写双方约定 key 的语义和类型（`store-keys.ts` 仅声明 key 名）
+- 纯数据常量（如提示词模板）可以直接导入，不属于"运行时状态"
 
 默认实现为 `InMemoryStore`（`src/core/store.ts`），可替换为任何后端存储。
 

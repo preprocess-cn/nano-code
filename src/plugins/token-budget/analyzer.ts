@@ -4,6 +4,8 @@ import { NanoConfig } from '#src/core/config.js';
 import { buildSystemPrompt } from '#src/core/prompt.js';
 import { loadAgentDefinitions } from '#src/plugins/coordinator/agent-loader.js';
 import { loadAllSkills } from '#src/plugins/skills/loader.js';
+import { MEMORY_RULES_PROMPT } from '#src/plugins/tools/memory.js';
+import { SK } from '#src/core/store-keys.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import { countTokens, countMessagesTokens } from '#src/plugins/token-budget/counter.js';
@@ -163,7 +165,7 @@ function analyzeCustomAgents(): ContextDimension {
 
 function analyzeMemoryFiles(config: NanoConfig, excludeFiles: string[] = []): ContextDimension {
   const excludeSet = new Set(excludeFiles);
-  const files = config.systemPrompt?.projectFiles ?? ['AGENT.md', 'CLAUDE.md'];
+  const files = config.systemPrompt?.projectFiles ?? ['AGENT.md'];
   const items: ContextItem[] = [];
   for (const name of files) {
     if (excludeSet.has(name)) continue; // 已在 System Prompt 中统计
@@ -176,6 +178,37 @@ function analyzeMemoryFiles(config: NanoConfig, excludeFiles: string[] = []): Co
   }
   const total = items.reduce((s, i) => s + i.tokens, 0);
   return { name: 'Memory Files', tokens: total, percentage: 0, items };
+}
+
+// ── Memory System analysis (rules + index + user global) ──
+
+function analyzeMemorySystem(registry: PluginRegistry): ContextDimension {
+  const items: ContextItem[] = [];
+
+  // Memory behavioral rules
+  const rulesTokens = countTokens(MEMORY_RULES_PROMPT);
+  items.push({ name: 'memory behavioral rules', tokens: rulesTokens });
+
+  // MEMORY.md index (project-specific) — path from shared store
+  const indexPath = registry.store.get<string>(SK.MemoryIndexPath);
+  if (indexPath) {
+    try {
+      const raw = fs.readFileSync(indexPath, 'utf-8').trim();
+      if (raw) items.push({ name: 'MEMORY.md (project index)', tokens: countTokens(raw) });
+    } catch { /* no memory index yet */ }
+  }
+
+  // User-global AGENT.md — path from shared store
+  const userGlobalPath = registry.store.get<string>(SK.MemoryUserGlobalPath);
+  if (userGlobalPath) {
+    try {
+      const raw = fs.readFileSync(userGlobalPath, 'utf-8').trim();
+      if (raw) items.push({ name: '~/.nano-code/AGENT.md (user global)', tokens: countTokens(raw) });
+    } catch { /* file doesn't exist */ }
+  }
+
+  const total = items.reduce((s, i) => s + i.tokens, 0);
+  return { name: 'Memory System', tokens: total, percentage: 0, items };
 }
 
 // ── Skills analysis ──
@@ -229,7 +262,7 @@ function analyzeMessages(agent: NanoCodeAgent): ContextDimension {
 // ── Public API ──
 
 /**
- * Analyze context usage across all 7 dimensions.
+ * Analyze context usage across all 8 dimensions.
  *
  * Token priority:
  * 1. API usage data from token-budget (accumulated across requests)
@@ -247,6 +280,7 @@ export function analyzeContextUsage(
     analyzeTools(registry),
     analyzeMcpTools(registry),
     analyzeCustomAgents(),
+    analyzeMemorySystem(registry),
     analyzeMemoryFiles(config, systemResult.foundFiles),
     analyzeSkills(),
     analyzeMessages(agent),

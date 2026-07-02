@@ -121,12 +121,10 @@ system_prompt:
   no_tools: |
     你是一个名为 nano-code 的 {role}。你可以帮助用户解决编程问题，提供代码示例和建议。如果回答涉及代码或命令，请直接输出文本，用户会自行复制使用。请保持回答简洁专业。
 
-  # 项目级指令文件搜索优先级
+  # 项目级指令文件搜索优先级（nano-code 使用 AGENT.md，不依赖 Claude Code 的 CLAUDE.md）
   project_files:
     - AGENT.md
-    - CLAUDE.md
     - AGENT.txt
-    - CLAUDE.txt
 `;
 
 // ── Config file paths ──

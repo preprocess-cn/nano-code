@@ -44,6 +44,14 @@ export const SK = {
   Tasks: 'task-plan:tasks',
   /** number: 任务数量 */
   TaskCount: 'task-plan:taskCount',
+
+  // ── Memory paths (set by memory plugin, read by analyzer) ──
+  /** string: 项目记忆目录路径 ~/.nano-code/projects/<sanitized>/ */
+  MemoryProjectDir: 'memory:projectDir',
+  /** string: MEMORY.md 索引文件路径 */
+  MemoryIndexPath: 'memory:indexPath',
+  /** string: ~/.nano-code/AGENT.md 用户全局文件路径 */
+  MemoryUserGlobalPath: 'memory:userGlobalPath',
 } as const;
 
 export interface AgentModeInfo {
