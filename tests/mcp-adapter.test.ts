@@ -3,7 +3,7 @@ import * as assert from 'node:assert/strict';
 import { writeFileSync, mkdtempSync, rmSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
-import { MCPStdioTransport, createMCPPlugin, buildMCPPluginsFromConfig, setMcpJsonPaths } from '../src/plugins/mcp/adapter.js';
+import { MCPStdioTransport, createMCPPlugin, buildMCPPluginsFromConfig, setMcpJsonPaths, shouldShowStderr } from '../src/plugins/mcp/adapter.js';
 import type { MCPTransport } from '../src/plugins/mcp/adapter.js';
 import { NanoConfig } from '../src/core/config.js';
 
@@ -356,5 +356,63 @@ describe('buildMCPPluginsFromConfig', () => {
 
     const plugins = buildMCPPluginsFromConfig(config);
     assert.equal(plugins.length, 0);
+  });
+});
+
+// ── shouldShowStderr ──
+
+describe('shouldShowStderr', () => {
+  const THRESHOLD = 'warn'; // default
+
+  it('passes through unknown format (no level indicator)', () => {
+    assert.equal(shouldShowStderr('starting up...', THRESHOLD), true);
+    assert.equal(shouldShowStderr('some random text', THRESHOLD), true);
+    assert.equal(shouldShowStderr('', THRESHOLD), true);
+  });
+
+  it('filters info level with warn threshold', () => {
+    assert.equal(shouldShowStderr('level=info msg="mem.init"', 'warn'), false);
+    assert.equal(shouldShowStderr('{"level":"info","msg":"init ok"}', 'warn'), false);
+    assert.equal(shouldShowStderr('{"level":"debug","msg":"verbose"}', 'warn'), false);
+  });
+
+  it('passes warn and error level with warn threshold', () => {
+    assert.equal(shouldShowStderr('level=warn msg="slow query"', 'warn'), true);
+    assert.equal(shouldShowStderr('level=error msg="connection lost"', 'warn'), true);
+    assert.equal(shouldShowStderr('{"level":"warn","msg":"timeout"}', 'warn'), true);
+    assert.equal(shouldShowStderr('{"level":"error","msg":"crash"}', 'warn'), true);
+  });
+
+  it('filters by debug threshold (shows all)', () => {
+    assert.equal(shouldShowStderr('level=debug msg="enter loop"', 'debug'), true);
+    assert.equal(shouldShowStderr('level=info msg="ready"', 'debug'), true);
+    assert.equal(shouldShowStderr('level=error msg="fail"', 'debug'), true);
+  });
+
+  it('filters by error threshold (only error)', () => {
+    assert.equal(shouldShowStderr('level=info msg="noop"', 'error'), false);
+    assert.equal(shouldShowStderr('level=warn msg="risky"', 'error'), false);
+    assert.equal(shouldShowStderr('level=error msg="crash"', 'error'), true);
+    assert.equal(shouldShowStderr('{"level":"error","msg":"panic"}', 'error'), true);
+  });
+
+  it('recognizes case-insensitive level field', () => {
+    assert.equal(shouldShowStderr('level=INFO msg="startup"', 'warn'), false);
+    assert.equal(shouldShowStderr('level=WARN msg="slow"', 'warn'), true);
+    assert.equal(shouldShowStderr('LEVEL=ERROR msg="fail"', 'warn'), true);
+    assert.equal(shouldShowStderr('{"level":"INFO"}', 'warn'), false);
+  });
+
+  it('ignores level-like text in unrelated positions', () => {
+    // "level" as a word inside a message, not as key=value
+    assert.equal(shouldShowStderr('check water level is normal', 'warn'), true);
+    assert.equal(shouldShowStderr('error: something broke', 'warn'), true);
+  });
+
+  it('falls back to log levels array order for unknown level names', () => {
+    // "trace"/"fatal" are not in LOG_LEVELS, should default to lowest (debug=0) or highest
+    assert.equal(shouldShowStderr('level=trace msg="detail"', 'warn'), false);   // unknown → default 0 < warn threshold
+    assert.equal(shouldShowStderr('level=fatal msg="dead"', 'warn'), false);     // unknown → default 0 < warn threshold
+    assert.equal(shouldShowStderr('level=critical msg="!"', 'warn'), false);     // unknown → default 0
   });
 });

@@ -55,7 +55,7 @@ const LOG_LEVELS: Record<string, number> = {
  *  - JSON: {"level":"info",...}
  *  - 未知格式：放行（保守策略，宁可过曝不丢信息）
  */
-function shouldShowStderr(text: string, threshold: string): boolean {
+export function shouldShowStderr(text: string, threshold: string): boolean {
   const thresholdNum = LOG_LEVELS[threshold] ?? 2; // default warn
   let lvl: string | undefined;
 
