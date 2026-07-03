@@ -665,8 +665,12 @@ interface IStore {
 ## 测试
 
 ```bash
-npm test        # 运行全部测试
+npm test         # 单元测试（532 项）
+npm run test:e2e # E2E 测试（9 项，覆盖 ReAct 全链路）
+npm run test:all # 全部测试
 ```
+
+E2E 测试使用 StubLLMClient 替代真实 LLM 调用，在临时目录中隔离执行，覆盖单工具流、多轮流、错误处理、权限门、取消、记忆插件和参数缺失等场景。
 
 ## 技术栈
 
