@@ -70,7 +70,7 @@ publish:
         registry-url: https://registry.npmjs.org
     - run: npm ci
     - run: npm run build
-    - run: npm publish --provenance  # 去掉 --provenance 如果个人账号不支持
+    - run: npm publish  # private repo: 不加 --provenance
       env:
         NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 ```
