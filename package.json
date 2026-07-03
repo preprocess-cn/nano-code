@@ -37,6 +37,8 @@
     "dev": "tsc --watch & node --watch dist/index.js",
     "debug": "node dist/index.js --debug",
     "test": "tsc --noEmit -p tsconfig.test.json && node --import tsx --test tests/*.test.ts",
+    "test:e2e": "node --import tsx --test tests/e2e/e2e.test.ts",
+    "test:all": "node --import tsx --test tests/*.test.ts tests/e2e/e2e.test.ts",
     "install:minimal": "npm install --omit=dev --no-optional",
     "install:default": "npm install --omit=dev",
     "install:full": "npm install"

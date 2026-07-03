@@ -66,7 +66,7 @@ Use \`recall_memory\` with relevant keywords to find saved memories.`;
 
 // ── Path resolution ──
 
-function sanitizeProjectPath(absPath: string): string {
+export function sanitizeProjectPath(absPath: string): string {
   return path.resolve(absPath)
     .replace(/[/\\]/g, '+')
     .replace(/[^a-zA-Z0-9_\-+.@]/g, '_');
@@ -341,7 +341,11 @@ function handleSave(
   const filename = safeFilename(title) + '.md';
   const hook = args.content.trim().slice(0, 100).replace(/\n/g, ' ');
 
-  // Dedupe: if same filename exists, update in place
+  // Dedupe: match on filename only. filename = safeFilename(title) + '.md'
+  // is deterministic, so the same title always produces the same filename.
+  // title-based matching is intentionally avoided — title is a user-supplied
+  // string that may differ from the canonical title in the index, and matching
+  // on it could silently overwrite unrelated memories.
   const existing = readIndex(indexPath);
   const dup = existing.find(e => e.file === filename);
 
