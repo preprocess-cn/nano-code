@@ -10,8 +10,6 @@ plugins:
     enabled: true
   memory:
     enabled: true
-    settings:
-      namespace: assistant
   search:
     enabled: true
   web:

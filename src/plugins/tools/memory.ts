@@ -72,14 +72,9 @@ function sanitizeProjectPath(absPath: string): string {
     .replace(/[^a-zA-Z0-9_\-+.@]/g, '_');
 }
 
-let _cachedProjectDir: string | null = null;
-
 /** Project-specific memory directory: ~/.nano-code/projects/<sanitized-cwd>/ */
 function getProjectDir(): string {
-  if (!_cachedProjectDir) {
-    _cachedProjectDir = path.join(os.homedir(), '.nano-code', 'projects', sanitizeProjectPath(process.cwd()));
-  }
-  return _cachedProjectDir;
+  return path.join(os.homedir(), '.nano-code', 'projects', sanitizeProjectPath(process.cwd()));
 }
 
 /** Directory for topic files: <projectDir>/memories/ */
@@ -107,18 +102,15 @@ interface IndexEntry {
 
 /** Parse a single MEMORY.md index line. Format: - [Title](file.md) — Hook */
 function parseIndexLine(line: string): IndexEntry | null {
-  const m = line.match(/^-\s*\[(.+?)\]\((.+?)\)\s*[—–-]\s*(.+)$/);
+  const m = line.match(/^-\s*\[([^\]]+)\]\(([^)]+)\)\s*[—–-]\s*(.+)$/);
   if (!m) return null;
   return { title: m[1].trim(), file: m[2].trim(), hook: m[3].trim() };
 }
 
 function readIndex(indexPath: string): IndexEntry[] {
-  try {
-    const raw = fs.readFileSync(indexPath, 'utf-8');
-    return raw.split('\n').map(l => parseIndexLine(l)).filter(Boolean) as IndexEntry[];
-  } catch {
-    return [];
-  }
+  const raw = readIndexRaw(indexPath);
+  if (!raw) return [];
+  return raw.split('\n').map(l => parseIndexLine(l)).filter(Boolean) as IndexEntry[];
 }
 
 function readIndexRaw(indexPath: string): string {
@@ -129,21 +121,13 @@ function readIndexRaw(indexPath: string): string {
   }
 }
 
-/** Append a new entry to MEMORY.md, enforcing caps. Returns the entry line. */
-function appendIndexEntry(
-  indexPath: string, title: string, file: string, hook: string,
-  lineLimit: number, byteLimit: number,
-): string {
+/** Write index lines to MEMORY.md with line-count and byte-count cap enforcement. */
+function writeIndexFile(
+  indexPath: string, lines: string[], lineLimit: number, byteLimit: number,
+): void {
   fs.mkdirSync(path.dirname(indexPath), { recursive: true });
-  const newLine = `- [${title}](${file}) — ${hook}`;
 
-  let existing = '';
-  try { existing = fs.readFileSync(indexPath, 'utf-8'); } catch { /* new file */ }
-
-  const lines = existing.trim() ? existing.trim().split('\n') : [];
-  lines.push(newLine);
-
-  // Cap by line count: drop oldest if over limit (keep the new entry)
+  // Cap by line count: drop oldest if over limit
   if (lines.length > lineLimit) {
     const dropped = lines.length - lineLimit;
     lines.splice(0, dropped);
@@ -161,6 +145,21 @@ function appendIndexEntry(
   }
 
   fs.writeFileSync(indexPath, output + '\n', 'utf-8');
+}
+
+/** Append a new entry to MEMORY.md, enforcing caps. Returns the entry line. */
+function appendIndexEntry(
+  indexPath: string, title: string, file: string, hook: string,
+  lineLimit: number, byteLimit: number,
+): string {
+  const newLine = `- [${title}](${file}) — ${hook}`;
+
+  let existing = '';
+  try { existing = fs.readFileSync(indexPath, 'utf-8'); } catch { /* new file */ }
+  const lines = existing.trim() ? existing.trim().split('\n') : [];
+  lines.push(newLine);
+
+  writeIndexFile(indexPath, lines, lineLimit, byteLimit);
   return newLine;
 }
 
@@ -186,9 +185,9 @@ function parseFrontMatter(content: string): { tags: string[]; created: string; b
   return { tags, created, body: m[2].trim() };
 }
 
-function writeTopicFile(dir: string, filename: string, content: string, tags: string[]): void {
+function writeTopicFile(dir: string, filename: string, content: string, tags: string[], existingCreated?: string): void {
   fs.mkdirSync(dir, { recursive: true });
-  const created = new Date().toISOString();
+  const created = existingCreated || new Date().toISOString();
   const fm = `---\ntags: ${JSON.stringify(tags)}\ncreated: ${created}\n---\n\n`;
   fs.writeFileSync(path.join(dir, filename), fm + content.trim() + '\n', 'utf-8');
 }
@@ -325,7 +324,6 @@ export function createMemoryPlugin(config?: MemoryPluginConfig): NanoPlugin {
     },
 
     onDestroy(): Promise<void> {
-      _cachedProjectDir = null;
       return Promise.resolve();
     },
   };
@@ -343,37 +341,25 @@ function handleSave(
   const filename = safeFilename(title) + '.md';
   const hook = args.content.trim().slice(0, 100).replace(/\n/g, ' ');
 
-  // Dedupe: if same filename and title exists, update
+  // Dedupe: if same filename exists, update in place
   const existing = readIndex(indexPath);
-  const dup = existing.find(e => e.file === filename || e.title === title);
+  const dup = existing.find(e => e.file === filename);
 
-  // Write topic file
-  writeTopicFile(memoriesDir, filename, args.content, tags);
+  // Read old topic's created timestamp for preservation on update
+  const oldCreated = dup ? readTopicFile(memoriesDir, dup.file)?.created : undefined;
+
+  // Write topic file (preserve original created time on update)
+  writeTopicFile(memoriesDir, filename, args.content, tags, oldCreated);
 
   // Update index
   if (dup) {
-    // Re-write the whole index with cap enforcement (replace matching entry)
     const newEntries = existing.map(e =>
-      (e.file === filename || e.title === title)
+      e.file === filename
         ? { title, file: filename, hook }
         : e,
     );
-    let lines = newEntries.map(e => `- [${e.title}](${e.file}) — ${e.hook}`);
-    if (lines.length > lineLimit) {
-      const dropped = lines.length - lineLimit;
-      lines = lines.slice(dropped);
-      lines.push('');
-      lines.push(`> WARNING: MEMORY.md line limit (${lineLimit}) reached. Dropped ${dropped} old entr${dropped > 1 ? 'ies' : 'y'}.`);
-    }
-    let raw = lines.join('\n');
-    if (Buffer.byteLength(raw, 'utf-8') > byteLimit) {
-      const buf = Buffer.from(raw);
-      const truncated = buf.slice(0, byteLimit);
-      const lastNewline = truncated.lastIndexOf(10);
-      raw = truncated.slice(0, lastNewline > 0 ? lastNewline : truncated.length).toString();
-    }
-    fs.mkdirSync(path.dirname(indexPath), { recursive: true });
-    fs.writeFileSync(indexPath, raw + '\n', 'utf-8');
+    const lines = newEntries.map(e => `- [${e.title}](${e.file}) — ${e.hook}`);
+    writeIndexFile(indexPath, lines, lineLimit, byteLimit);
   } else {
     appendIndexEntry(indexPath, title, filename, hook, lineLimit, byteLimit);
   }

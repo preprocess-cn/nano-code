@@ -32,8 +32,6 @@ system_prompt:
 plugins:
   memory:
     enabled: true
-    settings:
-      namespace: adventure
   fs:
     enabled: false
   command:
