@@ -12,6 +12,7 @@ import * as path from 'path';
 import type { BuiltinCommand } from '#src/plugins/commands/types.js';
 import { readAllTasks, getPlanFilePath } from '#src/plugins/tools/task-plan.js';
 import { SK } from '#src/core/store-keys.js';
+import type { ModelEntry } from '#src/core/llm.js';
 import { runDoctor, formatDoctorResults } from '#src/core/doctor.js';
 import { loadAgentDefinitions } from '#src/plugins/coordinator/agent-loader.js';
 import { readMcpJson, getProjectMcpJsonPath, getGlobalMcpJsonPath, getClaudeMcpJsonPath } from '#src/plugins/mcp/config-writer.js';
@@ -53,6 +54,7 @@ const BUILTIN_COMMANDS: BuiltinCommand[] = [
       lines.push('  /plan             查看/管理 Plan Mode');
       lines.push('  /task, /tasks     查看任务列表');
       lines.push('  /doctor           诊断系统健康状态');
+      lines.push('  /model [name]      查看/切换 LLM 模型（需启用 model-registry 插件）');
       lines.push('  /plugin, /plugins 管理插件 — /plugin list, enable <name>, disable <name>');
       lines.push('  /init            初始化 AGENT.md — 分析项目结构并生成代码库文档');
       lines.push('');
@@ -271,6 +273,61 @@ const BUILTIN_COMMANDS: BuiltinCommand[] = [
         handled: true, skipAgent: true,
         message: ['', '当前会话已允许免确认的工具：', ...allowed.map(t => `  - ${t}`), '', '使用 /permissions reset 清空 allowlist。', ''].join('\n'),
       };
+    },
+  },
+  {
+    name: 'model',
+    description: '查看/切换 LLM 模型 — /model [name|index]',
+    handler: async (ctx?: BuiltinContext) => {
+      if (!ctx?.registry) {
+        return { handled: true, skipAgent: true, message: '无法获取上下文信息' };
+      }
+      const store = ctx.registry.store;
+      const models = store.get<ModelEntry[]>(SK.ModelRegistryModels);
+
+      if (!models || models.length === 0) {
+        return { handled: true, skipAgent: true, message: '未配置模型注册表。请启用 model-registry 插件并配置 models。' };
+      }
+
+      const current = store.get<ModelEntry>(SK.ModelOverride);
+      const args = (ctx.args || '').trim();
+
+      // /model bare — try interactive picker first (Ink), fall back to text list
+      if (!args) {
+        if (ctx.display) {
+          const handled = await ctx.display.showModelPicker(ctx.registry);
+          if (handled) return { handled: true, skipAgent: true };
+        }
+
+        const lines: string[] = [''];
+        lines.push('可用模型：');
+        models.forEach((m, i) => {
+          const label = m.provider ? `${m.provider}/${m.model}` : m.model;
+          const active = current && m.model === current.model && m.apiKey === current.apiKey ? '  ← 当前' : '';
+          lines.push(`  [${i}] ${label}${active}`);
+        });
+        lines.push('');
+        lines.push('使用 /model <名称|序号> 切换模型');
+        lines.push('');
+        return { handled: true, skipAgent: true, message: lines.join('\n') };
+      }
+
+      // /model <index>
+      const idx = parseInt(args, 10);
+      if (!isNaN(idx) && idx >= 0 && idx < models.length) {
+        const m = models[idx];
+        store.set(SK.ModelOverride, m);
+        return { handled: true, skipAgent: true, message: `已切换到模型: ${m.provider ? m.provider + '/' : ''}${m.model}` };
+      }
+
+      // /model <name> — match by model name or provider/model
+      const match = models.find(m => m.model === args || (m.provider && `${m.provider}/${m.model}` === args));
+      if (match) {
+        store.set(SK.ModelOverride, match);
+        return { handled: true, skipAgent: true, message: `已切换到模型: ${match.provider ? match.provider + '/' : ''}${match.model}` };
+      }
+
+      return { handled: true, skipAgent: true, message: `未找到模型 "${args}"。使用 /model 查看可用模型列表。` };
     },
   },
   {

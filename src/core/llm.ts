@@ -3,6 +3,8 @@ import * as dotenv from 'dotenv';
 import * as path from 'path';
 import * as os from 'os';
 import type { ToolDefinition } from '#src/core/contract.js';
+import type { IStore } from '#src/core/store.js';
+import { SK } from '#src/core/store-keys.js';
 import { withRetry } from '#src/core/retry.js';
 
 // 加载环境变量：项目 .env 优先于全局 ~/.nano-code/.env，shell 环境变量优先于两者
@@ -15,6 +17,40 @@ export interface LLMConfig {
   maxTokens?: number;
   apiKey?: string;
   baseURL?: string;
+  store?: IStore;
+}
+
+/**
+ * 单个模型条目的运行态配置（已解析 $ENV_VAR）。
+ * 由 model-registry 插件写入 Store，LLMClient 每次请求前读取。
+ */
+export interface ModelEntry {
+  provider?: 'openai' | 'anthropic';
+  model: string;
+  apiKey?: string;
+  baseURL?: string;
+  temperature?: number;
+  maxTokens?: number;
+  extraParams?: Record<string, unknown>;
+}
+
+/**
+ * 解析可能的 $ENV_VAR 引用。
+ * - "$OPENAI_API_KEY" → process.env.OPENAI_API_KEY
+ * - "sk-literal" → "sk-literal"（原样返回）
+ */
+export function resolveEnvVar(value: string): string {
+  if (value.startsWith('$')) {
+    const envName = value.slice(1);
+    const resolved = process.env[envName];
+    if (!resolved) {
+      throw new Error(
+        `Environment variable "${envName}" is not set (referenced via $${envName} in model config)`
+      );
+    }
+    return resolved;
+  }
+  return value;
 }
 
 /**
@@ -68,6 +104,9 @@ export class LLMClient {
   private openai: OpenAI;
   private model: string;
   private temperature: number;
+  private store?: IStore;
+  private resolvedApiKey: string;
+  private resolvedBaseURL: string;
 
   getModel(): string {
     return this.model;
@@ -79,12 +118,22 @@ export class LLMClient {
       throw new Error('未能在环境变量中找到 OPENAI_API_KEY。请在 .env 文件中配置。');
     }
 
+    this.resolvedApiKey = apiKey;
+    this.resolvedBaseURL = config?.baseURL || process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1';
+
     this.openai = new OpenAI({
-      apiKey,
-      baseURL: config?.baseURL || process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
+      apiKey: this.resolvedApiKey,
+      baseURL: this.resolvedBaseURL,
     });
     this.model = config?.model || process.env.OPENAI_MODEL_NAME || 'gpt-4o';
     this.temperature = config?.temperature ?? 0;
+    this.store = config?.store;
+  }
+
+  /** 从 Store 读取模型覆盖配置。不存在时返回 undefined。 */
+  private resolveModelOverride(): ModelEntry | undefined {
+    if (!this.store) return undefined;
+    return this.store.get<ModelEntry>(SK.ModelOverride);
   }
 
   /**
@@ -109,14 +158,27 @@ export class LLMClient {
       return await withRetry(async () => {
         if (signal?.aborted) throw new Error('CANCELLED');
 
-        const stream = await this.openai.chat.completions.create({
-          model: this.model,
-          ...extraParams,
+        // Per-request model override from plugin (e.g. model-registry)
+        const override = this.resolveModelOverride();
+        const model = override?.model ?? this.model;
+        const temperature = override?.temperature ?? this.temperature;
+        const reqApiKey = override?.apiKey || this.resolvedApiKey;
+        const reqBaseURL = override?.baseURL || this.resolvedBaseURL;
+        const mergedExtra = { ...extraParams, ...(override?.extraParams || {}) };
+
+        // Create per-request client if provider/credentials differ from defaults
+        const client = (reqApiKey === this.resolvedApiKey && reqBaseURL === this.resolvedBaseURL)
+          ? this.openai
+          : new OpenAI({ apiKey: reqApiKey, baseURL: reqBaseURL });
+
+        const stream = await client.chat.completions.create({
+          model,
+          ...mergedExtra,
           messages: messages as any,
           stream: true,
           stream_options: { include_usage: true },
           tools: tools && tools.length > 0 ? (tools as any) : undefined,
-          temperature: this.temperature,
+          temperature,
         }, { signal });
 
         let fullText = '';

@@ -52,6 +52,12 @@ export const SK = {
   MemoryIndexPath: 'memory:indexPath',
   /** string: ~/.nano-code/AGENT.md 用户全局文件路径 */
   MemoryUserGlobalPath: 'memory:userGlobalPath',
+
+  // ── Model registry (model-registry plugin) ──
+  /** ModelEntry: 当前请求应使用的模型覆盖配置 */
+  ModelOverride: 'model:override',
+  /** ModelEntry[]: model-registry 中已解析的全部模型条目（用于 /model 命令和 --model CLI） */
+  ModelRegistryModels: 'model-registry:models',
 } as const;
 
 export interface AgentModeInfo {

@@ -373,6 +373,7 @@ const BUILTIN_LOADERS: Record<string, (settings?: Record<string, any>) => Promis
   skills: async () => (await import('#src/plugins/skills/index.js')).createSkillsPlugin(),
   search: async () => (await import('#src/plugins/tools/search.js')).searchPlugin,
   web: async () => (await import('#src/plugins/tools/web.js')).webPlugin,
+  'model-registry': async (s) => (await import('#src/plugins/model-registry/index.js')).createModelRegistryPlugin(s || {}),
 };
 
 /**

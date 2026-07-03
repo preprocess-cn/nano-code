@@ -1,0 +1,156 @@
+# ============================================================================
+# nano-code 全功能配置示例（nano-code-full）
+# 此文件展示所有可配置的插件与功能。复制为项目 .nano-code.yaml 后启动生效。
+# ============================================================================
+
+# 核心配置（仅保留与模型无关的字段）
+core:
+  defaultTimeout: 120000
+
+# Agent 问候语与告别语（role 不设置则使用默认 "终端 AI 编程助手"）
+agent:
+  greeting: "全功能模式已启动 — 支持模型切换、Web 搜索、MCP 扩展"
+  goodbye: "** 期待再次为您服务"
+
+# 系统插件白名单（CLI enable/disable 不可触及）
+system_plugins:
+  - fs
+  - command
+  - memory
+  - token-budget
+  - skills
+  - search
+  - web                       # web 插件加入白名单，默认启用
+
+# Display 插件 — 可选：repl（默认）| claude-code-ink（TUI）
+display:
+  plugin: claude-code-ink
+
+# MCP 子进程日志过滤级别
+mcp:
+  stderrLevel: warn
+
+# 技能系统
+skills:
+  disabled: []                 # 不禁用任何内置技能
+  disableSkillTool: false      # 保留 LLM 调用技能的能力
+
+# ============================================================================
+# 插件配置
+# ============================================================================
+plugins:
+
+  # ── 文件系统工具 ──
+  fs:
+    enabled: true
+
+  # ── 命令执行工具 ──
+  command:
+    enabled: true
+
+  # ── 持久化记忆系统 ──
+  memory:
+    settings:
+      injectMemoryRules: true
+      injectMemoryIndex: true
+      injectUserGlobal: true
+      indexLineLimit: 200
+      indexByteLimit: 25600
+
+  # ── Token 预算管理 ──
+  token-budget:
+    settings:
+      maxTokensPerSession: 200000
+      maxTokensPerRequest: 10000
+      compressionThreshold: 160000
+      warnAtTokens: 150000
+      autoCompactEnabled: true
+
+  # ── 代码搜索工具 ──
+  search:
+    enabled: true
+
+  # ── Web 搜索工具（需 Tavily API Key，也可通过环境变量 TAVILY_API_KEY 设置） ──
+  web:
+    settings:
+      searchApiKey: "tvly-fake-api-key-for-demo"
+
+  # ── 模型注册表 — 在配置中声明多个模型，运行时通过 /model 切换 ──
+  model-registry:
+    settings:
+      models:
+        # provider 表示 API 兼容协议，非模型厂商。
+        # MiniMax / DeepSeek 等均兼容 OpenAI API，故 provider 为 openai。
+        - provider: openai
+          model: MiniMax-2.5
+          apiKey: "$MINIMAX_API_KEY"
+          baseURL: "https://api.minimax.chat/v1"
+          temperature: 0
+        - provider: openai
+          model: deepseek-v4-pro
+          apiKey: "$DEEPSEEK_API_KEY"
+          baseURL: "https://api.deepseek.com/v1"
+          temperature: 0
+
+  # ── MCP 插件示例（stdio 传输） ──
+  # 解除注释后生效。首次使用会下载对应包。
+  # filesystem-mcp:
+  #   type: mcp
+  #   enabled: true
+  #   transport: stdio
+  #   command: npx
+  #   args: ["-y", "@modelcontextprotocol/server-filesystem", "/path/to/allowed-dir"]
+  #   initTimeout: 15000
+  #   sideEffect: true
+
+  # ── MCP 插件示例（HTTP 传输） ──
+  # remote-mcp:
+  #   type: mcp
+  #   enabled: true
+  #   transport: http
+  #   url: "https://your-mcp-server.example.com/mcp"
+  #   initTimeout: 10000
+
+  # ── npm 插件示例 ──
+  # 解除注释后生效。spec 为 npm 包名或本地文件路径。
+  # my-custom-plugin:
+  #   type: npm
+  #   spec: "@my-scope/nano-plugin"
+  #   enabled: true
+  #   settings:
+  #     optionKey: optionValue
+
+# ============================================================================
+# 环境变量兜底（shell 和 .env 优先级更高）
+# ============================================================================
+env:
+  OPENAI_API_KEY: "sk-fake-openai-key-for-fallback"
+  OPENAI_BASE_URL: "https://api.openai.com/v1"
+  MINIMAX_API_KEY: "sk-fake-minimax-key"
+  DEEPSEEK_API_KEY: "sk-fake-deepseek-key"
+  TAVILY_API_KEY: "tvly-fake-tavily-key"
+
+# ============================================================================
+# 系统提示词模板
+# ============================================================================
+system_prompt:
+  with_tools: |
+    你是一个名为 nano-code 的 {role}。你可以调用以下工具来完成工作：{tool_list}。
+
+    【核心安全约束】如果人类用户拒绝了你的工具执行权限（返回状态为 rejected_by_user），
+    这是最高级别的物理约束。你必须立刻停止该方向的尝试，在当前轮次中严禁再次生成任何
+    工具调用（tool_calls），绝对不要换个参数或换个工具重试。请转为纯文本模式，向用户
+    诚恳解释该操作的必要性，并主动提供其他不依赖该工具的非侵入式替代方案。
+
+    【模型切换】你可以在对话中建议用户使用 /model 命令切换模型。
+    当前可用模型请询问用户。
+
+    请保持回答简洁专业。
+
+  no_tools: |
+    你是一个名为 nano-code 的 {role}。你可以帮助用户解决编程问题，提供代码示例和建议。
+    如果回答涉及代码或命令，请直接输出文本，用户会自行复制使用。请保持回答简洁专业。
+
+  project_files:
+    - AGENT.md
+    - AGENT.txt

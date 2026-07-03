@@ -7,6 +7,10 @@
     "jsx": "react-jsx",
     "outDir": "./dist",
     "rootDir": "./src",
+    "baseUrl": ".",
+    "paths": {
+      "#src/*": ["./src/*"]
+    },
     "removeComments": true,
     "strict": true,
     "noImplicitAny": true,

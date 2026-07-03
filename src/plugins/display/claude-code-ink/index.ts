@@ -7,6 +7,7 @@ import type { PluginRegistry } from '#src/core/plugin.js';
 import type { AgentModeInfo } from '#src/core/store-keys.js';
 
 import { SK } from '#src/core/store-keys.js';
+import type { ModelEntry } from '#src/core/llm.js';
 import { logManager } from '#src/core/logger.js';
 import React from 'react';
 
@@ -148,6 +149,7 @@ function createPlugin(): DisplayPlugin {
   let thinkStream: ThinkStream | null = null;
   let lastStreamTarget: UIMessage | null = null;
   let lastThinkTarget: UIMessage | null = null;
+  let greetingShown = false; // 是否已在消息列表中展示 greeting
   // Permission confirm state — 支持 allow_once / always_allow / deny
   let pendingPermission: PermissionPrompt | null = null;
   let permissionResolve: ((value: boolean | 'always_allow') => void) | null = null;
@@ -262,6 +264,12 @@ function createPlugin(): DisplayPlugin {
 
     prompt(): Promise<string | null> {
       if (!inkInstance) {
+        // 首次渲染：如果有消息（如 debug/think 状态消息），greeting 不会显示在欢迎页，
+        // 因此将其加入消息列表头部，确保用户能看到它
+        if (messages.length > 0 && !greetingShown) {
+          messages.unshift({ agentName, text: greeting, kind: 'status' });
+          greetingShown = true;
+        }
         const initSuggestions = _suggestionProvider?.() ?? [];
         const initPromise = inkRender(
           React.createElement(InkApp, {
@@ -495,6 +503,47 @@ function createPlugin(): DisplayPlugin {
       });
 
       // 恢复 InkApp 主界面
+      render();
+      return true;
+    },
+
+    async showModelPicker(r: PluginRegistry): Promise<boolean> {
+      if (!inkInstance) return false;
+      if (!r.store.get(SK.ModelRegistryModels)) return false;
+
+      // 记录切换前的模型，用于对比
+      const before = r.store.get<ModelEntry>(SK.ModelOverride);
+      const beforeLabel = before ? `${before.provider ? before.provider + '/' : ''}${before.model}` : null;
+
+      const { ModelPicker } = await import('#src/plugins/display/claude-code-ink/ModelPicker.js');
+      let pickerResolve: (() => void) | null = null;
+
+      inkInstance.rerender(
+        React.createElement(ModelPicker, {
+          registry: r,
+          onDone: () => {
+            if (pickerResolve) {
+              const r2 = pickerResolve;
+              pickerResolve = null;
+              r2();
+            }
+          },
+        }),
+      );
+
+      await new Promise<void>(resolve => {
+        pickerResolve = resolve;
+      });
+
+      // 如果模型有变化，推送提示
+      const after = r.store.get<ModelEntry>(SK.ModelOverride);
+      if (after && (!before || before.model !== after.model || before.apiKey !== after.apiKey)) {
+        const label = `${after.provider ? after.provider + '/' : ''}${after.model}`;
+        if (label !== beforeLabel) {
+          messages.push({ agentName: 'main', text: `已切换到模型: ${label}`, kind: 'status' });
+        }
+      }
+
       render();
       return true;
     },

@@ -172,7 +172,26 @@ export class NanoCodeAgent {
         break;
       }
 
-      for (const rawToolCall of response.toolCalls) {
+      // Partition: read-only tools (no side effect) can run in parallel.
+      // Write tools must stay serial to maintain order and permission flow.
+      const readOnlyCalls = response.toolCalls.filter(
+        tc => !this.registry.getToolSideEffect(tc.function.name)
+      );
+      const writeCalls = response.toolCalls.filter(
+        tc => this.registry.getToolSideEffect(tc.function.name)
+      );
+
+      if (readOnlyCalls.length > 0) {
+        const results = await Promise.all(
+          readOnlyCalls.map(tc => this.executeToolCall(tc))
+        );
+        for (const r of results) {
+          for (const msg of r.toolMessages) this.messageHistory.push(msg);
+          if (r.status === 'rejected') break;
+        }
+      }
+
+      for (const rawToolCall of writeCalls) {
         if (isCancelled()) break;
         const tcResult = await this.executeToolCall(rawToolCall);
         for (const msg of tcResult.toolMessages) this.messageHistory.push(msg);

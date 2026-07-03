@@ -19,6 +19,7 @@ import { replDisplay } from '#src/plugins/display/repl.js';
 import { cliDisplay } from '#src/plugins/display/cli.js';
 import { resolveDisplayPlugin } from '#src/plugins/display/loader.js';
 import { SK } from '#src/core/store-keys.js';
+import type { ModelEntry } from '#src/core/llm.js';
 import { cac } from 'cac';
 import { getPackageVersion } from '#src/core/version.js';
 import { logManager } from '#src/core/logger.js';
@@ -266,7 +267,7 @@ async function runMainLoop(
   }
 }
 
-async function startCLI(options: { debug?: boolean; think?: boolean; skipPermission?: boolean; listPlugins?: boolean; continue?: boolean; profile?: string }) {
+async function startCLI(options: { debug?: boolean; think?: boolean; skipPermission?: boolean; listPlugins?: boolean; continue?: boolean; profile?: string; model?: string }) {
 
   // ── Load configuration + optional agent profile ──
   const config = options.profile
@@ -282,6 +283,9 @@ async function startCLI(options: { debug?: boolean; think?: boolean; skipPermiss
   const displayMgr = new DisplayManager();
   displayMgr.addPlugin(await resolveDisplayPluginByName(config));
 
+  // ── Plugin registry (created before LLMClient so its Store is available) ──
+  const registry = new PluginRegistry();
+
   // ── LLM Client ──
   let llmClient: LLMClient;
   try {
@@ -290,15 +294,32 @@ async function startCLI(options: { debug?: boolean; think?: boolean; skipPermiss
       temperature: config.core.temperature,
       apiKey: config.core.apiKey,
       baseURL: config.core.baseURL,
+      store: registry.store,
     });
   } catch (err: any) {
     console.error(MSG_LLM_INIT_ERROR, err.message);
     process.exit(1);
   }
 
-  // ── Plugin registry & initialization ──
-  const registry = new PluginRegistry();
+  // ── Plugin initialization ──
   await initializePlugins(config, registry, llmClient, displayMgr, options.skipPermission ?? false, options.debug);
+
+  // --model CLI 覆盖：在插件初始化后生效，优先级高于 model-registry 默认（models[0]）
+  if (options.model) {
+    const models = registry.store.get<ModelEntry[]>(SK.ModelRegistryModels);
+    let match: ModelEntry | undefined;
+    if (models && models.length > 0) {
+      const idx = parseInt(options.model, 10);
+      if (!isNaN(idx) && idx >= 0 && idx < models.length) {
+        match = models[idx];
+      } else {
+        match = models.find(m => m.model === options.model || (m.provider && `${m.provider}/${m.model}` === options.model));
+      }
+    }
+    if (match) {
+      registry.store.set(SK.ModelOverride, match);
+    }
+  }
 
   // 全局错误边界（registry + display 就绪后注册）
   setupGlobalErrorHandlers(displayMgr, registry);
@@ -366,6 +387,7 @@ cli.option('--skip-permission', '跳过工具调用的用户确认提示，系�
 cli.option('--list-plugins', '列出所有已注册的插件及其提供的工具');
 cli.option('-c, --continue', '接续最近一次在当前项目中的会话继续对话');
 cli.option('-p, --profile <name>', '指定 agent 角色配置文件（profile），可以是名称（如 treehole）或文件路径（如 ./my-profile.json）');
+cli.option('--model <name>', '指定使用的模型（名称或序号，需启用 model-registry 插件并配置 models）');
 
 cli.help();
 cli.version(getPackageVersion());
@@ -400,5 +422,6 @@ if (!parsed.options.help && !parsed.options.version) {
     listPlugins: parsed.options.listPlugins ?? false,
     continue: parsed.options.continue ?? false,
     profile: parsed.options.profile as string | undefined,
+    model: parsed.options.model as string | undefined,
   });
 }

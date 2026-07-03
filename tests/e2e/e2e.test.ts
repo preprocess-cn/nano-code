@@ -306,6 +306,99 @@ describe('E2E — ReAct 循环全链路', () => {
     assert.equal(events.toolCalls.length, 2);
   });
 
+  // ── Scenario 8: 并发只读工具执行 ──
+
+  it('场景 8: 并发只读工具执行 — 同轮两个 view_file_content 并行', async () => {
+    const registry = new PluginRegistry();
+    registry.setDefaultContext({ skipPermission: true });
+    await registerBuiltinPlugin(registry, 'fs');
+
+    // 创建两个测试文件
+    fs.writeFileSync(path.join(tmpDir, 'a.txt'), 'FILE_A');
+    fs.writeFileSync(path.join(tmpDir, 'b.txt'), 'FILE_B');
+
+    // LLM 一轮返回两个 read-only 工具调用
+    const stub = new StubLLMClient([
+      {
+        text: null, stopReason: 'tool_use',
+        toolCalls: [
+          createToolCall('view_file_content', { path: 'a.txt' }, 'call_read_a'),
+          createToolCall('view_file_content', { path: 'b.txt' }, 'call_read_b'),
+        ],
+      },
+      { text: 'Both files read.', stopReason: 'stop' },
+    ]);
+
+    const { display, events } = createSpyDisplay();
+    const agent = new NanoCodeAgent({ registry, llmClient: stub as any, display });
+    const result = await agent.runTask('read both files');
+
+    assert.equal(result, 'Both files read.');
+
+    // History: user → asst(tc1+tc2) → tool1 → tool2 → asst(final)
+    const history = agent.getHistory();
+    assert.equal(history.length, 5);
+    assert.equal(history[0].role, 'user');
+    assert.equal(history[1].role, 'assistant');
+    assert.ok(history[1].tool_calls);
+    assert.equal(history[1].tool_calls!.length, 2);
+
+    // 两个 tool result 都存在
+    const toolRoles = history.filter(m => m.role === 'tool');
+    assert.equal(toolRoles.length, 2);
+    assert.ok(toolRoles[0].content?.includes('FILE_A') || toolRoles[0].content?.includes('FILE_B'));
+    assert.ok(toolRoles[1].content?.includes('FILE_A') || toolRoles[1].content?.includes('FILE_B'));
+
+    // Display 事件：两个工具都被调用
+    assert.equal(events.toolCalls.length, 2);
+    assert.equal(events.toolCalls[0].toolName, 'view_file_content');
+    assert.equal(events.toolCalls[1].toolName, 'view_file_content');
+    assert.equal(events.toolResults.length, 2);
+
+    // LLM 只被调用 2 次（不是 3 次 — 两个工具并行不额外增加轮次）
+    assert.equal(stub.callCount, 2);
+  });
+
+  it('场景 9: 混合并行 — 只读工具并行 + 写入工具串行', async () => {
+    const registry = new PluginRegistry();
+    registry.setDefaultContext({ skipPermission: true });
+    await registerBuiltinPlugin(registry, 'fs');
+
+    // 两个只读 + 一个写入，同轮混合
+    fs.writeFileSync(path.join(tmpDir, 'ref.txt'), 'REFERENCE');
+
+    const stub = new StubLLMClient([
+      {
+        text: null, stopReason: 'tool_use',
+        toolCalls: [
+          createToolCall('view_file_content', { path: 'ref.txt' }, 'call_read_ref'),
+          createToolCall('write_file_content', { path: 'out.txt', content: 'WRITTEN' }, 'call_write'),
+          createToolCall('view_file_content', { path: 'ref.txt' }, 'call_read_ref2'),
+        ],
+      },
+      { text: 'Read and wrote.', stopReason: 'stop' },
+    ]);
+
+    const { display, events } = createSpyDisplay();
+    const agent = new NanoCodeAgent({ registry, llmClient: stub as any, display });
+    const result = await agent.runTask('read ref and write out');
+
+    assert.equal(result, 'Read and wrote.');
+
+    // 文件写入成功
+    assert.equal(fs.existsSync(path.join(tmpDir, 'out.txt')), true);
+    assert.equal(fs.readFileSync(path.join(tmpDir, 'out.txt'), 'utf-8'), 'WRITTEN');
+
+    // History 应有 3 个 tool result（两个只读并行 + 一个串行写入）
+    const history = agent.getHistory();
+    const toolRoles = history.filter(m => m.role === 'tool');
+    assert.equal(toolRoles.length, 3);
+
+    // Display 事件：3 个工具调用
+    assert.equal(events.toolCalls.length, 3);
+    assert.equal(events.toolResults.length, 3);
+  });
+
   // ── Scenario 7: 工具参数缺失 ──
 
   it('场景 7: 工具参数缺失 — write_file 缺少 path，错误回注 LLM', async () => {

@@ -47,6 +47,7 @@ npm start
 | `--list-plugins` | 列出所有已注册的插件及其提供的工具（含 agent 工具） |
 | `-c, --continue` | 接续最近一次在当前项目的会话继续对话 |
 | `-p, --profile <name>` | 指定 agent 角色配置文件（如 `treehole`），直接进入特定角色模式 |
+| `--model <name>` | 指定使用的模型（名称或序号，需启用 model-registry 插件） |
 | `--version` | 显示版本号 |
 | `--help` | 显示帮助信息 |
 
@@ -65,6 +66,7 @@ npm start
 | `/permissions` | 查看会话已允许免确认的工具列表 |
 | `/permissions reset` | 清空权限 allowlist |
 | `/doctor` | 诊断系统健康状态（配置、API 连通性、插件加载） |
+| `/model [name]` | 查看/切换 LLM 模型（Ink 下为交互式选择器，需启用 model-registry 插件） |
 | `/plugin`, `/plugins` | 管理插件 — `/plugin list`, `/plugin enable <name>`, `/plugin disable <name>` |
 | `/init` | 初始化 nano-code.md — 分析项目结构并生成代码库文档 |
 
@@ -405,6 +407,17 @@ agent-dba({ query: "分析慢查询", run_in_background: true })
   - **REPL 模式**：打印 `[后台] agent名（taskId）...` 消息
   - **Ink 模式**：底栏显示 `BackgroundTaskBar`，实时展示运行/完成/失败状态，完成后 5 秒自动消失
 
+### 并发工具执行
+
+同一 LLM 轮次中，多个无副作用的工具（如 `view_file_content`、`search_code`）自动并行执行，减少总等待时间。有副作用的工具（`write_file`、`command` 等）保持串行执行，确保执行顺序和权限流程正确。
+
+```
+同一 LLM 轮次：
+  read-only 工具:  ── view_file ──┐
+                   ── search_code ──┤── Promise.all ──→ 下一轮 LLM
+  write 工具:      ── write_file ────────────→ 串行执行
+```
+
 ### Agent 间通信
 
 运行中的 agent 可以通过 `send_message` 工具互相通信：
@@ -460,6 +473,7 @@ send_message({ to: "main", summary: "查询结果", message: "users 表有 3 个
 | **memory** | `"memory": {}` | 文件化记忆系统：MEMORY.md 索引 + topic 文件，onSystemPrompt 注入行为规则和索引，save_memory/recall_memory 工具，~/.nano-code/AGENT.md 用户全局偏好 |
 | **skills** | 系统白名单自动启用 | 10 个内置 TypeScript 技能 + 文件系统 SKILL.md 技能，`skill`/`skills_list`/`skill_view`/`run_agent` 工具 |
 | **store** | 内建默认 `InMemoryStore` | 插件间共享状态通道，`IStore` 接口可替换实现 |
+| **model-registry** | `"model-registry": { settings: { models: [...] } }` | 声明多个 LLM 模型，`/model` 切换；支持 `$ENV_VAR` 语法隐藏密钥 |
 | **agent** | 自动发现 `~/.nano-code/agents/*.yaml` | `agent-<name>` 子 agent 调用工具；`agent_task_status` 查询后台任务；`send_message` agent 间通信 |
 | **task-plan** | 内建默认注册 | Plan Mode（`enter_plan_mode`/`exit_plan_mode`） + 任务系统（`task_create`/`task_list`/`task_update`/`task_stop`） |
 | **display** | 通过 `display.plugin` 配置 | 展示层插件，支持生命周期事件（独立于 PluginRegistry） |
@@ -471,6 +485,7 @@ send_message({ to: "main", summary: "查询结果", message: "users 表有 3 个
 | **npm** | 配置 `type: "npm"` 和 `spec`，`import()` 加载 NanoPlugin |
 | **MCP** | 配置 `type: "mcp"` 条目，自动加载外部 MCP Server |
 | **Token Budget** | 配置 `plugins.token-budget.settings`，使用 API 精确 token 统计；支持自动压缩阈值 `autoCompactEnabled`（默认 `true`）/`autoCompactThreshold` |
+| **Model Registry** | 配置 `plugins.model-registry.settings.models` 声明多个 LLM 模型，通过 `/model` 命令或 `--model` CLI 运行时切换 |
 | **npm-loader** | 内置默认插件，自动处理 `type: "npm"` 插件的注册 |
 
 ## Plan Mode
@@ -622,6 +637,38 @@ nano-code plugin autoscan    # 一次性导入，补全 config.plugins 声明
 
 部分 MCP server 的官方安装脚本也直接写入 `~/.claude/.mcp.json`。`autoscan` 会将其导入到 nano-code 自有配置并补全声明。如果不想导入，也可手动在 `config.plugins` 中写入声明后直接使用。
 
+## 模型注册表（Model Registry）
+
+通过 model-registry 插件在配置中声明多个 LLM 模型，运行时通过 `/model` 命令或 `--model` CLI 参数切换：
+
+```yaml
+plugins:
+  model-registry:
+    settings:
+      models:
+        - provider: openai
+          model: gpt-4o
+          apiKey: "$OPENAI_API_KEY"
+          baseURL: "https://api.openai.com/v1"
+          temperature: 0
+        - provider: openai
+          model: deepseek-chat
+          apiKey: "$DEEPSEEK_API_KEY"
+          baseURL: "https://api.deepseek.com/v1"
+```
+
+`apiKey` 和 `baseURL` 支持 `$ENV_VAR` 语法，从环境变量读取。`provider` 表示 API 兼容协议（`openai` / `anthropic`），非模型厂商。
+
+### 运行时切换
+
+- **`/model`** — 无参数进入交互式选择器（Ink 下方向键选择 + Enter 确认），REPL 回退文本列表
+- **`/model deepseek-chat`** / **`/model 1`** — 按名称或序号直接切换
+- **`--model deepseek-chat`** — 启动时指定模型
+
+当 model-registry 插件未配置或未启用时，行为回退到环境变量方式（`OPENAI_API_KEY` / `OPENAI_BASE_URL` / `OPENAI_MODEL_NAME`）。
+
+完整配置示例见 [`examples/configs/nano-code-full.yaml`](examples/configs/nano-code-full.yaml)。
+
 ## 插件开发
 
 nano-code 的插件是一个实现 `NanoPlugin` 接口的模块，可以提供工具和钩子：
@@ -665,8 +712,8 @@ interface IStore {
 ## 测试
 
 ```bash
-npm test         # 单元测试（532 项）
-npm run test:e2e # E2E 测试（9 项，覆盖 ReAct 全链路）
+npm test         # 单元测试（543 项）
+npm run test:e2e # E2E 测试（11 场景，覆盖 ReAct 全链路 + 并发执行 + 混合工具）
 npm run test:all # 全部测试
 ```
 

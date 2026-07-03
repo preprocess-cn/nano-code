@@ -3,7 +3,7 @@ import * as path from 'path';
 import * as os from 'os';
 import * as yaml from 'js-yaml';
 
-const CONFIG_TOP_KEYS = new Set(['core', 'plugins', 'agent', 'display', 'configVersion']);
+const CONFIG_TOP_KEYS = new Set(['core', 'plugins', 'agent', 'display', 'configVersion', 'mcp', 'skills']);
 
 // ── Typed config interface ──
 
@@ -645,9 +645,13 @@ export function loadConfig(): NanoConfig {
     systemPrompt = convertSystemPromptConfig(yamlData.system_prompt);
   }
 
-  // 只取合并系统认识的三个字段，新加 YAML 字段无需修改此处
+  // 项目 YAML 的 env 段也需要写入 process.env（全局 env 已在 applyYAMLEnv 处理）
+  const projectData = loadProjectYAMLConfig();
+  applyYAMLEnv(projectData);
+
+  // 只取合并系统认识的几个字段，新加 YAML 字段无需修改此处
   const yamlMerge = yamlData ? pickMergeKeys(yamlData) : null;
-  const result = mergeConfigs(yamlMerge, loadProjectYAMLConfig());
+  const result = mergeConfigs(yamlMerge, projectData);
   result.systemPlugins = systemPlugins;
   result.systemPrompt = systemPrompt;
   return result;

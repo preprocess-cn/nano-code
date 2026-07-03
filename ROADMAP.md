@@ -46,6 +46,7 @@
 | ✅ | **`plugin uninstall`** | 卸载插件，从所有域（项目/全局）的 `config.plugins` + `.mcp.json` 中移除，支持 `--scope` |
 | ✅ | **轻量权限系统** | PluginRegistry allowlist + agent 层 permission gate + fs/command 加固，Ink 权限弹窗三选项（批准/始终允许/拒绝），`/permissions` 查看/管理已允许工具 |
 | ✅ | **交互式 `/plugin` 命令** | 会话中通过 `/plugin list/enable/disable/manage` 管理插件；Ink 下进入全屏交互式插件管理器，`↑↓`/`Enter`/`/` 搜索/Esc 退出；REPL 回退文本列表 |
+| ✅ | **Model Registry 插件** | 声明多个 LLM 模型，`/model` 命令 + Ink 交互式选择器 + `--model` CLI 启动切换，`$ENV_VAR` 加密钥隐藏 |
 | ☐ | 插件热加载 | 运行时开关插件无需重启 |
 | ✅ | 上下文裁剪与压缩 | `/compact` 内建命令 + 基于 LLM 摘要的智能压缩，保留最近对话、移植 Claude Code 9 段总结模板 |
 | ✅ | 后台 agent 执行 | `agent-<name>({ query, run_in_background: true })` 异步执行，主 agent 立即返回 `taskId`，完成后自动注入结果；可同时启动多个后台 agent |
@@ -125,7 +126,7 @@
 | 2 | ☐ | 可选 Telemetry | 用户可选的匿名使用统计（启动次数、常用命令、错误率），帮助开发者诊断问题；默认关闭，首次使用询问 |
 | 3 | ☐ | 配置校验增强 | 运行时对 YAML 配置做完整 JSON Schema 校验，报错时精确定位到具体字段 |
 | 4 | ☐ | LLM 速率限制处理 | 429 响应时读取 `Retry-After` 头，智能等待而非固定指数退避 |
-| 5 | ☐ | 并发工具执行 | 多个无副作用的工具调用（如 read_file）并行执行，减少总等待时间 |
+| 5 | ✅ | 并发工具执行 | 多个无副作用的工具调用（如 read_file）并行执行，减少总等待时间 |
 
 ## 展示层插件（已实现）
 

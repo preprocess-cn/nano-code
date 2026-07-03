@@ -123,6 +123,13 @@ export interface DisplayPlugin {
    * 如果 display 不支持交互式管理（REPL），可不实现此方法。
    */
   showPluginManager?(registry: PluginRegistry): Promise<boolean>;
+
+  /**
+   * 交互式模型选择器。
+   * 显示模型列表，方向键选择 + Enter 切换。
+   * 返回 true 表示已处理，false 表示不支持。
+   */
+  showModelPicker?(registry: PluginRegistry): Promise<boolean>;
 }
 
 // ════════════════════════════════════════════
@@ -237,6 +244,20 @@ export class DisplayManager implements DisplayPlugin {
     for (const p of this.plugins) {
       if (p.showPluginManager) {
         await p.showPluginManager(registry);
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * 调用首个实现了 showModelPicker 的 display 插件打开交互式模型选择器。
+   * 返回 true 表示已处理，false 表示无 display 支持。
+   */
+  async showModelPicker(registry: PluginRegistry): Promise<boolean> {
+    for (const p of this.plugins) {
+      if (p.showModelPicker) {
+        await p.showModelPicker(registry);
         return true;
       }
     }
