@@ -11,8 +11,9 @@ import { validateSendMessageArgs } from '#src/plugins/coordinator/messaging-plug
 export function createAgentCoordinatorPlugin(
   llmClient: LLMClient,
   displayMgr?: DisplayManager,
+  agentDir?: string,
 ): NanoPlugin {
-  const defs = loadAgentDefinitions().filter((d) => d.enabled !== false);
+  const defs = loadAgentDefinitions(agentDir).filter((d) => d.enabled !== false);
 
   return {
     name: 'agent-coordinator',

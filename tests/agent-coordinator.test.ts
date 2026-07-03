@@ -1,5 +1,8 @@
 import { describe, it, afterEach, beforeEach } from 'node:test';
 import * as assert from 'node:assert/strict';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
 import { createAgentCoordinatorPlugin } from '../src/plugins/coordinator/coordinator.js';
 import { BackgroundTaskManager } from '../src/plugins/coordinator/task-manager.js';
 import { MessageBus } from '../src/plugins/coordinator/message-bus.js';
@@ -13,14 +16,28 @@ function mockLLMClient() {
   } as unknown as LLMClient;
 }
 
+function createTempAgentDir(): string {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nano-agent-test-'));
+  const yaml = [
+    'name: dba',
+    'description: Database admin agent',
+    'role: You are a DBA.',
+  ].join('\n') + '\n';
+  fs.writeFileSync(path.join(dir, 'dba.yaml'), yaml, 'utf-8');
+  return dir;
+}
+
 describe('AgentCoordinator', () => {
+  let agentDir: string;
+
   beforeEach(() => {
-    // Use a temp agent directory to avoid loading real agent definitions
+    agentDir = createTempAgentDir();
   });
 
   afterEach(() => {
     BackgroundTaskManager.resetInstance();
     MessageBus.resetInstance();
+    try { fs.rmSync(agentDir, { recursive: true, force: true }); } catch {}
   });
 
   it('provides agent_task_status tool', () => {
@@ -75,7 +92,7 @@ describe('AgentCoordinator', () => {
   });
 
   it('onSystemPrompt adds agent section when no header exists', () => {
-    const plugin = createAgentCoordinatorPlugin(mockLLMClient());
+    const plugin = createAgentCoordinatorPlugin(mockLLMClient(), undefined, agentDir);
     const result = plugin.onSystemPrompt!('You are a helpful assistant.');
     assert.ok(result.includes('## Specialist Agents'));
     assert.ok(result.includes('agent-'));
@@ -98,7 +115,7 @@ describe('AgentCoordinator', () => {
   });
 
   it('onSystemPrompt does not produce duplicate headers on multiple calls', () => {
-    const plugin = createAgentCoordinatorPlugin(mockLLMClient());
+    const plugin = createAgentCoordinatorPlugin(mockLLMClient(), undefined, agentDir);
     // Each call is independent — no accumulation across calls
     const first = plugin.onSystemPrompt!('Base prompt.');
     const second = plugin.onSystemPrompt!('Base prompt.');
@@ -121,7 +138,7 @@ describe('AgentCoordinator', () => {
   });
 
   it('onSystemPrompt includes all subsections when agents exist', () => {
-    const plugin = createAgentCoordinatorPlugin(mockLLMClient());
+    const plugin = createAgentCoordinatorPlugin(mockLLMClient(), undefined, agentDir);
     const result = plugin.onSystemPrompt!('Base prompt.');
 
     if (result.includes('## Specialist Agents')) {

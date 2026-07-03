@@ -358,6 +358,12 @@ describe('buildSystemPrompt with skill listing', () => {
       disableModelInvocation: true,
       getPrompt: async () => '',
     });
+    // Register a visible skill so the prompt section is non-empty
+    bundled.registerBundledSkill({
+      name: 'visible-skill',
+      description: 'Visible',
+      getPrompt: async () => '',
+    });
 
     const { buildSystemPrompt } = await import('../src/core/prompt.js');
     const { PluginRegistry } = await import('../src/core/plugin.js');
@@ -367,6 +373,7 @@ describe('buildSystemPrompt with skill listing', () => {
 
     const result = buildSystemPrompt(registry, undefined);
     assert.ok(result.content);
+    assert.ok(result.content!.includes('visible-skill'));
     assert.ok(!result.content!.includes('hidden-skill'));
   });
 
@@ -398,12 +405,15 @@ describe('buildSystemPrompt with skill listing', () => {
     assert.strictEqual(betaMatches?.length ?? 0, 1);
   });
 
-  it('returns empty section when no skills registered', async () => {
+  it('returns base prompt when no skills registered', async () => {
     const { buildSystemPrompt } = await import('../src/core/prompt.js');
     const { PluginRegistry } = await import('../src/core/plugin.js');
     const registry = new PluginRegistry();
 
-    const result = buildSystemPrompt(registry, undefined);
+    const result = buildSystemPrompt(registry, {
+      noTools: 'You are a helpful assistant.',
+    });
     assert.ok(result.content);
+    assert.ok(result.content!.includes('helpful assistant'));
   });
 });
