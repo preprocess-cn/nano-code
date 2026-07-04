@@ -141,6 +141,7 @@
 | **斜杠命令建议弹出**（`/` 开头弹出技能列表 + 实时过滤 + Tab 补全） | ✅ 已实现 |
 | **输入框模式变色**（`!` → 粉框 / `/` → 紫框） | ✅ 已实现 |
 | **Plan Mode 状态指示器**（底栏 plan badge + 任务数量） | ✅ 已实现 |
+| **Display 事件携带 tool_call_id**（onToolCall/onToolResult 含 id 字段，便于前后端事件关联） | ✅ 已实现 |
 | **极简模式**（`readline` 裸输入） | ☐ 未实现 |
 | **CLI one-shot 模式**（stdin/stdout 管道，cli-display 插件就绪） | ☐ 待接入 |
 | **Web UI**（HTTP/WebSocket） | ☐ 未实现 |

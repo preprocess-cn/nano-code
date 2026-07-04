@@ -184,6 +184,162 @@ describe('NanoCodeAgent — lifecycle hooks', () => {
 
 });
 
+function toolCallingMock(toolCallId: string, toolName: string, args: string) {
+  let callCount = 0;
+  return {
+    sendSystemMessage: async () => {
+      callCount++;
+      if (callCount === 1) {
+        return {
+          text: null,
+          toolCalls: [{ id: toolCallId, type: 'function', function: { name: toolName, arguments: args } }],
+          stopReason: 'tool_use',
+        };
+      }
+      return { text: 'done', stopReason: 'stop' };
+    },
+    getModel: () => 'gpt-4o',
+  };
+}
+
+describe('NanoCodeAgent — display events carry tool_call_id', () => {
+
+  it('onToolCall / onToolResult 都携带正确的 id', async () => {
+    const calls: any[] = [];
+    const results: any[] = [];
+    const display = {
+      onAgentTurnStart() {},
+      onAgentTurnEnd() {},
+      onStateSnapshot() {},
+      onStatus() {},
+      onStreamChunk() {},
+      onError() {},
+      onToolCall(e: any) { calls.push(e); },
+      onToolResult(e: any) { results.push(e); },
+    };
+
+    const registry = new PluginRegistry();
+    registry.register({
+      name: 'test',
+      getTools: () => [{
+        type: 'function',
+        function: { name: 'echo', description: 'echo', parameters: { type: 'object', properties: {} } },
+      }],
+      execute: async () => ({ status: 'success' as const, data: 'ok' }),
+    });
+
+    const agent = new NanoCodeAgent({
+      registry,
+      llmClient: toolCallingMock('call_dsp_001', 'echo', '{"x":1}') as any,
+      display: display as any,
+    });
+    await agent.runTask('run echo');
+
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].id, 'call_dsp_001');
+    assert.equal(calls[0].toolName, 'echo');
+
+    assert.equal(results.length, 1);
+    assert.equal(results[0].id, 'call_dsp_001');
+    assert.equal(results[0].status, 'success');
+  });
+
+  it('工具执行失败时 onToolResult 仍携带 id', async () => {
+    const results: any[] = [];
+    const display = {
+      onAgentTurnStart() {},
+      onAgentTurnEnd() {},
+      onStateSnapshot() {},
+      onStatus() {},
+      onStreamChunk() {},
+      onError() {},
+      onToolCall() {},
+      onToolResult(e: any) { results.push(e); },
+    };
+
+    const registry = new PluginRegistry();
+    registry.register({
+      name: 'fail',
+      getTools: () => [{
+        type: 'function',
+        function: { name: 'crash', description: 'crash', parameters: { type: 'object', properties: {} } },
+      }],
+      execute: async () => { throw new Error('boom'); },
+    });
+
+    const agent = new NanoCodeAgent({
+      registry,
+      llmClient: toolCallingMock('call_dsp_002', 'crash', '{}') as any,
+      display: display as any,
+    });
+    await agent.runTask('run crash');
+
+    assert.equal(results.length, 1);
+    assert.equal(results[0].id, 'call_dsp_002');
+    assert.equal(results[0].status, 'error');
+  });
+
+  it('用户拒绝时 onToolResult 仍携带 id', async () => {
+    const results: any[] = [];
+    const display = {
+      onAgentTurnStart() {},
+      onAgentTurnEnd() {},
+      onStateSnapshot() {},
+      onStatus() {},
+      onStreamChunk() {},
+      onError() {},
+      onToolCall() {},
+      onToolResult(e: any) { results.push(e); },
+    };
+
+    const registry = new PluginRegistry();
+    registry.setConfirmCallback(async () => false);
+    registry.register({
+      name: 'reject',
+      getTools: () => [{
+        type: 'function',
+        function: { name: 'side_effect_tool', description: 'test', parameters: { type: 'object', properties: {} } },
+      }],
+      execute: async () => ({ status: 'success' as const, data: 'should not reach' }),
+    });
+
+    const agent = new NanoCodeAgent({
+      registry,
+      llmClient: toolCallingMock('call_dsp_reject', 'side_effect_tool', '{}') as any,
+      display: display as any,
+    });
+    await agent.runTask('run tool');
+
+    assert.equal(results.length, 1);
+    assert.equal(results[0].id, 'call_dsp_reject');
+    assert.equal(results[0].status, 'rejected_by_user');
+  });
+
+  it('LLM 历史消息包含 tool_call_id', async () => {
+    const registry = new PluginRegistry();
+    registry.register({
+      name: 'test',
+      getTools: () => [{
+        type: 'function',
+        function: { name: 'echo', description: 'echo', parameters: { type: 'object', properties: {} } },
+      }],
+      execute: async () => ({ status: 'success' as const, data: 'ok' }),
+    });
+
+    const agent = new NanoCodeAgent({
+      registry,
+      llmClient: toolCallingMock('call_dsp_003', 'echo', '{}') as any,
+    });
+    await agent.runTask('echo');
+
+    const history = agent.getHistory();
+    const toolMsg = history.find(m => m.role === 'tool');
+    assert.ok(toolMsg, '应有 tool role 的消息');
+    assert.equal(toolMsg!.tool_call_id, 'call_dsp_003');
+  });
+
+});
+
 describe('NanoCodeAgent — malformed tool call JSON', () => {
 
   it('returns error to LLM when tool arguments are invalid JSON', async () => {

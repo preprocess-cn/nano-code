@@ -110,8 +110,8 @@ export function isMainAgent(agentName: string): boolean {
 export interface AgentDisplay {
   onStatus?(event: { message: string; agentName: string; level: string }): void;
   onStreamChunk?(event: { text: string; agentName: string }): void;
-  onToolCall?(event: { toolName: string; args: any; agentName: string }): void;
-  onToolResult?(event: { status: ToolStatus; message?: string; agentName: string }): void;
+  onToolCall?(event: { id?: string; toolName: string; args: any; agentName: string }): void;
+  onToolResult?(event: { id?: string; status: ToolStatus; message?: string; agentName: string }): void;
   onStateSnapshot?(snapshot: { agentName: string; messageCount: number }): void;
   onAgentTurnStart?(event: { agentName: string }): void;
   onAgentTurnEnd?(event: { agentName: string }): void;

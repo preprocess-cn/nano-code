@@ -38,11 +38,13 @@ export interface StreamEvent extends AgentEvent {
 }
 
 export interface ToolCallEvent extends AgentEvent {
+  id?: string;
   toolName: string;
   args: any;
 }
 
 export interface ToolResultEvent extends AgentEvent {
+  id?: string;
   status: ToolStatus;
   message?: string;
 }

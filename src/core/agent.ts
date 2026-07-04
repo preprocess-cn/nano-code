@@ -248,7 +248,7 @@ export class NanoCodeAgent {
     // ── 先展示工具调用信息，再检查权限 ──
     // 顺序：onToolCall → permission gate → execute
     // 用户拒绝时也会显示被拒绝的工具调用及结果
-    this.display?.onToolCall?.({ toolName, args: toolArgs, agentName: this.name });
+    this.display?.onToolCall?.({ id: rawToolCall.id, toolName, args: toolArgs, agentName: this.name });
 
     // ── Permission gate ──
     // sideEffect=true 且不在 allowlist 中的工具需要用户确认
@@ -268,9 +268,9 @@ export class NanoCodeAgent {
         } else if (response) {
           agentConfirmed = true;
         } else {
-          this.display?.onToolResult?.({ status: 'rejected_by_user', message: '用户拒绝', agentName: this.name });
+          this.display?.onToolResult?.({ id: rawToolCall.id, status: 'rejected_by_user', message: '用户拒绝', agentName: this.name });
           toolMessages.push({
-            role: 'tool', tool_call_id: toolCall.id, name: toolName,
+            role: 'tool', tool_call_id: rawToolCall.id, name: toolName,
             content: JSON.stringify({ status: 'rejected_by_user', message: '用户拒绝工具调用' }),
           });
           return { status: 'rejected', toolMessages };
@@ -295,7 +295,7 @@ export class NanoCodeAgent {
       }
     }
 
-    this.display?.onToolResult?.({ status: toolResult.status, message: toolResult.message, agentName: this.name });
+    this.display?.onToolResult?.({ id: rawToolCall.id, status: toolResult.status, message: toolResult.message, agentName: this.name });
 
     toolMessages.push({
       role: 'tool', tool_call_id: rawToolCall.id, name: toolName,
