@@ -113,17 +113,129 @@ describe('Bundled Skills Registry', () => {
     assert.ok(section.includes('use it'));
   });
 
-  it('registerAllDefaultBundledSkills registers all 11 skills', () => {
+  it('registerAllDefaultBundledSkills registers all 13 skills', () => {
     registry.clearBundledSkills();
     registry.registerAllDefaultBundledSkills();
     const all = registry.getBundledSkills();
-    assert.equal(all.length, 11);
+    assert.equal(all.length, 13);
     const names = all.map(s => s.name).sort();
     assert.deepEqual(names, [
-      'batch', 'debug', 'keybindings', 'lorem-ipsum',
-      'remember', 'review', 'simplify', 'skillify', 'stuck',
-      'update-config', 'verify',
+      'batch', 'commit', 'commit-pr', 'debug', 'keybindings',
+      'lorem-ipsum', 'remember', 'review', 'simplify', 'skillify',
+      'stuck', 'update-config', 'verify',
     ]);
+  });
+});
+
+// ── Commit / Commit-PR skill prompt tests ──
+
+describe('Commit Skill', () => {
+  let bundled: typeof import('../src/plugins/skills/bundled/index.js');
+
+  beforeEach(async () => {
+    bundled = await import('../src/plugins/skills/bundled/index.js');
+    bundled.clearBundledSkills();
+    bundled.registerAllDefaultBundledSkills();
+  });
+
+  it('prompt contains nano-code attribution with model name', async () => {
+    const skill = bundled.findBundledSkill('commit')!;
+    const prompt = await skill.getPrompt('', { cwd: '/tmp', modelName: 'deepseek-v4-flash' });
+    assert.ok(prompt.includes('nano-code(deepseek-v4-flash)'));
+  });
+
+  it('prompt contains HEREDOC syntax for safe commit message', async () => {
+    const skill = bundled.findBundledSkill('commit')!;
+    const prompt = await skill.getPrompt('', { cwd: '/tmp', modelName: 'test' });
+    assert.ok(prompt.includes("<<'EOF'"));
+    assert.ok(prompt.includes('EOF'));
+  });
+
+  it('prompt contains git steps and safety rules', async () => {
+    const skill = bundled.findBundledSkill('commit')!;
+    const prompt = await skill.getPrompt('', { cwd: '/tmp', modelName: 'test' });
+    assert.ok(prompt.includes('git status'));
+    assert.ok(prompt.includes('git diff'));
+    assert.ok(prompt.includes('git commit'));
+    assert.ok(prompt.includes('--amend'));
+    assert.ok(prompt.includes('--no-verify'));
+  });
+
+  it('prompt interpolates user args when provided', async () => {
+    const skill = bundled.findBundledSkill('commit')!;
+    const prompt = await skill.getPrompt('fix: resolve login timeout', { cwd: '/tmp', modelName: 'test' });
+    assert.ok(prompt.includes('fix: resolve login timeout'));
+  });
+
+  it('prompt uses unknown when no modelName provided', async () => {
+    const skill = bundled.findBundledSkill('commit')!;
+    const prompt = await skill.getPrompt('', { cwd: '/tmp' });
+    assert.ok(prompt.includes('nano-code(unknown)'));
+  });
+
+  it('is user-invocable and listed in system prompt', () => {
+    const skill = bundled.findBundledSkill('commit')!;
+    assert.equal(skill.disableModelInvocation, undefined);
+    const sysSkills = bundled.getSystemPromptSkills();
+    assert.ok(sysSkills.some(s => s.name === 'commit'));
+  });
+});
+
+describe('Commit-PR Skill', () => {
+  let bundled: typeof import('../src/plugins/skills/bundled/index.js');
+
+  beforeEach(async () => {
+    bundled = await import('../src/plugins/skills/bundled/index.js');
+    bundled.clearBundledSkills();
+    bundled.registerAllDefaultBundledSkills();
+  });
+
+  it('prompt contains nano-code attribution with model name', async () => {
+    const skill = bundled.findBundledSkill('commit-pr')!;
+    const prompt = await skill.getPrompt('', { cwd: '/tmp', modelName: 'gpt-4o' });
+    assert.ok(prompt.includes('nano-code(gpt-4o)'));
+  });
+
+  it('prompt contains push and PR creation steps', async () => {
+    const skill = bundled.findBundledSkill('commit-pr')!;
+    const prompt = await skill.getPrompt('', { cwd: '/tmp', modelName: 'test' });
+    assert.ok(prompt.includes('git push'));
+    assert.ok(prompt.includes('gh pr create'));
+    assert.ok(prompt.includes('git status'));
+    assert.ok(prompt.includes('git diff'));
+  });
+
+  it('prompt contains safety rules including force push ban', async () => {
+    const skill = bundled.findBundledSkill('commit-pr')!;
+    const prompt = await skill.getPrompt('', { cwd: '/tmp', modelName: 'test' });
+    assert.ok(prompt.includes('git push --force'));
+    assert.ok(prompt.includes('--amend'));
+    assert.ok(prompt.includes('--no-verify'));
+  });
+
+  it('prompt interpolates user args', async () => {
+    const skill = bundled.findBundledSkill('commit-pr')!;
+    const prompt = await skill.getPrompt('feat: add user dashboard', { cwd: '/tmp', modelName: 'test' });
+    assert.ok(prompt.includes('feat: add user dashboard'));
+  });
+
+  it('has alias commitpr', () => {
+    const skill = bundled.findBundledSkill('commit-pr')!;
+    assert.ok(skill.aliases);
+    assert.ok(skill.aliases!.includes('commitpr'));
+  });
+
+  it('can be found by alias commitpr', () => {
+    const byAlias = bundled.findBundledSkill('commitpr');
+    assert.ok(byAlias);
+    assert.equal(byAlias!.name, 'commit-pr');
+  });
+
+  it('is user-invocable and listed in system prompt', () => {
+    const skill = bundled.findBundledSkill('commit-pr')!;
+    assert.equal(skill.disableModelInvocation, undefined);
+    const sysSkills = bundled.getSystemPromptSkills();
+    assert.ok(sysSkills.some(s => s.name === 'commit-pr'));
   });
 });
 
@@ -169,6 +281,8 @@ describe('Skills Plugin with Bundled Skills', () => {
     const bundledNames = data.skills.map((s: any) => s.name);
     assert.ok(bundledNames.includes('simplify'));
     assert.ok(bundledNames.includes('verify'));
+    assert.ok(bundledNames.includes('commit'));
+    assert.ok(bundledNames.includes('commit-pr'));
     assert.ok(bundledNames.includes('update-config'));
     assert.ok(bundledNames.includes('remember'));
     assert.ok(bundledNames.includes('keybindings'));

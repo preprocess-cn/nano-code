@@ -257,6 +257,7 @@ async function handleSkillExecute(
     const argsStr = typeof args?.args === 'string' ? args.args : '';
     const prompt = await bundledSkill.getPrompt(argsStr, {
       cwd: process.cwd(),
+      modelName: llmClient?.getModel(),
     });
     return {
       status: 'success',

@@ -58,10 +58,10 @@
 | ✅ | **Ink 上下文可视化** | `InkApp.tsx` 内联 `ContextVis` 组件渲染色块网格，数据源为 `analyzer.ts` 的 8 维度分析 |
 | ✅ | 多轮摘要记忆 | 自动压缩默认启用（`autoCompactEnabled: true`），触发策略改为基于当前消息大小 + slide window 多次压缩，压缩前全量备份至 `.nano-code-session.pre-compact.json` |
 | ✅ | 角色模式 & 斜杠命令 | profiles/ 通过 `--profile` 启动时加载，主 agent 可通过斜杠 `/` 切换 agent；profile 运行时切换暂不支持 |
-| ✅ | 内置 Skill 系统 | 11 个对齐 Claude Code 的内置技能：simplify/verify/batch/debug/lorem-ipsum/update-config/remember/stuck/skillify/keybindings/review |
+| ✅ | 内置 Skill 系统 | 13 个对齐 Claude Code 的内置技能：simplify/verify/batch/debug/lorem-ipsum/update-config/remember/stuck/skillify/keybindings/review/commit/commit-pr |
 | ☐ | ToolUseContext | 工具执行的共享运行时上下文（模型覆盖、effort、权限绑定等），贯穿 ReAct 循环 |
 | ☐ | contextModifier | 工具可通过 ToolResponse 返回上下文修改器，作用于后续工具调用的执行环境 |
-| ✅ | Skill 系统 | 11 个内置 TypeScript 技能（bundled），skills_list / skill_view / skill 工具，inline（newMessages 注入）+ fork（子 agent）双模式，skills 配置禁用开关 |
+| ✅ | Skill 系统 | 13 个内置 TypeScript 技能（bundled），skills_list / skill_view / skill 工具，inline（newMessages 注入）+ fork（子 agent）双模式，skills 配置禁用开关 |
 
 ## P0 — 搜索与审查
 

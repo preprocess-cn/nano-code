@@ -15,6 +15,8 @@ import type { PluginRegistry } from '#src/core/plugin.js';
 export interface BundledSkillContext {
   cwd: string;
   registry?: PluginRegistry;
+  /** 当前使用的模型名称（如 "gpt-4o"），用于 commit 归属签名 */
+  modelName?: string;
 }
 
 export interface BundledSkillDef {
@@ -51,7 +53,13 @@ export function getBundledSkills(): BundledSkillDef[] {
 }
 
 export function findBundledSkill(name: string): BundledSkillDef | undefined {
-  return _registry.get(name);
+  const direct = _registry.get(name);
+  if (direct) return direct;
+  // Fallback: check aliases
+  for (const def of _registry.values()) {
+    if (def.aliases?.includes(name)) return def;
+  }
+  return undefined;
 }
 
 /**
@@ -80,6 +88,8 @@ import { createStuckSkill } from '#src/plugins/skills/bundled/stuck.js';
 import { createSkillifySkill } from '#src/plugins/skills/bundled/skillify.js';
 import { createKeybindingsSkill } from '#src/plugins/skills/bundled/keybindings.js';
 import { createReviewSkill } from '#src/plugins/skills/bundled/review.js';
+import { createCommitSkill } from '#src/plugins/skills/bundled/commit.js';
+import { createCommitPrSkill } from '#src/plugins/skills/bundled/commit-pr.js';
 
 export function registerAllDefaultBundledSkills(): void {
   // Phase 2 — Tier 1
@@ -89,6 +99,8 @@ export function registerAllDefaultBundledSkills(): void {
   // Phase 3 — Tier 2
   registerBundledSkill(createDebugSkill());
   registerBundledSkill(createReviewSkill());
+  registerBundledSkill(createCommitSkill());
+  registerBundledSkill(createCommitPrSkill());
   registerBundledSkill(createBatchSkill());
   registerBundledSkill(createUpdateConfigSkill());
   registerBundledSkill(createRememberSkill());
