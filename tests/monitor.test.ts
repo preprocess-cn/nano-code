@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import * as assert from 'node:assert/strict';
-import { monitorPlugin, userConfirmation } from '../src/plugins/tools/monitor.js';
+import { monitorPlugin } from '../src/plugins/tools/monitor.js';
 
 /**
  * Helper: execute monitor tool with given args.

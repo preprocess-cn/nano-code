@@ -1,35 +1,12 @@
 import { spawn } from 'child_process';
-import { confirm } from '@clack/prompts';
 import { NanoPlugin } from '#src/core/plugin.js';
 import { ToolDefinition, ToolResponse, ToolContext } from '#src/core/contract.js';
-
-/**
- * [LOCK] 危险命令黑名单 — 与 command.ts 同步
- */
-const DANGEROUS_COMMAND_BLACKLIST = [
-  /\brm\s+-[rfvIS]*[rf][rfvIS]*\s+([\/\.\*~]|\w+)/i,
-  /\b(mkfs(\..*)?|dd|fdisk|parted)\b/i,
-  /\b(shutdown|reboot|poweroff|init\s+[06])\b/i,
-  /:\s*\(\s*\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;\s*:/,
-  /\b(nc|netcat|bash\s+-i|sh\s+-i)\b.*\b(exec|tcp|udp)\b/i,
-  /\b(passwd|userdel|groupdel|chsh)\b/i,
-];
+import { DANGEROUS_COMMAND_BLACKLIST, userConfirmation } from '#src/plugins/tools/command.js';
 
 const DEFAULT_TIMEOUT = 120_000;
 const MAX_TIMEOUT = 600_000;
 const LOG_LIMIT = 4000;
 
-const userConfirmation = {
-  async ask(query: string): Promise<boolean> {
-    const result = await confirm({
-      message: query,
-      initialValue: true,
-    });
-    return typeof result === 'symbol' ? false : result;
-  },
-};
-
-export { userConfirmation };
 
 export const monitorPlugin: NanoPlugin = {
   name: 'monitor',
@@ -91,23 +68,13 @@ export const monitorPlugin: NanoPlugin = {
         };
       }
 
-      if (!ctx.skipPermission && ctx.sideEffect) {
-        const confirmed = ctx.confirmCallback
-          ? await ctx.confirmCallback({ toolName: 'monitor', message: '是否批准执行此监控命令？', details: args.command })
-          : await userConfirmation.ask('[?] 是否批准执行此监控命令？');
-
-        if (!confirmed) {
-          return { status: 'rejected_by_user', message: '用户已拒绝执行。' };
-        }
-      }
-
       const pattern = args.pattern ? String(args.pattern) : undefined;
       const timeoutMs = Math.min(args.timeout ?? DEFAULT_TIMEOUT, MAX_TIMEOUT);
       const out = ctx.outputHandler;
 
       if (out) out.stdout(`>> 正在执行: ${trimmedCmd}\n`);
 
-      return await new Promise<ToolResponse>((resolve) => {
+      return await new Promise<ToolResponse>((resolve, reject) => {
         const child = spawn(trimmedCmd, {
           shell: true,
           cwd: process.cwd(),
@@ -135,11 +102,19 @@ export const monitorPlugin: NanoPlugin = {
         };
 
         const appendOutput = (chunk: Buffer | string): void => {
-          const text = typeof chunk === 'string' ? chunk : chunk.toString('utf-8');
-          output += text;
-          if (out) out.stdout(text);
-          tryMatch(text);
-          if (matched) finish('match');
+          try {
+            const text = typeof chunk === 'string' ? chunk : chunk.toString('utf-8');
+            output += text;
+            if (out) out.stdout(text);
+            tryMatch(text);
+            if (matched) finish('match');
+          } catch (err: unknown) {
+            if (!finished) {
+              finished = true;
+              clearTimeout(timer);
+              resolve({ status: 'error', message: `monitor 处理输出异常: ${err instanceof Error ? err.message : String(err)}` });
+            }
+          }
         };
 
         child.stdout.on('data', appendOutput);
@@ -162,13 +137,6 @@ export const monitorPlugin: NanoPlugin = {
             output = `${head}\n\n... [输出过长 (${output.length} 字符)，已截断] ...\n\n${tail}`;
           }
 
-          let summary = '';
-          if (reason === 'match') {
-            summary = `[matched] 检测到匹配行: "${matchedLine}"\n\n`;
-          } else if (reason === 'timeout') {
-            summary = `[timeout] 监控超时 (${timeoutMs}ms)\n\n`;
-          }
-
           resolve({
             status: 'success',
             message: output || '命令无输出。',
@@ -189,6 +157,7 @@ export const monitorPlugin: NanoPlugin = {
             resolve({ status: 'error', message: `进程启动失败: ${err.message}` });
           }
         });
+
       });
     } catch (err: any) {
       return { status: 'error', message: `monitor 执行失败: ${err.message}` };

@@ -6,7 +6,7 @@ import { ToolDefinition, ToolResponse, ToolContext } from '#src/core/contract.js
 /**
  * [LOCK] 危险命令黑名单模式列表
  */
-const DANGEROUS_COMMAND_BLACKLIST = [
+export const DANGEROUS_COMMAND_BLACKLIST = [
   /\brm\s+-[rfvIS]*[rf][rfvIS]*\s+([\/\.\*~]|\w+)/i,  // 毁灭性删除 (rm -rf /, rm -rf *)
   /\b(mkfs(\..*)?|dd|fdisk|parted)\b/i,               // 磁盘物理破坏 (dd, mkfs)
   /\b(shutdown|reboot|poweroff|init\s+[06])\b/i,      // 系统关机重启

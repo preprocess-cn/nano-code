@@ -2,18 +2,7 @@ import { spawn } from 'child_process';
 import { NanoPlugin } from '#src/core/plugin.js';
 import { CommandInterceptResult } from '#src/core/contract.js';
 import { DisplayManager } from '#src/display.js';
-
-/**
- * 危险命令黑名单（复用 command.ts 中的模式）
- */
-const DANGEROUS_COMMAND_BLACKLIST = [
-  /\brm\s+-[rfvIS]*[rf][rfvIS]*\s+([\/\.\*~]|\w+)/i,
-  /\b(mkfs(\..*)?|dd|fdisk|parted)\b/i,
-  /\b(shutdown|reboot|poweroff|init\s+[06])\b/i,
-  /:\s*\(\s*\)\s*\{\s*:\s*\|\s*:\s*&\s*\}\s*;\s*:/,
-  /\b(nc|netcat|bash\s+-i|sh\s+-i)\b.*\b(exec|tcp|udp)\b/i,
-  /\b(passwd|userdel|groupdel|chsh)\b/i,
-];
+import { DANGEROUS_COMMAND_BLACKLIST } from '#src/plugins/tools/command.js';
 
 const LOG_LIMIT = 4000;
 

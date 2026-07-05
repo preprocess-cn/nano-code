@@ -75,6 +75,12 @@ export class NanoCodeAgent {
     }
   }
 
+  /** 通知 display 层当前 turn 已结束 */
+  private endTurn(): void {
+    this.display?.onStatus?.({ message: 'end', agentName: this.name, level: 'status' });
+    this.display?.onAgentTurnEnd?.({ agentName: this.name });
+  }
+
   async runTask(userPrompt: string): Promise<string | undefined> {
     this.display?.onAgentTurnStart?.({ agentName: this.name });
 
@@ -94,7 +100,7 @@ export class NanoCodeAgent {
 
     while (true) {
       if (this.registry.store.get(SK.AgentCancelled)) {
-        this.display?.onStatus?.({ message: 'end', agentName: this.name, level: 'status' });
+        this.endTurn();
         this.registry.store.set(SK.AgentCancelled, undefined);
         break;
       }
@@ -134,8 +140,7 @@ export class NanoCodeAgent {
       } catch (err: any) {
         if (err?.name === 'AbortError' || err?.message === 'CANCELLED' || isCancelled()) {
           this.registry.store.set(SK.AgentAbort, undefined);
-          this.display?.onStatus?.({ message: 'end', agentName: this.name, level: 'status' });
-          this.display?.onAgentTurnEnd?.({ agentName: this.name });
+          this.endTurn();
           break;
         }
         throw err;
@@ -144,8 +149,7 @@ export class NanoCodeAgent {
       this.registry.store.set(SK.AgentAbort, undefined);
 
       if (isCancelled()) {
-        this.display?.onStatus?.({ message: 'end', agentName: this.name, level: 'status' });
-        this.display?.onAgentTurnEnd?.({ agentName: this.name });
+        this.endTurn();
         break;
       }
 
@@ -166,9 +170,8 @@ export class NanoCodeAgent {
       this.messageHistory.push(assistantMessage);
 
       if (response.stopReason !== 'tool_use' || !response.toolCalls) {
-        this.display?.onStatus?.({ message: 'end', agentName: this.name, level: 'status' });
         this.display?.onStateSnapshot?.({ agentName: this.name, messageCount: this.messageHistory.length });
-        this.display?.onAgentTurnEnd?.({ agentName: this.name });
+        this.endTurn();
         break;
       }
 
@@ -185,10 +188,12 @@ export class NanoCodeAgent {
         const results = await Promise.all(
           readOnlyCalls.map(tc => this.executeToolCall(tc))
         );
+        let anyRejected = false;
         for (const r of results) {
           for (const msg of r.toolMessages) this.messageHistory.push(msg);
-          if (r.status === 'rejected') break;
+          if (r.status === 'rejected') anyRejected = true;
         }
+        if (anyRejected) break;
       }
 
       for (const rawToolCall of writeCalls) {
