@@ -86,6 +86,16 @@
 
 ---
 
+## P0 — 高频命令与监控
+
+| 状态 | 功能 | 说明 |
+|------|------|------|
+| ✅ | `/diff` / `/status` 命令 | 查看 git diff 和变更状态，支持 `--staged`、`--stat` 等原生 git 参数 |
+| ✅ | Monitor 工具 | 实时监控进程输出/日志文件事件流，覆盖「等 build 完成」「监视错误日志」场景 |
+| ☐ | Agent 工具增强 | run_agent 升级为一级工具，支持 structured_output schema、isolation 隔离模式、丰富 prompt 描述 |
+
+---
+
 # 生产级就绪
 
 ## P0 — 崩溃与可靠性

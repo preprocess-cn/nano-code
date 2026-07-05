@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import * as yaml from 'js-yaml';
+import { DEFAULT_SYSTEM_PLUGINS } from '#src/core/plugin.js';
 
 const CONFIG_TOP_KEYS = new Set(['core', 'plugins', 'agent', 'display', 'configVersion', 'mcp', 'skills']);
 
@@ -100,6 +101,7 @@ system_plugins:
   - token-budget
   - skills
   - search
+  - monitor
 
 # 环境变量兜底（shell 和 .env 优先级更高）
 env:
@@ -721,7 +723,7 @@ export function getPluginConfig(
  * 返回系统插件白名单（Set）。插件在此集合中则 CLI enable/disable 拒绝操作。
  */
 export function getSystemWhitelist(config: NanoConfig): Set<string> {
-  return new Set(config.systemPlugins || []);
+  return new Set(config.systemPlugins ?? DEFAULT_SYSTEM_PLUGINS);
 }
 
 /** @internal exported for testing */

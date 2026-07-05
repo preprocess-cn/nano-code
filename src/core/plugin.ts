@@ -374,10 +374,27 @@ const BUILTIN_LOADERS: Record<string, (settings?: Record<string, any>) => Promis
   search: async () => (await import('#src/plugins/tools/search.js')).searchPlugin,
   web: async () => (await import('#src/plugins/tools/web.js')).webPlugin,
   'model-registry': async (s) => (await import('#src/plugins/model-registry/index.js')).createModelRegistryPlugin(s || {}),
+  monitor: async () => (await import('#src/plugins/tools/monitor.js')).monitorPlugin,
 };
 
 /**
- * 按内置名注册一个插件。处理 fs / command / memory / token-budget / skills / search。
+ * 系统插件默认列表 — 自动注册且受保护（CLI enable/disable 不可操作）。
+ * 用户可在 YAML 配置中通过 system_plugins 覆盖此列表。
+ * 新增内置工具时：在此列表加一行即可（无需修改 config.ts）。
+ */
+export const DEFAULT_SYSTEM_PLUGINS: readonly string[] = [
+  'fs',
+  'command',
+  'memory',
+  'token-budget',
+  'skills',
+  'search',
+  'monitor',
+];
+
+/**
+ * 按内置名注册一个插件。
+ * 新增内置工具：在 BUILTIN_LOADERS + DEFAULT_SYSTEM_PLUGINS 各加一行即可。
  * @returns true 表示已注册，false 表示名称未识别（调用方应忽略或警告）。
  */
 export async function registerBuiltinPlugin(

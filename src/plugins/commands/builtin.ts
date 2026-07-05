@@ -7,6 +7,7 @@ import { loadAllSkills } from '#src/plugins/skills/loader.js';
 import { analyzeContextUsage, type ContextAnalysis } from '#src/plugins/token-budget/analyzer.js';
 import { CompactService } from '#src/plugins/compact/service.js';
 import { saveSession } from '#src/core/session.js';
+import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import type { BuiltinCommand } from '#src/plugins/commands/types.js';
@@ -68,12 +69,49 @@ const BUILTIN_COMMANDS: BuiltinCommand[] = [
         lines.push('');
       }
 
+      lines.push('Git 命令：');
+      lines.push('  /diff [args]     查看工作区 git diff（直接透传 git diff 参数）');
+      lines.push('  /status [args]   查看工作区变更状态（直接透传 git status 参数）');
+      lines.push('');
+
       lines.push('可直接执行的 bash 命令（输入 !<命令>）：');
       lines.push('  !ls -la            直接执行 ls -la');
       lines.push('  !npm test          直接运行测试');
       lines.push('');
 
       return { handled: true, skipAgent: true, message: lines.join('\n') };
+    },
+  },
+  // ── /diff ──
+  {
+    name: 'diff',
+    description: '查看工作区 git diff — /diff [--staged] [--stat] [<path>]（直接透传参数给 git diff）',
+    handler: async (ctx?: BuiltinContext) => {
+      const args = (ctx?.args || '').trim();
+      try {
+        const output = execSync(`git diff ${args}`, { encoding: 'utf-8', cwd: process.cwd() });
+        if (!output) return { handled: true, skipAgent: true, message: '工作区干净，无未暂存的变更。' };
+        return { handled: true, skipAgent: true, message: output };
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return { handled: true, skipAgent: true, message: `git diff 执行失败: ${msg}` };
+      }
+    },
+  },
+  // ── /status ──
+  {
+    name: 'status',
+    description: '查看工作区变更状态 — /status [-b] [--long]（直接透传参数给 git status）',
+    handler: async (ctx?: BuiltinContext) => {
+      const args = (ctx?.args || '').trim();
+      const defaultArgs = args || '--short';
+      try {
+        const output = execSync(`git status ${defaultArgs}`, { encoding: 'utf-8', cwd: process.cwd() });
+        return { handled: true, skipAgent: true, message: output || '工作区干净。' };
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return { handled: true, skipAgent: true, message: `git status 执行失败: ${msg}` };
+      }
     },
   },
   {
