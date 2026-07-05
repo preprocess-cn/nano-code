@@ -90,6 +90,7 @@ import { createKeybindingsSkill } from '#src/plugins/skills/bundled/keybindings.
 import { createReviewSkill } from '#src/plugins/skills/bundled/review.js';
 import { createCommitSkill } from '#src/plugins/skills/bundled/commit.js';
 import { createCommitPrSkill } from '#src/plugins/skills/bundled/commit-pr.js';
+import { createLoopSkill } from '#src/plugins/skills/bundled/loop.js';
 
 export function registerAllDefaultBundledSkills(): void {
   // Phase 2 — Tier 1
@@ -108,6 +109,8 @@ export function registerAllDefaultBundledSkills(): void {
   // Phase 4 — Tier 3
   registerBundledSkill(createSkillifySkill());
   registerBundledSkill(createKeybindingsSkill());
+  // Phase 5 — Cron / Loop
+  registerBundledSkill(createLoopSkill());
 }
 
 /** 格式化技能描述（对齐 Claude Code formatCommandDescription） */

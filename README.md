@@ -59,6 +59,7 @@ npm start
 | `/clear` | 清除对话历史，重新开始 |
 | `/help` | 显示帮助信息 |
 | `/compact`, `/compress` | 压缩对话历史 — 摘要旧消息以节省上下文空间 |
+| `/loop [间隔] <prompt>` | 创建定时循环任务（如 `/loop 5m "检查部署"`） |
 | `/context` | 查看上下文分布及用量（8 维度 + ContextVis 色块图） |
 | `/plan` | 查看 Plan Mode 状态、当前计划内容 |
 | `/task`, `/tasks` | 查看任务列表 |
@@ -473,7 +474,8 @@ send_message({ to: "main", summary: "查询结果", message: "users 表有 3 个
 | **search** | 系统白名单自动启用 | 文件搜索（glob）+ 内容搜索（grep），支持正则和 glob 限定范围 |
 | **command** | `"command": {}` | Bash 命令执行（含危险命令黑名单 + 权限确认弹窗） |
 | **memory** | `"memory": {}` | 文件化记忆系统：MEMORY.md 索引 + topic 文件，onSystemPrompt 注入行为规则和索引，save_memory/recall_memory 工具，~/.nano-code/AGENT.md 用户全局偏好 |
-| **skills** | 系统白名单自动启用 | 12 个内置 TypeScript 技能 + 文件系统 SKILL.md 技能，`skill`/`skills_list`/`skill_view`/`run_agent` 工具 |
+| **skills** | 系统白名单自动启用 | 14 个内置 TypeScript 技能 + 文件系统 SKILL.md 技能，`skill`/`skills_list`/`skill_view`/`run_agent` 工具 |
+| **cron** | 系统白名单自动启用 | 定时任务管理：`cron_create`/`cron_delete`/`cron_list` 工具 |
 | **store** | 内建默认 `InMemoryStore` | 插件间共享状态通道，`IStore` 接口可替换实现 |
 | **model-registry** | `"model-registry": { settings: { models: [...] } }` | 声明多个 LLM 模型，`/model` 切换；支持 `$ENV_VAR` 语法隐藏密钥 |
 | **agent** | 自动发现 `~/.nano-code/agents/*.yaml` | `agent-<name>` 子 agent 调用工具；`agent_task_status` 查询后台任务；`send_message` agent 间通信 |
@@ -714,7 +716,7 @@ interface IStore {
 ## 测试
 
 ```bash
-npm test         # 单元测试（543 项）
+npm test         # 单元测试（621 项）
 npm run test:e2e # E2E 测试（11 场景，覆盖 ReAct 全链路 + 并发执行 + 混合工具）
 npm run test:all # 全部测试
 ```

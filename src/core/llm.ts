@@ -76,6 +76,8 @@ export interface ChatMessage {
   tool_calls?: AssembledToolCall[];
   tool_call_id?: string;
   name?: string;
+  /** 标记为合成消息（如 cron 触发、系统注入），下期供 display 过滤 */
+  isMeta?: boolean;
 }
 
 // ── Retry configuration ──

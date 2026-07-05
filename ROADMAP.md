@@ -93,6 +93,15 @@
 | ✅ | `/diff` / `/status` 命令 | 查看 git diff 和变更状态，支持 `--staged`、`--stat` 等原生 git 参数 |
 | ✅ | Monitor 工具 | 实时监控进程输出/日志文件事件流，覆盖「等 build 完成」「监视错误日志」场景 |
 | ☐ | Agent 工具增强 | run_agent 升级为一级工具，支持 structured_output schema、isolation 隔离模式、丰富 prompt 描述 |
+| ✅ | **Cron + Loop（后端）** | `CronCreate`/`CronDelete`/`CronList` 工具 + `/loop` 命令 + `CronScheduler` 调度器 + `isMeta` 消息标记机制 |
+| ☐ | **Cron + Loop（Display 适配）** | **REPL**: 调用 `onStatus({ level: 'info' })` 显示 `* Running scheduled task (时间)` 暗色行；**Ink**: `UIMessage.kind` 新增 `'system'` 类型，`MessageItem` 分支渲染为 dim 文本；**消息过滤**: `isMeta=true` 的 user 消息不在 UI 中展示（仅作为 API 请求上下文）；**BackgroundTaskBar**: 可选扩展展示运行中的 cron 任务状态 |
+
+### 不需要实现（设计理念差异）
+
+| 功能 | 原因 |
+|------|------|
+| `/cost` 命令 | nano-code 不追踪具体费用，token-budget 插件仅做用量上限控制 |
+| `/config` 命令 | nano-code 配置设计为文件驱动（YAML + 分层 merge），运行时修改与配置分层设计矛盾 |
 
 ---
 

@@ -188,12 +188,9 @@ export class NanoCodeAgent {
         const results = await Promise.all(
           readOnlyCalls.map(tc => this.executeToolCall(tc))
         );
-        let anyRejected = false;
         for (const r of results) {
           for (const msg of r.toolMessages) this.messageHistory.push(msg);
-          if (r.status === 'rejected') anyRejected = true;
         }
-        if (anyRejected) break;
       }
 
       for (const rawToolCall of writeCalls) {

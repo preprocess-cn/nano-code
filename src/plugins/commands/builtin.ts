@@ -17,6 +17,7 @@ import type { ModelEntry } from '#src/core/llm.js';
 import { runDoctor, formatDoctorResults } from '#src/core/doctor.js';
 import { loadAgentDefinitions } from '#src/plugins/coordinator/agent-loader.js';
 import { readMcpJson, getProjectMcpJsonPath, getGlobalMcpJsonPath, getClaudeMcpJsonPath } from '#src/plugins/mcp/config-writer.js';
+import { CronScheduler } from '#src/plugins/cron/cron-scheduler.js';
 
 export interface BuiltinContext {
   agent: NanoCodeAgent;
@@ -73,6 +74,9 @@ const BUILTIN_COMMANDS: BuiltinCommand[] = [
       lines.push('  /diff [args]     查看工作区 git diff（直接透传 git diff 参数）');
       lines.push('  /status [args]   查看工作区变更状态（直接透传 git status 参数）');
       lines.push('');
+      lines.push('定时任务：');
+      lines.push('  /loop [间隔] <prompt>  创建定时循环任务（如 /loop 5m "检查部署"）');
+      lines.push('');
 
       lines.push('可直接执行的 bash 命令（输入 !<命令>）：');
       lines.push('  !ls -la            直接执行 ls -la');
@@ -112,6 +116,67 @@ const BUILTIN_COMMANDS: BuiltinCommand[] = [
         const msg = err instanceof Error ? err.message : String(err);
         return { handled: true, skipAgent: true, message: `git status 执行失败: ${msg}` };
       }
+    },
+  },
+  // ── /loop ──
+  {
+    name: 'loop',
+    description: '创建定时循环任务 — /loop [间隔] <prompt>（如 /loop 5m "检查部署"）',
+    handler: async (ctx?: BuiltinContext) => {
+      const args = (ctx?.args || '').trim();
+      if (!args) {
+        return {
+          handled: true, skipAgent: true,
+          message: [
+            '',
+            '用法: /loop [间隔] <prompt>',
+            '',
+            '间隔格式（选填，不指定则 LLM 自定速）：',
+            '  30s      每 30 秒',
+            '  5m       每 5 分钟',
+            '  1h       每小时',
+            '  */5 * * * *  标准 cron 表达式',
+            '',
+            '示例:',
+            '  /loop 5m 检查服务器状态',
+            '  /loop 1h "运行测试套件"',
+            '  /loop */5 * * * * 执行定时任务',
+            '',
+            '管理：使用 cron_list / cron_delete 工具在对话中管理任务。',
+            '',
+          ].join('\n'),
+        };
+      }
+
+      const parsed = parseLoopArgs(args);
+      if (!parsed) {
+        return { handled: true, skipAgent: true, message: '参数解析失败。间隔格式: 30s, 5m, 1h 或标准 cron 表达式。' };
+      }
+
+      const scheduler = CronScheduler.getInstance();
+      scheduler.initialize();
+
+      const result = scheduler.createTask({
+        cron: parsed.cron,
+        prompt: parsed.prompt,
+        description: parsed.humanReadable,
+        recurring: true,
+        durable: false,
+      });
+
+      if ('error' in result) {
+        return { handled: true, skipAgent: true, message: `创建定时任务失败: ${result.error}` };
+      }
+
+      return {
+        handled: true, skipAgent: true,
+        message: `已创建定时任务 #${result.id}
+  触发间隔: ${parsed.humanReadable}
+  执行内容: ${parsed.prompt}
+  任务 ID: ${result.id}
+
+使用 cron_delete({ id: "${result.id}" }) 在对话中删除此任务。`,
+      };
     },
   },
   {
@@ -613,6 +678,51 @@ function togglePlugin(name: string, enable: boolean, config: NanoConfig | undefi
   }
 
   return { handled: true, skipAgent: true, message: `插件 "${name}" 已${enable ? '启用' : '禁用'}。` };
+}
+
+// ── /loop helper: parseLoopArgs ──
+
+/** 解析 /loop 参数，返回 cron 表达式、prompt 和可读描述 */
+function parseLoopArgs(input: string): { cron: string; prompt: string; humanReadable: string } | null {
+  // 第一个 token 是间隔，剩余是 prompt
+  const match = input.match(/^(\S+)\s+(.+)$/s);
+  if (!match) return null;
+
+  const interval = match[1];
+  const prompt = match[2].trim();
+  if (!prompt) return null;
+
+  const cron = intervalToCron(interval);
+  if (!cron) return null;
+
+  return { cron, prompt, humanReadable: interval };
+}
+
+/** 将人类可读间隔（30s, 5m, 1h）转为 cron 表达式 */
+function intervalToCron(interval: string): string | null {
+  // 标准 5 字段 cron 表达式 → 直接返回
+  if (/^(\S+\s+){4}\S+$/.test(interval)) return interval;
+  // 6 字段（带秒）
+  if (/^(\S+\s+){5}\S+$/.test(interval)) return interval;
+
+  const m = interval.match(/^(\d+)(s|m|h)$/);
+  if (!m) return null;
+
+  const num = parseInt(m[1], 10);
+  const unit = m[2];
+  if (num <= 0) return null;
+
+  switch (unit) {
+    case 's':
+      if (num < 5) return null; // 最少 5 秒
+      return `*/${num} * * * * *`;  // 6 字段 cron（node-cron 支持）
+    case 'm':
+      return `*/${num} * * * *`;
+    case 'h':
+      return `0 */${num} * * *`;
+    default:
+      return null;
+  }
 }
 
 const INIT_PROMPT = `请分析当前项目，创建一份 \`AGENT.md\` 文件。

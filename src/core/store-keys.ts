@@ -58,6 +58,10 @@ export const SK = {
   ModelOverride: 'model:override',
   /** ModelEntry[]: model-registry 中已解析的全部模型条目（用于 /model 命令和 --model CLI） */
   ModelRegistryModels: 'model-registry:models',
+
+  // ── Cron scheduler (cron plugin) ──
+  /** CronTask[]: 持久化定时任务列表 */
+  CronTasks: 'cron:tasks',
 } as const;
 
 export interface AgentModeInfo {

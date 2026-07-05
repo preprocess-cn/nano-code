@@ -95,13 +95,7 @@ const DEFAULT_YAML = `# nano-code 全局配置
 
 # 系统插件白名单 — CLI enable/disable 不可操作，仅通过配置文件开启/关闭
 system_plugins:
-  - fs
-  - command
-  - memory
-  - token-budget
-  - skills
-  - search
-  - monitor
+${DEFAULT_SYSTEM_PLUGINS.map(p => `  - ${p}`).join('\n')}
 
 # 环境变量兜底（shell 和 .env 优先级更高）
 env:

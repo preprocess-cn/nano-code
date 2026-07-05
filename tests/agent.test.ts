@@ -590,6 +590,103 @@ describe('NanoCodeAgent — newMessages injection', () => {
 
 });
 
+describe('NanoCodeAgent — parallel read-only tool execution', () => {
+
+  it('all read-only tool results are pushed to messageHistory regardless of order', async () => {
+    let callCount = 0;
+    const mock = {
+      sendSystemMessage: async (_messages: any, _tools: any, _onChunk?: any) => {
+        callCount++;
+        if (callCount === 1) {
+          return {
+            text: null,
+            toolCalls: [
+              { id: 'call_1', type: 'function', function: { name: 'read_tool_a', arguments: '{}' } },
+              { id: 'call_2', type: 'function', function: { name: 'read_tool_b', arguments: '{}' } },
+            ],
+            stopReason: 'tool_use',
+          };
+        }
+        return { text: 'done', stopReason: 'stop' };
+      },
+      getModel: () => 'gpt-4o',
+    };
+
+    const registry = new PluginRegistry();
+    const toolNames: string[] = [];
+    registry.register({
+      name: 'reader',
+      getTools: () => [
+        {
+          type: 'function',
+          function: { name: 'read_tool_a', description: 'read-only a', sideEffect: false, parameters: { type: 'object', properties: {} } },
+        },
+        {
+          type: 'function',
+          function: { name: 'read_tool_b', description: 'read-only b', sideEffect: false, parameters: { type: 'object', properties: {} } },
+        },
+      ],
+      execute: async (name: string) => {
+        toolNames.push(name);
+        return { status: 'success' as const, data: `result from ${name}` };
+      },
+    });
+
+    const agent = new NanoCodeAgent({ registry: registry, llmClient: mock as any });
+    await agent.runTask('run both tools');
+
+    const history = agent.getHistory();
+    // user + assistant(tc) + tool(a) + tool(b) + assistant(done)
+    const toolMsgs = history.filter(m => m.role === 'tool');
+    assert.equal(toolMsgs.length, 2, 'both tool results should be in history');
+    assert.ok(toolMsgs[0].content?.includes('read_tool_a'), 'first tool result should be for read_tool_a');
+    assert.ok(toolMsgs[1].content?.includes('read_tool_b'), 'second tool result should be for read_tool_b');
+    // Verify both tools actually executed
+    assert.equal(toolNames.length, 2, 'both tools should have been executed');
+    assert.ok(toolNames.includes('read_tool_a'));
+    assert.ok(toolNames.includes('read_tool_b'));
+  });
+
+  it('handles single read-only tool correctly', async () => {
+    let callCount = 0;
+    const mock = {
+      sendSystemMessage: async (_messages: any, _tools: any, _onChunk?: any) => {
+        callCount++;
+        if (callCount === 1) {
+          return {
+            text: null,
+            toolCalls: [
+              { id: 'call_single', type: 'function', function: { name: 'read_tool', arguments: '{}' } },
+            ],
+            stopReason: 'tool_use',
+          };
+        }
+        return { text: 'done', stopReason: 'stop' };
+      },
+      getModel: () => 'gpt-4o',
+    };
+
+    const registry = new PluginRegistry();
+    registry.register({
+      name: 'reader',
+      getTools: () => [{
+        type: 'function',
+        function: { name: 'read_tool', description: 'read-only', sideEffect: false, parameters: { type: 'object', properties: {} } },
+      }],
+      execute: async () => ({ status: 'success' as const, data: 'single result' }),
+    });
+
+    const agent = new NanoCodeAgent({ registry: registry, llmClient: mock as any });
+    await agent.runTask('run tool');
+
+    const history = agent.getHistory();
+    const toolMsgs = history.filter(m => m.role === 'tool');
+    assert.equal(toolMsgs.length, 1);
+    assert.ok(toolMsgs[0].content?.includes('single result'));
+  });
+
+});
+
 describe('NanoCodeAgent — cancellation', () => {
 
   it('breaks immediately when cancelled before runTask', async () => {

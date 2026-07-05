@@ -28,5 +28,5 @@ export async function withRetry<T>(
       throw err;
     }
   }
-  throw lastErr;
+  throw lastErr as T; // satisfy TS control flow analysis
 }

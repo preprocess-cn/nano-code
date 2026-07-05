@@ -375,6 +375,7 @@ const BUILTIN_LOADERS: Record<string, (settings?: Record<string, any>) => Promis
   web: async () => (await import('#src/plugins/tools/web.js')).webPlugin,
   'model-registry': async (s) => (await import('#src/plugins/model-registry/index.js')).createModelRegistryPlugin(s || {}),
   monitor: async () => (await import('#src/plugins/tools/monitor.js')).monitorPlugin,
+  cron: async () => (await import('#src/plugins/cron/cron-plugin.js')).cronPlugin,
 };
 
 /**
@@ -390,6 +391,7 @@ export const DEFAULT_SYSTEM_PLUGINS: readonly string[] = [
   'skills',
   'search',
   'monitor',
+  'cron',
 ];
 
 /**
