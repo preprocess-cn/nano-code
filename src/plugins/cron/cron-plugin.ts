@@ -152,8 +152,9 @@ export const cronPlugin: NanoPlugin = {
     const fired = scheduler.drainFired();
     if (fired.length === 0) return messages;
 
+    const now = new Date();
     const content = fired
-      .map(t => `⏰ 定时任务触发 (ID: ${t.id})\n${t.prompt}`)
+      .map(t => `⏰ 定时任务触发 (ID: ${t.id}, ${now.toLocaleString()})\n${t.prompt}`)
       .join('\n\n---\n\n');
 
     const extraMessages: ChatMessage[] = [{
@@ -162,9 +163,8 @@ export const cronPlugin: NanoPlugin = {
       isMeta: true,
     }];
 
-    // [system, ...extra, ...rest] 模式
-    const [system, ...rest] = messages;
-    return [system, ...extraMessages, ...rest];
+    // 追加到末尾，不破坏 system prompt 之后的缓存前缀
+    return [...messages, ...extraMessages];
   },
 
   onAfterRequest(_response: any): void {

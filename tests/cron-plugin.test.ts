@@ -110,9 +110,9 @@ describe('CronPlugin', () => {
     ];
     const result = cronPlugin.onBeforeRequest!(messages);
     assert.equal(result.length, 3);
-    assert.equal(result[1].role, 'user');
-    assert.equal(result[1].isMeta, true);
-    assert.ok(result[1].content!.includes('fired prompt!'));
+    assert.equal(result[2].role, 'user');    // isMeta 追加在末尾
+    assert.equal(result[2].isMeta, true);
+    assert.ok(result[2].content!.includes('fired prompt!'));
   });
 
   it('onBeforeRequest returns unchanged when no fired tasks', () => {
@@ -124,7 +124,7 @@ describe('CronPlugin', () => {
     assert.equal(result[0], messages[0]); // same reference
   });
 
-  it('onBeforeRequest uses [system, extra, ...rest] pattern', async () => {
+  it('onBeforeRequest appends isMeta messages at the end', async () => {
     const scheduler = CronScheduler.getInstance();
     const task = scheduler.createTask({
       cron: '*/5 * * * *', prompt: 'check status', recurring: false, durable: false,
@@ -140,11 +140,12 @@ describe('CronPlugin', () => {
     const result = cronPlugin.onBeforeRequest!(messages);
     assert.equal(result.length, 4);
     assert.equal(result[0].role, 'system');
-    assert.equal(result[1].role, 'user');
-    assert.equal(result[1].isMeta, true);
-    assert.equal(result[2].role, 'user');
-    assert.equal(result[2].content, 'user msg 1');
-    assert.equal(result[3].role, 'assistant');
+    assert.equal(result[1].role, 'user');       // 原文不变
+    assert.equal(result[1].content, 'user msg 1');
+    assert.equal(result[2].role, 'assistant');   // 原文不变
+    assert.equal(result[2].content, 'response');
+    assert.equal(result[3].role, 'user');        // isMeta 追加在末尾
+    assert.equal(result[3].isMeta, true);
   });
 
   it('onAfterRequest clears injectedSinceFire', () => {

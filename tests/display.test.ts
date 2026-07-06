@@ -1,4 +1,4 @@
-import { describe, it, beforeEach, mock } from 'node:test';
+import { describe, it, beforeEach, afterEach, mock } from 'node:test';
 import * as assert from 'node:assert/strict';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -32,6 +32,84 @@ describe('DisplayPlugin — repl', () => {
   it('onUserInput with other source echoes preview', () => {
     replDisplay.onUserInput?.('a very long input message', 'web');
     // visible output: "[来自 web] >> a very lon…"
+  });
+
+  describe('onStatus', () => {
+    let writes: string[];
+    let originalWrite: typeof process.stdout.write;
+    let originalStderrWrite: typeof process.stderr.write;
+
+    const mockWrite = (chunk: unknown): boolean => { writes.push(String(chunk)); return true; };
+
+    beforeEach(() => {
+      writes = [];
+      originalWrite = process.stdout.write.bind(process.stdout);
+      originalStderrWrite = process.stderr.write.bind(process.stderr);
+      process.stdout.write = mockWrite as typeof process.stdout.write;
+    });
+
+    afterEach(() => {
+      process.stdout.write = originalWrite;
+      process.stderr.write = originalStderrWrite;
+    });
+
+    it('info level outputs dim text', () => {
+      replDisplay.onStatus?.({ message: '* Running scheduled task (14:30:00)', agentName: 'main', level: 'info' });
+      assert.equal(writes.length, 1);
+      assert.ok(writes[0].startsWith('\x1b[2m'));  // starts with dim
+      assert.ok(writes[0].endsWith('\x1b[0m\n'));  // ends with reset + newline
+      assert.ok(writes[0].includes('* Running scheduled task'));
+    });
+
+    it('info level with sub-agent name includes prefix', () => {
+      replDisplay.onStatus?.({ message: '* Running scheduled task (14:30:00)', agentName: 'sub', level: 'info' });
+      assert.equal(writes.length, 1);
+      assert.ok(writes[0].includes('[sub]'));
+      assert.ok(writes[0].includes('* Running scheduled task'));
+    });
+
+    it('success level is not dim', () => {
+      replDisplay.onStatus?.({ message: 'done', agentName: 'main', level: 'success' });
+      assert.equal(writes.length, 1);
+      assert.ok(!writes[0].includes('\x1b[2m'));
+      assert.ok(writes[0].includes('✓'));          // green checkmark prefix
+    });
+
+    it('warn level is not dim', () => {
+      replDisplay.onStatus?.({ message: 'caution', agentName: 'main', level: 'warn' });
+      assert.equal(writes.length, 1);
+      assert.ok(!writes[0].includes('\x1b[2m'));
+      assert.ok(writes[0].includes('⚠'));
+    });
+
+    it('error level writes to stderr', () => {
+      let stderrWrites: string[] = [];
+      const mockStderr = (chunk: unknown): boolean => { stderrWrites.push(String(chunk)); return true; };
+      process.stderr.write = mockStderr as typeof process.stderr.write;
+
+      replDisplay.onStatus?.({ message: 'fail', agentName: 'main', level: 'error' });
+
+      assert.equal(writes.length, 0);  // nothing on stdout
+      assert.equal(stderrWrites.length, 1);
+      assert.ok(stderrWrites[0].includes('✗'));
+      assert.ok(stderrWrites[0].includes('fail'));
+    });
+
+    it('status level thinking outputs expected text', () => {
+      replDisplay.onStatus?.({ message: 'thinking', agentName: 'main', level: 'status' });
+      // thinking uses console.log (→ mocked stdout), verify the message
+      assert.ok(writes.some(w => w.includes('正在思考并请求大模型')));
+    });
+
+    it('status level end produces no output', () => {
+      replDisplay.onStatus?.({ message: 'end', agentName: 'main', level: 'status' });
+      assert.equal(writes.length, 0);
+    });
+
+    it('empty message produces no output', () => {
+      replDisplay.onStatus?.({ message: '', agentName: 'main', level: 'info' });
+      assert.equal(writes.length, 0);
+    });
   });
 
 });

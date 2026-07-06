@@ -109,6 +109,10 @@ export class NanoCodeAgent {
       const systemMessage = buildSystemPrompt(this.registry, this.promptConfig, this.agentRole);
       let messagesWithSystem: ChatMessage[] = [systemMessage, ...this.messageHistory];
       messagesWithSystem = this.registry.execBeforeRequest(messagesWithSystem);
+      // Notify display when synthetic messages (isMeta, e.g. cron triggers) are injected
+      if (messagesWithSystem.slice(1).some(m => m.isMeta)) {
+        this.display?.onStatus?.({ message: `* Running scheduled task (${new Date().toTimeString().slice(0, 8)})`, agentName: this.name, level: 'info' });
+      }
 
       const isSubAgent = !isMainAgent(this.name);
       let streamBuffer = '';

@@ -687,6 +687,62 @@ describe('NanoCodeAgent — parallel read-only tool execution', () => {
 
 });
 
+describe('NanoCodeAgent — isMeta message injection triggers onStatus', () => {
+
+  it('emits onStatus when onBeforeRequest injects isMeta messages', async () => {
+    const statusCalls: { message: string; level: string }[] = [];
+    const display = {
+      onStatus(e: any) { statusCalls.push(e); },
+      onStreamChunk() {},
+      onToolCall() {},
+      onToolResult() {},
+      onStateSnapshot() {},
+      onAgentTurnStart() {},
+      onAgentTurnEnd() {},
+    };
+
+    const registry = new PluginRegistry();
+    registry.register({
+      name: 'meta-injector',
+      getTools: () => [],
+      execute: async () => ({ status: 'success' as const }),
+      onBeforeRequest(messages: any[]) {
+        // 模拟 cron 插件行为：追加 isMeta 消息到末尾，不破坏缓存
+        return [...messages, { role: 'user', content: '⏰ 定时任务触发', isMeta: true }];
+      },
+    });
+
+    const agent = new NanoCodeAgent({ registry, llmClient: mockLLM(), display: display as any });
+    await agent.runTask('hello');
+
+    assert.ok(statusCalls.length >= 1, 'should have at least one onStatus call');
+    const cronStatus = statusCalls.find(s => s.message.includes('Running scheduled task'));
+    assert.ok(cronStatus, 'should emit cron notification onStatus');
+    assert.equal(cronStatus!.level, 'info');
+    assert.match(cronStatus!.message, /^\* Running scheduled task \(\d{2}:\d{2}:\d{2}\)$/);
+  });
+
+  it('does not emit cron status when no isMeta messages are injected', async () => {
+    const statusCalls: { message: string; level: string }[] = [];
+    const display = {
+      onStatus(e: any) { statusCalls.push(e); },
+      onStreamChunk() {},
+      onToolCall() {},
+      onToolResult() {},
+      onStateSnapshot() {},
+      onAgentTurnStart() {},
+      onAgentTurnEnd() {},
+    };
+
+    const agent = new NanoCodeAgent({ registry: new PluginRegistry(), llmClient: mockLLM(), display: display as any });
+    await agent.runTask('hello');
+
+    const cronStatus = statusCalls.find(s => s.message.includes('Running scheduled task'));
+    assert.equal(cronStatus, undefined, 'should not emit cron notification when no isMeta messages');
+  });
+
+});
+
 describe('NanoCodeAgent — cancellation', () => {
 
   it('breaks immediately when cancelled before runTask', async () => {

@@ -107,7 +107,12 @@ export const replDisplay: DisplayPlugin = {
     if (!event.message) return;
     const prefix = statusLevelPrefix(event.level);
     const output = event.level === 'error' ? process.stderr : process.stdout;
-    output.write(prefix + p(event.agentName, event.message) + '\n');
+    const line = prefix + p(event.agentName, event.message);
+    if (event.level === 'info') {
+      output.write(`\x1b[2m${line}\x1b[0m\n`); // dim for info-level (e.g. cron notification)
+    } else {
+      output.write(line + '\n');
+    }
   },
 
   onStreamChunk(event: StreamEvent): void {
