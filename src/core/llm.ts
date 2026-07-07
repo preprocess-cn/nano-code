@@ -6,6 +6,7 @@ import type { ToolDefinition } from '#src/core/contract.js';
 import type { IStore } from '#src/core/store.js';
 import { SK } from '#src/core/store-keys.js';
 import { withRetry } from '#src/core/retry.js';
+import { logManager } from '#src/core/logger.js';
 
 // 加载环境变量：项目 .env 优先于全局 ~/.nano-code/.env，shell 环境变量优先于两者
 dotenv.config();                                                                  // $CWD/.env
@@ -76,7 +77,7 @@ export interface ChatMessage {
   tool_calls?: AssembledToolCall[];
   tool_call_id?: string;
   name?: string;
-  /** 标记为合成消息（如 cron 触发、系统注入），下期供 display 过滤 */
+  /** 标记为合成消息（如系统自动注入），下期供 display 过滤 */
   isMeta?: boolean;
 }
 
@@ -242,7 +243,7 @@ export class LLMClient {
       if (error?.name === 'AbortError' || error?.message === 'CANCELLED') {
         throw error;
       }
-      console.error('[llm] API request failed:', error);
+      logManager.error('llm', 'API request failed:', error);
       throw error;
     }
   }

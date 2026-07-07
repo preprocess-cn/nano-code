@@ -8,7 +8,6 @@ import { PluginRegistry } from '../src/core/plugin.js';
 import { SK, type AgentModeInfo } from '../src/core/store-keys.js';
 import {
   createAgentSlashPlugin,
-  setTargetAgent,
   _resetState,
 } from '../src/plugins/commands/agent-slash.js';
 
@@ -40,7 +39,7 @@ describe('agent-slash plugin', () => {
   });
 
   it('non-slash input returns null', async () => {
-    const plugin = createAgentSlashPlugin(undefined, '/tmp');
+    const plugin = createAgentSlashPlugin();
     const result = await plugin.onBeforeAgentInput!('hello');
     assert.strictEqual(result, null);
   });
@@ -49,7 +48,10 @@ describe('agent-slash plugin', () => {
     const dir = tmpDir();
     try {
       writeAgent(dir, 'dba', { description: 'DB expert', role: 'You are a DBA' });
-      const plugin = createAgentSlashPlugin(undefined, dir);
+      const registry = new PluginRegistry();
+      registry.setPluginConfig('agent-slash', { agentDir: dir });
+      const plugin = createAgentSlashPlugin();
+      await plugin.onInit!(registry);
       const result = await plugin.onBeforeAgentInput!('/nonexistent');
       assert.strictEqual(result, null);
     } finally {
@@ -62,10 +64,11 @@ describe('agent-slash plugin', () => {
     try {
       writeAgent(dir, 'dba', { description: 'DB expert', role: 'You are a DBA' });
       const registry = new PluginRegistry();
+      registry.setPluginConfig('agent-slash', { agentDir: dir });
       const agent = new NanoCodeAgent({ registry, llmClient: mockLLM() });
-      setTargetAgent(agent);
-      const plugin = createAgentSlashPlugin(undefined, dir);
+      const plugin = createAgentSlashPlugin();
       await plugin.onInit!(registry);
+      await plugin.onAgentReady!({ agent, display: undefined as any });
 
       const result = await plugin.onBeforeAgentInput!('/dba');
       assert.ok(result);
@@ -87,10 +90,11 @@ describe('agent-slash plugin', () => {
     try {
       writeAgent(dir, 'dba', { description: 'DB expert', role: 'You are a DBA' });
       const registry = new PluginRegistry();
+      registry.setPluginConfig('agent-slash', { agentDir: dir });
       const agent = new NanoCodeAgent({ registry, llmClient: mockLLM() });
-      setTargetAgent(agent);
-      const plugin = createAgentSlashPlugin(undefined, dir);
+      const plugin = createAgentSlashPlugin();
       await plugin.onInit!(registry);
+      await plugin.onAgentReady!({ agent, display: undefined as any });
 
       await plugin.onBeforeAgentInput!('/dba');
       assert.ok(registry.store.get<AgentModeInfo>(SK.AgentMode));
@@ -112,10 +116,11 @@ describe('agent-slash plugin', () => {
     try {
       writeAgent(dir, 'dba', { description: 'DB expert', role: 'You are a DBA' });
       const registry = new PluginRegistry();
+      registry.setPluginConfig('agent-slash', { agentDir: dir });
       const agent = new NanoCodeAgent({ registry, llmClient: mockLLM() });
-      setTargetAgent(agent);
-      const plugin = createAgentSlashPlugin(undefined, dir);
+      const plugin = createAgentSlashPlugin();
       await plugin.onInit!(registry);
+      await plugin.onAgentReady!({ agent, display: undefined as any });
 
       await plugin.onBeforeAgentInput!('/dba');
       assert.ok(registry.store.get<AgentModeInfo>(SK.AgentMode));
@@ -132,7 +137,10 @@ describe('agent-slash plugin', () => {
     const dir = tmpDir();
     try {
       writeAgent(dir, 'dba', { description: 'DB expert', role: 'You are a DBA' });
-      const plugin = createAgentSlashPlugin(undefined, dir);
+      const registry = new PluginRegistry();
+      registry.setPluginConfig('agent-slash', { agentDir: dir });
+      const plugin = createAgentSlashPlugin();
+      await plugin.onInit!(registry);
       const result = await plugin.onBeforeAgentInput!('/dba');
       assert.strictEqual(result, null);
     } finally {
@@ -155,10 +163,11 @@ describe('agent-slash plugin', () => {
       ].join('\n'), 'utf-8');
 
       const registry = new PluginRegistry();
+      registry.setPluginConfig('agent-slash', { agentDir: dir });
       const agent = new NanoCodeAgent({ registry, llmClient: mockLLM() });
-      setTargetAgent(agent);
-      const plugin = createAgentSlashPlugin(undefined, dir);
+      const plugin = createAgentSlashPlugin();
       await plugin.onInit!(registry);
+      await plugin.onAgentReady!({ agent, display: undefined as any });
 
       await plugin.onBeforeAgentInput!('/expert');
       assert.equal(agent.getAgentRole(), 'You are an expert');
@@ -172,9 +181,12 @@ describe('agent-slash plugin', () => {
     const dir = tmpDir();
     try {
       writeAgent(dir, 'dba', { description: 'DB expert', role: 'You are a DBA' });
+      const registry = new PluginRegistry();
+      registry.setPluginConfig('agent-slash', { agentDir: dir });
       const agent = new NanoCodeAgent({ registry: new PluginRegistry(), llmClient: mockLLM() });
-      setTargetAgent(agent);
-      const plugin = createAgentSlashPlugin(undefined, dir);
+      const plugin = createAgentSlashPlugin();
+      await plugin.onInit!(registry);
+      await plugin.onAgentReady!({ agent, display: undefined as any });
 
       const result = await plugin.onBeforeAgentInput!('/dba some extra text');
       assert.ok(result);

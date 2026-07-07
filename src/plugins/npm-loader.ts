@@ -1,5 +1,6 @@
 import { NanoPlugin, PluginRegistry } from '#src/core/plugin.js';
 import { ToolDefinition, ToolResponse, ToolContext } from '#src/core/contract.js';
+import { logManager } from '#src/core/logger.js';
 
 /**
  * npm 插件加载器。
@@ -35,7 +36,7 @@ export const npmLoaderPlugin: NanoPlugin = {
       if (entry.enabled === false) continue;
       const spec = entry.spec;
       if (!spec) {
-        console.warn(`[npm-loader] Plugin "${name}" has no "spec"，跳过。`);
+        logManager.warn('npm-loader', `Plugin "${name}" has no "spec"，跳过。`);
         continue;
       }
 
@@ -43,19 +44,19 @@ export const npmLoaderPlugin: NanoPlugin = {
         const mod = await import(spec);
         const plugin: NanoPlugin | undefined = mod.default || mod;
         if (!plugin || typeof plugin.name !== 'string' || typeof plugin.execute !== 'function') {
-          console.warn(`[npm-loader] Package "${spec}" 没有导出有效的 NanoPlugin（需要 default export 包含 name 和 execute）。`);
+          logManager.warn('npm-loader', `Package "${spec}" 没有导出有效的 NanoPlugin（需要 default export 包含 name 和 execute）。`);
           continue;
         }
         await registry.register(plugin);
-        console.log(`[npm-loader] 已加载插件 "${plugin.name}" <- "${spec}"`);
+        logManager.info('npm-loader', `已加载插件 "${plugin.name}" <- "${spec}"`);
         loaded++;
       } catch (err) {
-        console.error(`[npm-loader] 加载插件 "${name}" 失败 ("${spec}"):`, err instanceof Error ? err.message : err);
+        logManager.error('npm-loader', `加载插件 "${name}" 失败 ("${spec}"): ${err instanceof Error ? err.message : err}`);
       }
     }
 
     if (loaded > 0) {
-      console.log(`[npm-loader] 本次共加载 ${loaded} 个 npm 插件。`);
+      logManager.info('npm-loader', `本次共加载 ${loaded} 个 npm 插件。`);
     }
   },
 };

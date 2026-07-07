@@ -167,24 +167,91 @@ function createPlugin(): DisplayPlugin {
     }
   }
 
+  /** 收集消息中出现的所有 agentName */
+  function collectAgentNames(): Set<string> {
+    const names = new Set<string>();
+    names.add('main');
+    for (const m of messages) {
+      if (m.agentName && m.agentName !== 'main') names.add(m.agentName);
+    }
+    return names;
+  }
+
+  /** 处理 @ 开头的视图切换命令。返回 true 表示已处理（切换视图），false 表示不匹配 */
+  function handleViewSwitch(text: string): boolean {
+    if (!text.startsWith('@')) return false;
+    const target = text.slice(1).trim();
+    if (!target || target === 'main') {
+      registry?.store?.set(SK.ViewAgent, undefined);
+      render();
+      return true;
+    }
+    const agentNames = collectAgentNames();
+    // 精确匹配
+    if (agentNames.has(target)) {
+      registry?.store?.set(SK.ViewAgent, target);
+      render();
+      return true;
+    }
+    // 尝试 +_agent 后缀
+    const withAgent = target + '_agent';
+    if (agentNames.has(withAgent)) {
+      registry?.store?.set(SK.ViewAgent, withAgent);
+      render();
+      return true;
+    }
+    return false;
+  }
+
   function render(): void {
     if (!inkInstance) return;
     const suggestions = _suggestionProvider?.() ?? [];
     try {
       const currentMode = (registry?.store?.get<string>(SK.Mode)) ?? 'normal';
       const currentTaskCount = (registry?.store?.get<number>(SK.TaskCount)) ?? 0;
+
+      // 当前查看的 agent，undefined = 主视图
+      const currentViewAgent = registry?.store?.get<string>(SK.ViewAgent) ?? undefined;
+
+      // 收集 agentName，作为 @ 切换候选项
+      const agentNames = collectAgentNames();
+      const viewAgents = Array.from(agentNames)
+        .map(name => ({
+          name,
+          label: name === 'main' ? '主对话' : name.replace(/_agent$/, ''),
+        }));
+
+      // 按视图过滤消息
+      const filteredMessages = currentViewAgent
+        ? messages.filter(m => m.agentName === currentViewAgent)
+        : messages.filter(m => m.agentName === 'main');
+
       inkInstance.rerender(
         React.createElement(InkApp, {
           greeting,
-          messages: [...messages],
+          messages: [...filteredMessages],
           inputBuffer: '',
           suggestions,
           activeAgentName: registry?.store?.get<AgentModeInfo>(SK.AgentMode)?.name,
           mode: currentMode as 'normal' | 'plan',
           taskCount: currentTaskCount,
           backgroundTasks,
+          viewAgent: currentViewAgent,
+          viewAgents,
+          onViewAgentChange: (name: string) => {
+            registry?.store?.set(SK.ViewAgent, name === 'main' ? undefined : name);
+            render();
+          },
+          onViewAgentClear: () => {
+            registry?.store?.set(SK.ViewAgent, undefined);
+            render();
+          },
           onInputChange: () => {},
           onInputSubmit: (text: string) => {
+            // @ 开头的输入：先尝试视图切换
+            if (text.startsWith('@')) {
+              if (handleViewSwitch(text)) return;
+            }
             if (promptResolve) {
               const r = promptResolve;
               promptResolve = null;
@@ -279,8 +346,21 @@ function createPlugin(): DisplayPlugin {
             suggestions: initSuggestions,
             activeAgentName: registry?.store?.get<AgentModeInfo>(SK.AgentMode)?.name,
             backgroundTasks,
+            viewAgent: undefined,
+            viewAgents: [{ name: 'main', label: '主对话' }],
+            onViewAgentChange: (name: string) => {
+              registry?.store?.set(SK.ViewAgent, name === 'main' ? undefined : name);
+              render();
+            },
+            onViewAgentClear: () => {
+              registry?.store?.set(SK.ViewAgent, undefined);
+              render();
+            },
             onInputChange: () => {},
             onInputSubmit: (text: string) => {
+              if (text.startsWith('@')) {
+                if (handleViewSwitch(text)) return;
+              }
               if (promptResolve) {
                 const r = promptResolve;
                 promptResolve = null;
@@ -332,7 +412,11 @@ function createPlugin(): DisplayPlugin {
         return;
       }
       if (!event.message) { render(); return; }
-      const kind = event.level === 'warn' ? 'warn' : event.level === 'error' ? 'error' : event.level === 'success' ? 'success' : 'status';
+      const kind: UIMessage['kind'] = event.level === 'warn' ? 'warn' : event.level === 'error' ? 'error' : event.level === 'success' ? 'success' : event.level === 'info' ? 'info' : 'status';
+      // 非 main agent 的结果消息：清除旧消息，仅保留最新一次执行结果
+      if (event.agentName !== 'main' && (event.level === 'success' || event.level === 'warn' || event.level === 'error')) {
+        messages = messages.filter(m => m.agentName !== event.agentName);
+      }
       messages.push({ agentName: event.agentName, text: event.message, kind });
       render();
     },

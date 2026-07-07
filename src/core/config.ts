@@ -3,6 +3,7 @@ import * as path from 'path';
 import * as os from 'os';
 import * as yaml from 'js-yaml';
 import { DEFAULT_SYSTEM_PLUGINS } from '#src/core/plugin.js';
+import { logManager } from '#src/core/logger.js';
 
 const CONFIG_TOP_KEYS = new Set(['core', 'plugins', 'agent', 'display', 'configVersion', 'mcp', 'skills']);
 
@@ -187,12 +188,12 @@ function tryLoadConfigFile(filePath: string): Record<string, unknown> | null {
     } else if (ext === '.json') {
       parsed = JSON.parse(raw);
     } else {
-      console.warn(`[config] Warning: ${filePath} has unsupported extension "${ext}", skipping.`);
+      logManager.warn('config', `${filePath} has unsupported extension "${ext}", skipping.`);
       return null;
     }
 
     if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-      console.warn(`[config] Warning: ${filePath} must contain an object, skipping.`);
+      logManager.warn('config', `${filePath} must contain an object, skipping.`);
       return null;
     }
     const obj = parsed as Record<string, unknown>;
@@ -200,15 +201,15 @@ function tryLoadConfigFile(filePath: string): Record<string, unknown> | null {
     // Schema validation catches typos and type errors early
     const warnings = validateConfigObject(obj);
     for (const w of warnings) {
-      console.warn(`[config] Warning: ${filePath} — ${w.path}: ${w.message}`);
+      logManager.warn('config', `${filePath} — ${w.path}: ${w.message}`);
     }
 
     return obj;
   } catch (err) {
     if (err instanceof SyntaxError) {
-      console.warn(`[config] Warning: Invalid JSON in ${filePath}, skipping.`);
+      logManager.warn('config', `Invalid JSON in ${filePath}, skipping.`);
     } else {
-      console.warn(`[config] Warning: Could not read ${filePath}: ${err}`);
+      logManager.warn('config', `Could not read ${filePath}: ${err}`);
     }
     return null;
   }
@@ -233,15 +234,15 @@ function loadYAMLFromFile(filePath: string): Record<string, unknown> | null {
     const raw = fs.readFileSync(filePath, 'utf-8');
     const parsed = yaml.load(raw);
     if (typeof parsed !== 'object' || parsed === null) {
-      console.warn(`[config] Warning: ${filePath} 必须包含一个对象，跳过。`);
+      logManager.warn('config', `${filePath} 必须包含一个对象，跳过。`);
       return null;
     }
     return parsed as Record<string, unknown>;
   } catch (err) {
     if (err instanceof yaml.YAMLException) {
-      console.warn(`[config] Warning: ${filePath} YAML 解析失败，跳过。`);
+      logManager.warn('config', `${filePath} YAML 解析失败，跳过。`);
     } else {
-      console.warn(`[config] Warning: 无法读取 ${filePath}: ${err}`);
+      logManager.warn('config', `无法读取 ${filePath}: ${err}`);
     }
     return null;
   }
@@ -492,7 +493,7 @@ function mergePluginEntries(
 
   for (const [name, rawConfig] of Object.entries(override)) {
     if (!isNonEmptyObject(rawConfig)) {
-      console.warn(`[config] Warning: Plugin "${name}" has invalid config (must be an object), skipping.`);
+      logManager.warn('config', `Plugin "${name}" has invalid config (must be an object), skipping.`);
       continue;
     }
 
@@ -545,7 +546,7 @@ function mergeConfigs(
     // Warn about unknown top-level keys
     for (const key of Object.keys(data)) {
       if (!CONFIG_TOP_KEYS.has(key)) {
-        console.warn(`[config] Warning: Unknown config key "${key}" in ${label} config, ignoring.`);
+        logManager.warn('config', `Unknown config key "${key}" in ${label} config, ignoring.`);
       }
     }
 
@@ -596,7 +597,7 @@ function loadProjectYAMLConfig(): Record<string, unknown> | null {
   // Schema validation catches typos and type errors early
   const warnings = validateConfigObject(data);
   for (const w of warnings) {
-    console.warn(`[config] Warning: ${configPath} — ${w.path}: ${w.message}`);
+    logManager.warn('config', `${configPath} — ${w.path}: ${w.message}`);
   }
   return data;
 }
@@ -626,7 +627,7 @@ export function loadConfig(): NanoConfig {
     const KNOWN_YAML_KEYS = new Set(['system_plugins', 'system_prompt', 'env', 'skills']);
     const warnings = validateConfigObject(yamlData).filter(w => !KNOWN_YAML_KEYS.has(w.path));
     for (const w of warnings) {
-      console.warn(`[config] Warning: ${getGlobalYAMLConfigPath()} — ${w.path}: ${w.message}`);
+      logManager.warn('config', `${getGlobalYAMLConfigPath()} — ${w.path}: ${w.message}`);
     }
   }
   applyYAMLEnv(yamlData);
@@ -674,7 +675,7 @@ function pickMergeKeys(data: Record<string, unknown>): Record<string, unknown> {
 export function applyProfile(base: NanoConfig, profileName: string): NanoConfig {
   const profileConfig = loadProfileConfig(profileName);
   if (!profileConfig) {
-    console.warn(`[config] agent profile "${profileName}" not found (checked project and global).`);
+    logManager.warn('config', `agent profile "${profileName}" not found (checked project and global).`);
     return base;
   }
 

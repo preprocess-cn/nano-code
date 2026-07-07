@@ -170,7 +170,7 @@ async function grepContent(pattern: string, glob?: string, cwd?: string): Promis
 const toolError = (msg: string): ToolResponse => ({ status: 'error', message: msg });
 
 export const searchPlugin: NanoPlugin = {
-  name: 'search',
+  name: 'file-search',
   description: 'File and content search tools (glob, grep)',
   getTools(): ToolDefinition[] {
     return [

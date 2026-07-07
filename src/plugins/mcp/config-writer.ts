@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+import { logManager } from '#src/core/logger.js';
 
 /**
  * .mcp.json 格式：MCP 服务器的标准配置文件。
@@ -47,11 +48,11 @@ export function readMcpJson(filePath: string): McpJsonConfig | null {
     if (parsed && typeof parsed.mcpServers === 'object' && parsed.mcpServers !== null) {
       return parsed as McpJsonConfig;
     }
-    console.warn(`[mcp] Warning: ${filePath} 缺少 "mcpServers" 字段，跳过。`);
+    logManager.warn('mcp', `${filePath} 缺少 "mcpServers" 字段，跳过。`);
     return null;
   } catch (err: any) {
     if (err?.code !== 'ENOENT') {
-      console.warn(`[mcp] Warning: 读取 ${filePath} 失败: ${err.message}`);
+      logManager.warn('mcp', `读取 ${filePath} 失败: ${err.message}`);
     }
     return null;
   }

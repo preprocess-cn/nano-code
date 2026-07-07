@@ -8,6 +8,8 @@ import {
   findBundledSkill,
   getBundledSkills,
   buildSkillsPromptSection,
+  registerAllDefaultBundledSkills,
+  unregisterBundledSkill,
 } from '#src/plugins/skills/bundled/index.js';
 
 export interface SkillsPluginOptions {
@@ -133,6 +135,12 @@ export function createSkillsPlugin(
         default:
           return { status: 'error', message: `Unknown tool: ${name}` };
       }
+    },
+
+    onInit(registry: PluginRegistry): Promise<void> {
+      registerAllDefaultBundledSkills();
+      for (const name of disabled) unregisterBundledSkill(name);
+      return Promise.resolve();
     },
 
     onSystemPrompt(prompt: string): string {
@@ -298,7 +306,7 @@ async function executeForkedSkill(
   await registerBuiltinPlugin(subRegistry, 'command');
   await registerBuiltinPlugin(subRegistry, 'memory');
   await registerBuiltinPlugin(subRegistry, 'token-budget');
-  await registerBuiltinPlugin(subRegistry, 'search');
+  await registerBuiltinPlugin(subRegistry, 'file-search');
 
   const subAgent = new NanoCodeAgent({ registry: subRegistry, llmClient, agentRole: `技能: ${skill.name}`, name: skill.name, display });
 
@@ -333,7 +341,7 @@ async function handleRunAgent(
   await registerBuiltinPlugin(subRegistry, 'command');
   await registerBuiltinPlugin(subRegistry, 'memory');
   await registerBuiltinPlugin(subRegistry, 'token-budget');
-  await registerBuiltinPlugin(subRegistry, 'search');
+  await registerBuiltinPlugin(subRegistry, 'file-search');
 
   const subAgent = new NanoCodeAgent({ registry: subRegistry, llmClient, agentRole: role, name: 'run_agent', display });
 

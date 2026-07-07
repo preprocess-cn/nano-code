@@ -1,4 +1,5 @@
-import { ToolDefinition, ToolResponse, ToolContext, CommandInterceptResult, type PermissionConfirmRequest, type PermissionConfirmResponse, type CommandOutputHandler } from '#src/core/contract.js';
+import { ToolDefinition, ToolResponse, ToolContext, CommandInterceptResult, type PermissionConfirmRequest, type PermissionConfirmResponse, type CommandOutputHandler, type AgentReadyContext, type SessionRestoreContext } from '#src/core/contract.js';
+import { logManager } from '#src/core/logger.js';
 import { ChatMessage } from '#src/core/llm.js';
 import { IStore, InMemoryStore } from '#src/core/store.js';
 
@@ -48,6 +49,12 @@ export interface NanoPlugin {
 
   /** 返回额外参数注入到 LLM API 请求体中。核心只透传，不知晓参数含义 */
   onExtraParams?(): Record<string, unknown>;
+
+  /** NanoCodeAgent 创建后触发，插件可在此获取 agent/display 引用 */
+  onAgentReady?(context: AgentReadyContext): Promise<void>;
+
+  /** --continue 恢复会话时触发，插件可恢复状态（如 token 计数） */
+  onSessionRestore?(context: SessionRestoreContext): Promise<void>;
 }
 
 // ── Plugin registry ──
@@ -83,6 +90,8 @@ export class PluginRegistry {
   // 不持久化，--continue 后 allowlist 为空，权限确认自然恢复。
 
   private _allowlist: Map<string, true> = new Map();
+  /** 全局跳过所有权限确认（用于自动触发/后台任务的执行） */
+  private _skipPermissionScope = false;
 
   /** 检查某工具是否已加入当前会话的 allowlist */
   isToolAllowed(toolName: string): boolean {
@@ -104,6 +113,16 @@ export class PluginRegistry {
     return Array.from(this._allowlist.keys());
   }
 
+  /** 设置全局跳过权限确认（自动执行（如插件触发）时使用） */
+  setSkipPermissionScope(skip: boolean): void {
+    this._skipPermissionScope = skip;
+  }
+
+  /** 当前是否处于全局跳过权限确认的作用域 */
+  isSkipPermissionScope(): boolean {
+    return this._skipPermissionScope;
+  }
+
   /** 获取某工具的 sideEffect 标记 */
   getToolSideEffect(toolName: string): boolean {
     return this.toolSideEffects.get(toolName) ?? true;
@@ -111,6 +130,10 @@ export class PluginRegistry {
 
   setOutputHandler(handler: CommandOutputHandler): void {
     this._outputHandler = handler;
+  }
+
+  getOutputHandler(): CommandOutputHandler | undefined {
+    return this._outputHandler;
   }
 
   setAgentName(name: string): void {
@@ -123,14 +146,14 @@ export class PluginRegistry {
 
   async register(plugin: NanoPlugin): Promise<void> {
     if (this.plugins.has(plugin.name)) {
-      console.warn(`[plugin] Warning: Plugin "${plugin.name}" is already registered, overwriting.`);
+      logManager.warn('plugin', `Plugin "${plugin.name}" is already registered, overwriting.`);
       await this.unregister(plugin.name);
     }
 
     this.plugins.set(plugin.name, plugin);
     for (const tool of plugin.getTools()) {
       if (this.toolIndex.has(tool.function.name)) {
-        console.warn(`[plugin] Warning: Tool "${tool.function.name}" already registered by plugin "${this.toolIndex.get(tool.function.name)}", overwritten by "${plugin.name}".`);
+        logManager.warn('plugin', `Tool "${tool.function.name}" already registered by plugin "${this.toolIndex.get(tool.function.name)}", overwritten by "${plugin.name}".`);
       }
       this.toolIndex.set(tool.function.name, plugin.name);
       this.toolSideEffects.set(tool.function.name, tool.function.sideEffect ?? true);
@@ -142,7 +165,7 @@ export class PluginRegistry {
         await plugin.onInit(this);
       }
     } catch (err) {
-      console.error(`[plugin] onInit failed for "${plugin.name}":`, err);
+      logManager.error('plugin', `onInit failed for "${plugin.name}":`, err);
     }
   }
 
@@ -153,7 +176,7 @@ export class PluginRegistry {
       const plugin = this.plugins.get(name);
       if (!plugin) continue;
       try { await plugin.onDestroy?.(); }
-      catch (err) { console.error(`[plugin] onDestroy failed for "${name}":`, err); }
+      catch (err) { logManager.error('plugin', `onDestroy failed for "${name}":`, err); }
     }
     this.plugins.clear();
     this.toolIndex.clear();
@@ -172,7 +195,7 @@ export class PluginRegistry {
         await plugin.onDestroy();
       }
     } catch (err) {
-      console.error(`[plugin] onDestroy failed for "${name}":`, err);
+      logManager.error('plugin', `onDestroy failed for "${name}":`, err);
     }
 
     for (const [toolName, pluginName] of this.toolIndex.entries()) {
@@ -254,7 +277,7 @@ export class PluginRegistry {
       const fn = getHook(p);
       if (!fn) continue;
       try { v = fn(v); }
-      catch (err) { console.error(`[plugin] ${label} failed for "${p.name}":`, err); }
+      catch (err) { logManager.error('plugin', `${label} failed for "${p.name}":`, err); }
     }
     return v;
   }
@@ -267,7 +290,7 @@ export class PluginRegistry {
       const fn = getHook(p);
       if (!fn) continue;
       try { fn(...args); }
-      catch (err) { console.error(`[plugin] ${label} failed for "${p.name}":`, err); }
+      catch (err) { logManager.error('plugin', `${label} failed for "${p.name}":`, err); }
     }
   }
 
@@ -292,7 +315,7 @@ export class PluginRegistry {
         const result = fn();
         if (result) params = { ...params, ...result };
       } catch (err) {
-        console.error(`[plugin] onExtraParams failed for "${p.name}":`, err);
+        logManager.error('plugin', ` onExtraParams failed for "${p.name}":`, err);
       }
     }
     return params;
@@ -306,7 +329,7 @@ export class PluginRegistry {
       try {
         current = fn(current);
       } catch (err) {
-        console.error(`[plugin] onBeforeToolCall failed for "${p.name}":`, err);
+        logManager.error('plugin', ` onBeforeToolCall failed for "${p.name}":`, err);
         continue;
       }
       if (current === null) return null;
@@ -318,6 +341,20 @@ export class PluginRegistry {
     return this.execPipe(p => p.onAfterToolCall, result, 'onAfterToolCall');
   }
 
+  async execAgentReady(ctx: AgentReadyContext): Promise<void> {
+    for (const plugin of this.plugins.values()) {
+      try { await plugin.onAgentReady?.(ctx); }
+      catch (err) { logManager.error('plugin', `onAgentReady failed for "${plugin.name}":`, err); }
+    }
+  }
+
+  async execSessionRestore(ctx: SessionRestoreContext): Promise<void> {
+    for (const plugin of this.plugins.values()) {
+      try { await plugin.onSessionRestore?.(ctx); }
+      catch (err) { logManager.error('plugin', `onSessionRestore failed for "${plugin.name}":`, err); }
+    }
+  }
+
   async execBeforeAgentInput(input: string): Promise<CommandInterceptResult | null> {
     for (const plugin of this.plugins.values()) {
       if (plugin.onBeforeAgentInput) {
@@ -325,7 +362,7 @@ export class PluginRegistry {
           const result = await plugin.onBeforeAgentInput(input);
           if (result?.handled) return result;
         } catch (err) {
-          console.error(`[plugin] onBeforeAgentInput failed for "${plugin.name}":`, err);
+          logManager.error('plugin', ` onBeforeAgentInput failed for "${plugin.name}":`, err);
         }
       }
     }
@@ -370,12 +407,20 @@ const BUILTIN_LOADERS: Record<string, (settings?: Record<string, any>) => Promis
   command: async () => (await import('#src/plugins/tools/command.js')).commandPlugin,
   memory: async (s) => (await import('#src/plugins/tools/memory.js')).createMemoryPlugin(s || {}),
   'token-budget': async (s) => (await import('#src/plugins/token-budget/index.js')).createTokenBudgetPlugin(s || {}),
-  skills: async () => (await import('#src/plugins/skills/index.js')).createSkillsPlugin(),
-  search: async () => (await import('#src/plugins/tools/search.js')).searchPlugin,
+  skills: async (s) => (await import('#src/plugins/skills/index.js')).createSkillsPlugin(s?.llmClient, s?.displayMgr, { disabled: s?.disabled, disableSkillTool: s?.disableSkillTool }),
+  'file-search': async () => (await import('#src/plugins/tools/search.js')).searchPlugin,
   web: async () => (await import('#src/plugins/tools/web.js')).webPlugin,
   'model-registry': async (s) => (await import('#src/plugins/model-registry/index.js')).createModelRegistryPlugin(s || {}),
   monitor: async () => (await import('#src/plugins/tools/monitor.js')).monitorPlugin,
-  cron: async () => (await import('#src/plugins/cron/cron-plugin.js')).cronPlugin,
+  // ── Feature plugins (loaded via registerBuiltinPlugin) ──
+  coordinator: async (s) => (await import('#src/plugins/coordinator/coordinator.js')).createAgentCoordinatorPlugin(s?.llmClient, s?.displayMgr),
+  commands: async (s) => (await import('#src/plugins/commands/index.js')).createCommandsPlugin(s?.displayMgr),
+  'skills-slash': async (s) => (await import('#src/plugins/commands/skills-slash.js')).createSkillsSlashPlugin(s?.llmClient, s?.displayMgr),
+  'agent-slash': async () => (await import('#src/plugins/commands/agent-slash.js')).createAgentSlashPlugin(),
+  bang: async (s) => (await import('#src/plugins/commands/bang.js')).createBangPlugin(s?.displayMgr),
+  'task-plan': async () => (await import('#src/plugins/tools/task-plan.js')).taskPlanPlugin,
+  'npm-loader': async () => (await import('#src/plugins/npm-loader.js')).npmLoaderPlugin,
+  'mcp-loader': async (s) => (await import('#src/plugins/mcp/adapter.js')).createMcpLoaderPlugin(s?.config, s?.debug),
 };
 
 /**
@@ -388,10 +433,24 @@ export const DEFAULT_SYSTEM_PLUGINS: readonly string[] = [
   'command',
   'memory',
   'token-budget',
-  'skills',
-  'search',
+  'file-search',
   'monitor',
-  'cron',
+  'mcp-loader',
+];
+
+/**
+ * 默认 feature 插件列表 — 在系统插件之后注册，可接收 settings 传入运行时依赖。
+ * 用户可在 YAML 配置中通过 plugins.<name>.enabled = false 禁用。
+ */
+export const DEFAULT_FEATURE_PLUGINS: readonly string[] = [
+  'skills',
+  'coordinator',
+  'commands',
+  'skills-slash',
+  'agent-slash',
+  'bang',
+  'task-plan',
+  'npm-loader',
 ];
 
 /**

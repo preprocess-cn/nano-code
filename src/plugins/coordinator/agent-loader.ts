@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import * as yaml from 'js-yaml';
+import { logManager } from '#src/core/logger.js';
 
 export interface AgentDefinition {
   name: string;
@@ -46,7 +47,7 @@ export function loadAgentDefinitions(agentDir?: string): AgentDefinition[] {
     try {
       raw = fs.readFileSync(filePath, 'utf-8');
     } catch {
-      console.warn(`[agent-loader] 无法读取 "${entry}"，已跳过。`);
+      logManager.warn('agent-loader', ` 无法读取 "${entry}"，已跳过。`);
       continue;
     }
 
@@ -54,27 +55,27 @@ export function loadAgentDefinitions(agentDir?: string): AgentDefinition[] {
     try {
       doc = yaml.load(raw);
     } catch {
-      console.warn(`[agent-loader] "${entry}" YAML 解析失败，已跳过。`);
+      logManager.warn('agent-loader', ` "${entry}" YAML 解析失败，已跳过。`);
       continue;
     }
 
     if (!doc || typeof doc !== 'object') {
-      console.warn(`[agent-loader] "${entry}" 内容为空或非对象，已跳过。`);
+      logManager.warn('agent-loader', ` "${entry}" 内容为空或非对象，已跳过。`);
       continue;
     }
 
     if (!doc.name || typeof doc.name !== 'string') {
-      console.warn(`[agent-loader] "${entry}" 缺少必填字段 "name"，已跳过。`);
+      logManager.warn('agent-loader', ` "${entry}" 缺少必填字段 "name"，已跳过。`);
       continue;
     }
 
     if (!doc.description || typeof doc.description !== 'string') {
-      console.warn(`[agent-loader] "${entry}" 缺少必填字段 "description"，已跳过。`);
+      logManager.warn('agent-loader', ` "${entry}" 缺少必填字段 "description"，已跳过。`);
       continue;
     }
 
     if (!doc.role || typeof doc.role !== 'string') {
-      console.warn(`[agent-loader] "${entry}" 缺少必填字段 "role"，已跳过。`);
+      logManager.warn('agent-loader', ` "${entry}" 缺少必填字段 "role"，已跳过。`);
       continue;
     }
 

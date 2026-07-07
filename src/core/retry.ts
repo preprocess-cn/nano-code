@@ -1,3 +1,5 @@
+import { logManager } from '#src/core/logger.js';
+
 export interface RetryOptions {
   maxRetries: number;
   delaysMs: number[];
@@ -21,7 +23,7 @@ export async function withRetry<T>(
       lastErr = err;
       if (attempt < options.maxRetries && options.isTransient(err)) {
         const delay = options.delaysMs[attempt];
-        console.warn(`[${options.label}] retry ${attempt + 1}/${options.maxRetries + 1} (delay ${delay / 1000}s)`);
+        logManager.warn(options.label, `retry ${attempt + 1}/${options.maxRetries + 1} (delay ${delay / 1000}s)`);
         await new Promise(r => setTimeout(r, delay));
         continue;
       }

@@ -565,3 +565,34 @@ export function buildMCPPluginsFromConfig(config: NanoConfig, debug = false): Na
 
   return plugins;
 }
+
+/**
+ * mcp-loader 系统插件 — 在 onInit 中读取 .mcp.json + config 配置，
+ * 自动创建并注册 MCP 传输层插件。
+ * 注册在 DEFAULT_SYSTEM_PLUGINS 中，随系统插件自动加载。
+ */
+export function createMcpLoaderPlugin(config?: NanoConfig, debug?: boolean): NanoPlugin {
+  return {
+    name: 'mcp-loader',
+    description: 'MCP 插件自动加载器 — 根据配置注册 MCP 传输层',
+
+    getTools(): ToolDefinition[] {
+      return [];
+    },
+
+    async execute(): Promise<ToolResponse> {
+      return { status: 'error', message: 'mcp-loader 插件不直接提供工具' };
+    },
+
+    async onInit(registry): Promise<void> {
+      const cfg = registry.getPluginConfig('mcp-loader') as { config?: NanoConfig; debug?: boolean } | undefined;
+      const mcpConfig = cfg?.config ?? config;
+      const mcpDebug = cfg?.debug ?? debug ?? false;
+      if (!mcpConfig) return;
+      const plugins = buildMCPPluginsFromConfig(mcpConfig, mcpDebug);
+      for (const plugin of plugins) {
+        await registry.register(plugin);
+      }
+    },
+  };
+}

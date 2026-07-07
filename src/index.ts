@@ -1,23 +1,10 @@
 import { NanoCodeAgent } from '#src/core/agent.js';
-import { PluginRegistry, registerBuiltinPlugin } from '#src/core/plugin.js';
+import { PluginRegistry, registerBuiltinPlugin, DEFAULT_SYSTEM_PLUGINS, DEFAULT_FEATURE_PLUGINS } from '#src/core/plugin.js';
 import { loadConfig, applyProfile, getSystemWhitelist } from '#src/core/config.js';
 import { LLMClient } from '#src/core/llm.js';
-import { buildMCPPluginsFromConfig } from '#src/plugins/mcp/adapter.js';
-import { npmLoaderPlugin } from '#src/plugins/npm-loader.js';
 import { loadSession, saveSession } from '#src/core/session.js';
 import { handlePluginCommand, printPluginList } from '#src/plugin-cli.js';
-import { createAgentCoordinatorPlugin } from '#src/plugins/coordinator/coordinator.js';
-import { createSkillsPlugin } from '#src/plugins/skills/index.js';
-import { registerAllDefaultBundledSkills, unregisterBundledSkill } from '#src/plugins/skills/bundled/index.js';
-import { createCommandsPlugin, setCommandAgent } from '#src/plugins/commands/index.js';
-import { createSkillsSlashPlugin } from '#src/plugins/commands/skills-slash.js';
-import { createAgentSlashPlugin, setTargetAgent } from '#src/plugins/commands/agent-slash.js';
-import { createBangPlugin } from '#src/plugins/commands/bang.js';
-import { taskPlanPlugin } from '#src/plugins/tools/task-plan.js';
-import { DisplayManager, DisplayPlugin } from '#src/display.js';
-import { replDisplay } from '#src/plugins/display/repl.js';
-import { cliDisplay } from '#src/plugins/display/cli.js';
-import { resolveDisplayPlugin } from '#src/plugins/display/loader.js';
+import { DisplayManager, resolveDisplayPlugin } from '#src/display.js';
 import { SK } from '#src/core/store-keys.js';
 import type { ModelEntry } from '#src/core/llm.js';
 import { cac } from 'cac';
@@ -63,25 +50,6 @@ async function handleExit(displayMgr?: DisplayManager, registry?: PluginRegistry
   process.exit(0);
 }
 
-// ── Helper: resolve display plugin ──
-
-async function resolveDisplayPluginByName(config: ReturnType<typeof loadConfig>): Promise<DisplayPlugin> {
-  if (config.display?.enabled === false) {
-    return config.display.plugin
-      ? (await resolveDisplayPlugin(config.display.plugin)) ?? cliDisplay
-      : cliDisplay;
-  }
-  if (config.display?.plugin) {
-    const plugin = await resolveDisplayPlugin(config.display.plugin);
-    if (!plugin) {
-      console.error(`Display plugin "${config.display.plugin}" not found`);
-      process.exit(1);
-    }
-    return plugin;
-  }
-  return replDisplay;
-}
-
 // ── Helper: create and populate the plugin registry ──
 
 async function initializePlugins(
@@ -98,84 +66,56 @@ async function initializePlugins(
     defaultTimeout: config.core.defaultTimeout,
   });
 
-  injectTokenBudgetRuntime(config, registry, llmClient, displayMgr);
-
-  const npmEntries = await registerConfigPlugins(config, registry);
-  await registerMCPPlugins(config, registry, debug);
-
-  registry.setPluginConfig('npm-loader', npmEntries);
-  await registry.register(npmLoaderPlugin);
-
-  await registerSystemPlugins(config, registry);
-
-  const disabledSkills = await registerFeaturePlugins(config, registry, llmClient, displayMgr);
-  await lazyInitSkillsBridge(disabledSkills);
-  await displayMgr.init(registry);
-}
-
-// ── Sub-functions for initializePlugins ──
-
-function injectTokenBudgetRuntime(config: ReturnType<typeof loadConfig>, registry: PluginRegistry, llmClient: LLMClient, displayMgr: DisplayManager): void {
+  // 1. Inject runtime deps for token-budget and mcp-loader
   const tbSettings = config.plugins['token-budget']?.settings;
   registry.setPluginConfig('token-budget', { ...(tbSettings ?? {}), llmClient, displayMgr });
-}
+  registry.setPluginConfig('mcp-loader', { config, debug });
 
-async function registerConfigPlugins(config: ReturnType<typeof loadConfig>, registry: PluginRegistry): Promise<Record<string, { spec?: string; enabled?: boolean }>> {
-  const npmEntries: Record<string, { spec?: string; enabled?: boolean }> = {};
-  for (const [name, pluginCfg] of Object.entries(config.plugins)) {
-    if (pluginCfg.enabled === false) continue;
-    if (pluginCfg.settings && name !== 'token-budget') registry.setPluginConfig(name, pluginCfg.settings);
-    if (pluginCfg.type === 'npm') {
-      npmEntries[name] = { spec: pluginCfg.spec, enabled: pluginCfg.enabled };
-    } else if (pluginCfg.type === 'mcp') {
-      continue;
-    } else {
-      await registerBuiltinPlugin(registry, name, pluginCfg.settings);
-    }
-  }
-  return npmEntries;
-}
-
-async function registerMCPPlugins(config: ReturnType<typeof loadConfig>, registry: PluginRegistry, debug = false): Promise<void> {
-  for (const mcpPlugin of buildMCPPluginsFromConfig(config, debug)) {
-    await registry.register(mcpPlugin);
-  }
-}
-
-async function registerSystemPlugins(config: ReturnType<typeof loadConfig>, registry: PluginRegistry): Promise<void> {
+  // 2. Register system plugins (fs, command, memory, token-budget, file-search, monitor, mcp-loader)
   const systemWhitelist = getSystemWhitelist(config);
   for (const name of systemWhitelist) {
     if (config.plugins[name]) continue;
     await registerBuiltinPlugin(registry, name);
   }
-}
 
-async function registerFeaturePlugins(config: ReturnType<typeof loadConfig>, registry: PluginRegistry, llmClient: LLMClient, displayMgr: DisplayManager): Promise<string[]> {
+  // 3. Register user-configured plugins + collect npm entries
+  const npmEntries: Record<string, { spec?: string; enabled?: boolean }> = {};
+  for (const [name, pluginCfg] of Object.entries(config.plugins)) {
+    if (pluginCfg.enabled === false) continue;
+    if (pluginCfg.type === 'npm') {
+      npmEntries[name] = { spec: pluginCfg.spec, enabled: pluginCfg.enabled };
+    } else if (pluginCfg.type === 'mcp') {
+      continue; // mcp-loader 处理
+    } else if (systemWhitelist.has(name)) {
+      continue; // 已在 step 2 注册
+    } else if ((DEFAULT_FEATURE_PLUGINS as unknown as string[]).includes(name)) {
+      continue; // feature 插件在 step 4 统一注册
+    } else {
+      await registerBuiltinPlugin(registry, name, pluginCfg.settings);
+    }
+  }
+
+  // 4. Register feature plugins with runtime deps
+  for (const name of DEFAULT_FEATURE_PLUGINS) {
+    if (config.plugins[name]?.enabled === false) continue;
+    const s: Record<string, any> = {};
+    if (['skills', 'coordinator', 'skills-slash'].includes(name)) s.llmClient = llmClient;
+    if (['skills', 'coordinator', 'commands', 'skills-slash', 'bang'].includes(name)) s.displayMgr = displayMgr;
+    if (name === 'skills') { s.disabled = config.skills?.disabled ?? []; s.disableSkillTool = config.skills?.disableSkillTool ?? false; }
+    if (name === 'npm-loader') s.entries = npmEntries;
+    await registerBuiltinPlugin(registry, name, s);
+  }
+
+  // 5. Optional Ink skills bridge
   const disabledSkills = config.skills?.disabled ?? [];
-  registerAllDefaultBundledSkills();
-  for (const name of disabledSkills) unregisterBundledSkill(name);
-
-  await registry.register(createSkillsPlugin(llmClient, displayMgr, {
-    disabled: disabledSkills,
-    disableSkillTool: config.skills?.disableSkillTool ?? false,
-  }));
-  await registry.register(createAgentCoordinatorPlugin(llmClient, displayMgr));
-  await registry.register(createCommandsPlugin(displayMgr, registry, config));
-  await registry.register(createAgentSlashPlugin(displayMgr));
-  await registry.register(createSkillsSlashPlugin(llmClient, displayMgr));
-  await registry.register(createBangPlugin(displayMgr));
-  await registry.register(taskPlanPlugin);
-
-  return disabledSkills;
-}
-
-async function lazyInitSkillsBridge(disabledSkills: string[]): Promise<void> {
   try {
     const { initCommandSuggestions } = await import('#src/plugins/display/claude-code-ink/skills-bridge.js');
     initCommandSuggestions(disabledSkills);
   } catch {
     // Ink 可选依赖未安装时静默跳过
   }
+
+  await displayMgr.init(registry);
 }
 
 // ── Helper: restore previous session ──
@@ -193,8 +133,8 @@ async function restoreSession(
 
   agent.loadHistory(session.messages);
 
-  const { countMessagesTokens } = await import('#src/plugins/token-budget/counter.js');
-  registry.store.set(SK.TokenBudgetInitialAccumulated, countMessagesTokens(session.messages));
+  // 触发 onSessionRestore hook（token-budget 插件计算累计 token）
+  await registry.execSessionRestore({ messages: session.messages, store: registry.store });
 
   for (const msg of session.messages) {
     if (msg.role === 'user') {
@@ -232,6 +172,7 @@ async function runMainLoop(
     isPrompting = true;
     const userInput = await displayMgr.prompt();
     isPrompting = false;
+
     if (userInput === null) {
       await handleExit(displayMgr, registry);
       return;
@@ -248,8 +189,9 @@ async function runMainLoop(
       if (intercept.skipAgent) continue;
     }
 
+    const effectiveInput = intercept?.replaceInput ?? userInput;
     try {
-      await agent.runTask(intercept?.replaceInput ?? userInput);
+      await agent.runTask(effectiveInput);
     } catch (error: any) {
       if (error?.name === 'AbortError' || error?.message === 'CANCELLED') {
         registry.store.set(SK.AgentCancelled, undefined);
@@ -281,7 +223,7 @@ async function startCLI(options: { debug?: boolean; think?: boolean; skipPermiss
 
   // ── Load display plugin ──
   const displayMgr = new DisplayManager();
-  displayMgr.addPlugin(await resolveDisplayPluginByName(config));
+  displayMgr.addPlugin(await resolveDisplayPlugin(config));
 
   // ── Plugin registry (created before LLMClient so its Store is available) ──
   const registry = new PluginRegistry();
@@ -364,8 +306,7 @@ async function startCLI(options: { debug?: boolean; think?: boolean; skipPermiss
   if (options.skipPermission) displayMgr.onStatus({ message: MSG_SKIP_PERMISSION, agentName: 'main', level: 'info' });
 
   const agent = new NanoCodeAgent({ registry, llmClient, agentRole: config.agent?.role, promptConfig: config.systemPrompt, name: 'main', display: displayMgr.asAgentDisplay() });
-  setCommandAgent(agent);
-  setTargetAgent(agent, displayMgr);
+  await registry.execAgentReady({ agent, display: displayMgr });
 
   // ── Session restore ──
   if (options.continue) await restoreSession(agent, registry, displayMgr);

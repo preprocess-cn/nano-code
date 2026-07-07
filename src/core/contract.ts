@@ -107,6 +107,24 @@ export function isMainAgent(agentName: string): boolean {
  * NanoCodeAgent 只依赖这个子集接口，不依赖完整的 DisplayPlugin。
  * 展示层通过 DisplayManager.asAgentDisplay() 适配。
  */
+/**
+ * onAgentReady hook 上下文。
+ * NanoCodeAgent 创建后触发，供插件获取 agent/display 引用。
+ */
+export interface AgentReadyContext {
+  agent: import('#src/core/agent.js').NanoCodeAgent;
+  display: import('#src/display.js').DisplayManager;
+}
+
+/**
+ * onSessionRestore hook 上下文。
+ * --continue 恢复会话时触发，供插件（如 token-budget）恢复状态。
+ */
+export interface SessionRestoreContext {
+  messages: import('#src/core/llm.js').ChatMessage[];
+  store: import('#src/core/store.js').IStore;
+}
+
 export interface AgentDisplay {
   onStatus?(event: { message: string; agentName: string; level: string }): void;
   onStreamChunk?(event: { text: string; agentName: string }): void;

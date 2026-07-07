@@ -59,9 +59,9 @@ export const SK = {
   /** ModelEntry[]: model-registry 中已解析的全部模型条目（用于 /model 命令和 --model CLI） */
   ModelRegistryModels: 'model-registry:models',
 
-  // ── Cron scheduler (cron plugin) ──
-  /** CronTask[]: 持久化定时任务列表 */
-  CronTasks: 'cron:tasks',
+  // ── View switching (Ink display) ──
+  /** string | undefined: 当前正在查看的 agent（如 sub_agent_name），undefined = 主视图 */
+  ViewAgent: 'view:agent',
 } as const;
 
 export interface AgentModeInfo {

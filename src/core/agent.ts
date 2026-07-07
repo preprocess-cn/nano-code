@@ -109,10 +109,6 @@ export class NanoCodeAgent {
       const systemMessage = buildSystemPrompt(this.registry, this.promptConfig, this.agentRole);
       let messagesWithSystem: ChatMessage[] = [systemMessage, ...this.messageHistory];
       messagesWithSystem = this.registry.execBeforeRequest(messagesWithSystem);
-      // Notify display when synthetic messages (isMeta, e.g. cron triggers) are injected
-      if (messagesWithSystem.slice(1).some(m => m.isMeta)) {
-        this.display?.onStatus?.({ message: `* Running scheduled task (${new Date().toTimeString().slice(0, 8)})`, agentName: this.name, level: 'info' });
-      }
 
       const isSubAgent = !isMainAgent(this.name);
       let streamBuffer = '';
@@ -258,29 +254,37 @@ export class NanoCodeAgent {
 
     // ── Permission gate ──
     // sideEffect=true 且不在 allowlist 中的工具需要用户确认
+    // 已在 allowlist 中的工具同时跳过工具层权限确认
     let agentConfirmed = false;
     const sideEffect = this.registry.getToolSideEffect(toolName);
-    if (sideEffect && !this.registry.isToolAllowed(toolName)) {
-      const confirmCb = this.registry.getConfirmCallback();
-      if (confirmCb) {
-        const response = await confirmCb({
-          toolName,
-          message: `工具 "${toolName}" 需要执行操作，是否批准？`,
-          details: JSON.stringify(toolArgs, null, 2).slice(0, 1000),
-        });
-        if (response === 'always_allow') {
-          this.registry.allowTool(toolName);
-          agentConfirmed = true;
-        } else if (response) {
-          agentConfirmed = true;
-        } else {
-          this.display?.onToolResult?.({ id: rawToolCall.id, status: 'rejected_by_user', message: '用户拒绝', agentName: this.name });
-          toolMessages.push({
-            role: 'tool', tool_call_id: rawToolCall.id, name: toolName,
-            content: JSON.stringify({ status: 'rejected_by_user', message: '用户拒绝工具调用' }),
+    if (sideEffect) {
+      if (this.registry.isSkipPermissionScope()) {
+        agentConfirmed = true;
+      } else if (!this.registry.isToolAllowed(toolName)) {
+        const confirmCb = this.registry.getConfirmCallback();
+        if (confirmCb) {
+          const response = await confirmCb({
+            toolName,
+            message: `工具 "${toolName}" 需要执行操作，是否批准？`,
+            details: JSON.stringify(toolArgs, null, 2).slice(0, 1000),
           });
-          return { status: 'rejected', toolMessages };
+          if (response === 'always_allow') {
+            this.registry.allowTool(toolName);
+            agentConfirmed = true;
+          } else if (response) {
+            agentConfirmed = true;
+          } else {
+            this.display?.onToolResult?.({ id: rawToolCall.id, status: 'rejected_by_user', message: '用户拒绝', agentName: this.name });
+            toolMessages.push({
+              role: 'tool', tool_call_id: rawToolCall.id, name: toolName,
+              content: JSON.stringify({ status: 'rejected_by_user', message: '用户拒绝工具调用' }),
+            });
+            return { status: 'rejected', toolMessages };
+          }
         }
+      } else {
+        // 工具已在 allowlist 中 — 跳过工具层的二次权限确认
+        agentConfirmed = true;
       }
     }
 

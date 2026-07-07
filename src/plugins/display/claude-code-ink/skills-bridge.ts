@@ -22,9 +22,9 @@ export function initCommandSuggestions(disabledSkills: string[]): void {
       }
     }
 
-    // 内置 TypeScript 技能
+    // 内置 TypeScript 技能（只显示用户可斜杠调用的）
     for (const s of getBundledSkills()) {
-      if (s.disableModelInvocation) continue;
+      if (s.userInvocable === false) continue;
       if (disabledSkills.includes(s.name)) continue;
       items.push({ name: s.name, description: s.description, type: 'skill' });
       for (const alias of s.aliases ?? []) {

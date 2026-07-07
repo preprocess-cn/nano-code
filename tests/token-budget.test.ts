@@ -48,18 +48,39 @@ describe('Token Budget Plugin', () => {
     assert.match(last.content!, /token budget/);
   });
 
-  it('rejects tool calls when over budget', () => {
-    const plugin = createTokenBudgetPlugin({ maxTokensPerSession: 10 });
-    plugin.onAfterRequest!({ text: 'x'.repeat(200), toolCalls: undefined });
+  it('injects isMeta flag on hard stop message', () => {
+    const plugin = createTokenBudgetPlugin({
+      maxTokensPerSession: 10,
+      compressionThreshold: 100,
+    });
+    plugin.onAfterRequest!({ text: 'x'.repeat(100), toolCalls: undefined });
 
-    const result = plugin.onBeforeToolCall!({ id: '1', function: { name: 'test', arguments: '{}' } });
-    assert.equal(result, null);
+    const msgs = makeMsgs(5, 'hello');
+    const result = plugin.onBeforeRequest!(msgs);
+    const last = result[result.length - 1];
+    assert.equal(last.isMeta, true);
+    assert.match(last.content!, /token budget/);
   });
 
-  it('allows tool calls when under budget', () => {
-    const plugin = createTokenBudgetPlugin({ maxTokensPerSession: 100000 });
-    const result = plugin.onBeforeToolCall!({ id: '1', function: { name: 'test', arguments: '{}' } });
-    assert.notEqual(result, null);
+  it('does not reject tool calls (onBeforeToolCall removed per Claude Code pattern)', () => {
+    const plugin = createTokenBudgetPlugin({ maxTokensPerSession: 10 });
+    // Simply verify the method does not exist — budget enforcement
+    // is done via onBeforeRequest, not tool call interception
+    assert.equal((plugin as any).onBeforeToolCall, undefined);
+  });
+
+  it('injects isMeta flag on compression hint', () => {
+    const plugin = createTokenBudgetPlugin({
+      maxTokensPerSession: 100000,
+      compressionThreshold: 10,
+    });
+    plugin.onAfterRequest!({ text: 'x'.repeat(60), toolCalls: undefined });
+
+    const msgs = makeMsgs(3, 'hi');
+    const result = plugin.onBeforeRequest!(msgs);
+    const last = result[result.length - 1];
+    assert.equal(last.isMeta, true);
+    assert.match(last.content!, /简洁/);
   });
 
   it('loads config from registry on init', async () => {
@@ -84,18 +105,22 @@ describe('Token Budget Plugin', () => {
 
   it('uses exact token counts from rawMeta when available', () => {
     const plugin = createTokenBudgetPlugin({ maxTokensPerSession: 100000 });
-    // Fallback: rawMeta empty, text-based estimation
+    // rawMeta empty → text-based estimation → onBeforeRequest should pass through (under budget)
     plugin.onAfterRequest!({ text: 'hello' });
-    const beforeEst = plugin.onBeforeToolCall!({ id: '1', function: { name: 'test', arguments: '{}' } });
-    assert.notEqual(beforeEst, null, 'should not reject yet');
+    const msgs = makeMsgs(2, 'hi');
+    const result = plugin.onBeforeRequest!(msgs);
+    assert.equal(result.length, msgs.length, 'should pass through when under budget');
 
-    // Reset: inject exact token counts via rawMeta
+    // Reset: inject exact token counts via rawMeta, exceed budget
     const plugin2 = createTokenBudgetPlugin({ maxTokensPerSession: 9 });
     plugin2.onAfterRequest!({ text: 'tiny' }, { promptTokens: 5, completionTokens: 5, totalTokens: 10 });
 
-    // Over budget now
-    const result = plugin2.onBeforeToolCall!({ id: '2', function: { name: 'test', arguments: '{}' } });
-    assert.equal(result, null, 'should reject after rawMeta indicates budget exhausted');
+    // Over budget now → onBeforeRequest should inject hard stop
+    const msgs2 = makeMsgs(2, 'hi');
+    const result2 = plugin2.onBeforeRequest!(msgs2);
+    const last = result2[result2.length - 1];
+    assert.equal(last.isMeta, true, 'should set isMeta on hard stop message');
+    assert.match(last.content!, /token budget/, 'should inject budget exceeded message');
   });
 
   it('can be registered as a NanoPlugin', async () => {

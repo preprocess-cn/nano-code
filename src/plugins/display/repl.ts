@@ -109,7 +109,7 @@ export const replDisplay: DisplayPlugin = {
     const output = event.level === 'error' ? process.stderr : process.stdout;
     const line = prefix + p(event.agentName, event.message);
     if (event.level === 'info') {
-      output.write(`\x1b[2m${line}\x1b[0m\n`); // dim for info-level (e.g. cron notification)
+      output.write(`\x1b[2m${line}\x1b[0m\n`); // dim for info-level notifications
     } else {
       output.write(line + '\n');
     }

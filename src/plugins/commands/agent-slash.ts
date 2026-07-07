@@ -9,22 +9,17 @@ import { SK, type AgentModeInfo } from '#src/core/store-keys.js';
 let _agent: NanoCodeAgent | null = null;
 let _display: DisplayManager | null = null;
 let _registry: PluginRegistry | null = null;
-
-export function setTargetAgent(agent: NanoCodeAgent, display?: DisplayManager): void {
-  _agent = agent;
-  _display = display ?? null;
-}
+let _agentDir: string | undefined;
 
 /** 测试用：重置模块级状态 */
 export function _resetState(): void {
   _agent = null;
   _display = null;
   _registry = null;
+  _agentDir = undefined;
 }
 
-export function createAgentSlashPlugin(display?: DisplayManager, agentDir?: string): NanoPlugin {
-  _display = display ?? null;
-
+export function createAgentSlashPlugin(): NanoPlugin {
   return {
     name: 'agent-slash',
     description: '切换工具型 agent — /<agent名>',
@@ -34,7 +29,14 @@ export function createAgentSlashPlugin(display?: DisplayManager, agentDir?: stri
 
     onInit(registry: PluginRegistry): Promise<void> {
       _registry = registry;
+      const cfg = registry.getPluginConfig('agent-slash');
+      if (cfg?.agentDir) _agentDir = cfg.agentDir;
       return Promise.resolve();
+    },
+
+    async onAgentReady(ctx) {
+      _agent = ctx.agent;
+      _display = ctx.display;
     },
 
     async onBeforeAgentInput(input: string): Promise<CommandInterceptResult | null> {
@@ -53,7 +55,7 @@ export function createAgentSlashPlugin(display?: DisplayManager, agentDir?: stri
         return { handled: true, skipAgent: true };
       }
 
-      const agents = loadAgentDefinitions(agentDir);
+      const agents = loadAgentDefinitions(_agentDir);
       const def = agents.find(a => a.name === cmdName);
       if (!def) return null; // fall through to skills-slash / commands
 

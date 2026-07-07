@@ -19,7 +19,7 @@ export interface TextSegment {
 export interface UIMessage {
   agentName: string;
   text: string;
-  kind: 'stream' | 'thinking' | 'status' | 'toolCall' | 'toolResult' | 'error' | 'userInput' | 'warn' | 'success';
+  kind: 'stream' | 'thinking' | 'status' | 'info' | 'toolCall' | 'toolResult' | 'error' | 'userInput' | 'warn' | 'success';
   segments?: TextSegment[];
   contextAnalysis?: ContextAnalysis;
 }
@@ -59,6 +59,14 @@ export interface InkAppProps {
   mode?: 'normal' | 'plan';
   taskCount?: number;
   backgroundTasks?: BackgroundTaskInfo[];
+  /** 当前查看的 agent（非 main 时切换到对应 agent 的页面） */
+  viewAgent?: string;
+  /** 可用视图列表（@ 命令切换用） */
+  viewAgents?: { name: string; label: string }[];
+  /** 切换视图 */
+  onViewAgentChange?: (name: string) => void;
+  /** 返回主视图 */
+  onViewAgentClear?: () => void;
 }
 
 function AgentLabel({ agentName }: { agentName: string }): React.ReactElement | null {
@@ -195,6 +203,18 @@ function MessageItem({ msg }: { msg: UIMessage }): React.ReactElement {
       { flexDirection: 'row' },
       label,
       React.createElement(Markdown, { dimColor: true, children: msg.text }),
+    );
+  }
+
+  if (msg.kind === 'info') {
+    const label = msg.agentName !== 'main'
+      ? React.createElement(AgentLabel, { agentName: msg.agentName })
+      : null;
+    return React.createElement(
+      Box,
+      { flexDirection: 'row' },
+      label,
+      React.createElement(Text, { dim: true }, msg.text),
     );
   }
 
@@ -385,7 +405,7 @@ function AgentHeader({ name }: { name: string }): React.ReactElement {
 }
 
 function AppContent(props: InkAppProps): React.ReactElement {
-  const { messages, onInputSubmit, onExit, greeting, pendingPermission, onPermissionResponse, activeAgentName } = props;
+  const { messages, onInputSubmit, onExit, greeting, pendingPermission, onPermissionResponse, activeAgentName, viewAgent, onViewAgentClear, onViewAgentChange } = props;
   const { setRawMode } = useStdin();
   const [input, setInput] = useState('');
   const [cursorPos, setCursorPos] = useState(0);
@@ -400,9 +420,18 @@ function AppContent(props: InkAppProps): React.ReactElement {
   // Filter suggestions when input or the full list changes
   useEffect(() => {
     const suggestions = props.suggestions ?? [];
+    const viewAgents = props.viewAgents ?? [];
     if (input.startsWith('/') && suggestions.length > 0) {
       const query = input.slice(1).toLowerCase();
       const filtered = filterSuggestions(suggestions, query);
+      setSuggestionFiltered(filtered);
+      setSelectedSuggestionIndex(0);
+      setIsSuggestionOpen(true);
+    } else if (input.startsWith('@') && viewAgents.length > 0) {
+      const query = input.slice(1).toLowerCase();
+      const filtered = viewAgents
+        .filter(v => v.name.toLowerCase().includes(query) || v.label.toLowerCase().includes(query))
+        .map(v => ({ name: v.name, description: v.label, type: 'agent' as const }));
       setSuggestionFiltered(filtered);
       setSelectedSuggestionIndex(0);
       setIsSuggestionOpen(true);
@@ -410,7 +439,7 @@ function AppContent(props: InkAppProps): React.ReactElement {
       setIsSuggestionOpen(false);
       setSuggestionFiltered([]);
     }
-  }, [input, props.suggestions]);
+  }, [input, props.suggestions, props.viewAgents]);
 
   // Collect user input messages for up/down history navigation
   const userMessages = useMemo(
@@ -439,12 +468,17 @@ function AppContent(props: InkAppProps): React.ReactElement {
     return h.subscribe(() => setScrollTick(n => n + 1));
   }, []);
 
-  // Dynamic border color based on input prefix
-  const inputBorderColor = input.startsWith('!')
-    ? '#ff0087' // bash mode (pink, matches Claude Code bashBorder)
-    : input.startsWith('/')
-      ? '#7c3aed' // slash/command mode (accent purple)
-      : '#6b7280'; // normal mode (gray)
+  // Dynamic border color based on input prefix and view mode
+  const isAtPrefix = input.startsWith('@');
+  const inputBorderColor = viewAgent && !isAtPrefix && input.length > 0
+    ? '#ef4444' // agent view + non-@ content = red (disabled)
+    : isAtPrefix
+      ? '#7c3aed' // @ command mode (purple)
+      : input.startsWith('!')
+        ? '#ff0087' // bash mode (pink, matches Claude Code bashBorder)
+        : input.startsWith('/')
+          ? '#7c3aed' // slash/command mode (accent purple)
+          : '#6b7280'; // normal mode (gray)
 
   // Show terminal cursor — Ink hides it in componentDidMount (parent class
   // component), which runs after useLayoutEffect but BEFORE useEffect.
@@ -559,7 +593,8 @@ function AppContent(props: InkAppProps): React.ReactElement {
       if (key.tab) {
         const selected = suggestionFiltered[selectedSuggestionIndex];
         if (selected) {
-          setInput('/' + selected.name + ' ');
+          const prefix = isAtPrefix ? '@' : '/';
+          setInput(prefix + selected.name + ' ');
           setCursorPos(selected.name.length + 2);
         }
         setIsSuggestionOpen(false);
@@ -570,27 +605,44 @@ function AppContent(props: InkAppProps): React.ReactElement {
         setIsSuggestionOpen(false);
         return;
       }
-      // Enter: complete + submit if a suggestion is selected
+      // Enter: complete + submit (/) or switch view (@)
       if (key.return) {
         const selected = suggestionFiltered[selectedSuggestionIndex];
         if (selected) {
-          const completed = '/' + selected.name + ' ';
-          onInputSubmit(completed.trim());
-          setInput('');
-          setCursorPos(0);
-          setHistoryIdx(-1);
-          draftRef.current = '';
+          if (isAtPrefix) {
+            // @ 模式：切换视图
+            onViewAgentChange?.(selected.name);
+            setInput('');
+            setCursorPos(0);
+            setIsSuggestionOpen(false);
+          } else {
+            const completed = '/' + selected.name + ' ';
+            onInputSubmit(completed.trim());
+            setInput('');
+            setCursorPos(0);
+            setHistoryIdx(-1);
+            draftRef.current = '';
+          }
           return;
         }
         // No selection: fall through to normal submit
       }
     }
 
-    // Up arrow: navigate to previous user input (history)
+    // Up arrow: navigate agents (cron view) or input history (main view)
     if (key.upArrow) {
+      if (viewAgent) {
+        // Agent 视图中上箭头切换到前一个 agent
+        const agents = props.viewAgents ?? [];
+        const currentIdx = agents.findIndex(a => a.name === viewAgent);
+        if (currentIdx > 0) {
+          onViewAgentChange?.(agents[currentIdx - 1].name);
+        }
+        return;
+      }
+      // 主视图：输入历史
       if (userMessages.length === 0) return;
       if (historyIdx === -1) {
-        // Save current draft before entering history browsing
         draftRef.current = input;
       }
       const newIdx = historyIdx === -1
@@ -603,8 +655,18 @@ function AppContent(props: InkAppProps): React.ReactElement {
       return;
     }
 
-    // Down arrow: navigate to next user input, restore draft when past the last
+    // Down arrow: navigate agents (cron view) or input history (main view)
     if (key.downArrow) {
+      if (viewAgent) {
+        // Agent 视图中下箭头切换到后一个 agent
+        const agents = props.viewAgents ?? [];
+        const currentIdx = agents.findIndex(a => a.name === viewAgent);
+        if (currentIdx < agents.length - 1) {
+          onViewAgentChange?.(agents[currentIdx + 1].name);
+        }
+        return;
+      }
+      // 主视图：输入历史
       if (historyIdx >= 0) {
         const newIdx = historyIdx + 1;
         if (newIdx >= userMessages.length) {
@@ -638,19 +700,42 @@ function AppContent(props: InkAppProps): React.ReactElement {
       return;
     }
 
-    // 统一管理的快捷键：Ctrl+C 和 Escape 都触发退出
-    if ((key.ctrl && _input === 'c') || key.escape) {
+    // Ctrl+C / Escape：agent 视图中 Esc 返回主视图
+    if (key.escape) {
+      if (viewAgent) {
+        onViewAgentClear?.();
+        return;
+      }
+      onExit();
+      return;
+    }
+    if (key.ctrl && _input === 'c') {
       onExit();
       return;
     }
     if (key.return) {
-      if (input.trim()) {
-        onInputSubmit(input.trim());
+      const trimmed = input.trim();
+      if (!trimmed) return;
+
+      // Agent 视图中 @ 开头的输入 → 切换视图
+      if (viewAgent && trimmed.startsWith('@')) {
+        const target = trimmed.slice(1);
+        onViewAgentChange?.(target || 'main');
         setInput('');
         setCursorPos(0);
-        setHistoryIdx(-1);
-        draftRef.current = '';
+        return;
       }
+      // Agent 视图中非 @ 输入 → 忽略（禁用状态）
+      if (viewAgent && !trimmed.startsWith('@')) {
+        return;
+      }
+
+      // 主视图正常提交
+      onInputSubmit(trimmed);
+      setInput('');
+      setCursorPos(0);
+      setHistoryIdx(-1);
+      draftRef.current = '';
       return;
     }
     // Backspace: delete character before cursor
@@ -736,7 +821,7 @@ function AppContent(props: InkAppProps): React.ReactElement {
                     key: s.name,
                     color: isFocused ? '#7c3aed' : s.type === 'agent' ? '#06b6d4' : undefined,
                     dimColor: !isFocused,
-                  }, `${isFocused ? '● ' : '○ '}/${s.name}  ${s.type === 'agent' ? '[agent] ' : ''}${s.description}`);
+                  }, `${isFocused ? '● ' : '○ '}${isAtPrefix ? '@' : '/'}${s.name}  ${s.type === 'agent' ? '[agent] ' : ''}${s.description}`);
                 }),
               )
             : null,
@@ -808,12 +893,21 @@ function AppContent(props: InkAppProps): React.ReactElement {
             ...visibleSuggestions.map((s, i) => {
               const actualIndex = suggestionWindowStart + i;
               const isFocused = actualIndex === selectedSuggestionIndex;
+              const suggestionPrefix = isAtPrefix ? '@' : '/';
               return React.createElement(Text, {
                 key: s.name,
                 color: isFocused ? '#7c3aed' : s.type === 'agent' ? '#06b6d4' : undefined,
                 dimColor: !isFocused,
-              }, `${isFocused ? '● ' : '○ '}/${s.name}  ${s.type === 'agent' ? '[agent] ' : ''}${s.description}`);
+              }, `${isFocused ? '● ' : '○ '}${suggestionPrefix}${s.name}  ${s.type === 'agent' ? '[agent] ' : ''}${s.description}`);
             }),
+          )
+        : null,
+      // Agent 视图提示
+      viewAgent
+        ? React.createElement(
+            Text,
+            { dim: true },
+            'Agent 视图页面，输入 @ 命令切换 · Esc 返回主页面',
           )
         : null,
     ),

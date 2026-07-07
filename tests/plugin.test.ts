@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import * as assert from 'node:assert/strict';
 import { PluginRegistry, NanoPlugin, ToolCall, LLMResponse } from '../src/core/plugin.js';
-import { ToolResponse, ToolDefinition } from '../src/core/contract.js';
+import { ToolResponse, ToolDefinition, CommandOutputHandler } from '../src/core/contract.js';
 import { ChatMessage } from '../src/core/llm.js';
 
 // ── Helpers ──
@@ -391,5 +391,75 @@ describe('PluginRegistry — config isolation', () => {
     assert.equal(r.getPluginConfig('p1').secret, 'p1-data');
     assert.equal(r.getPluginConfig('p2').secret, 'p2-data');
     assert.notEqual(r.getPluginConfig('p1').secret, r.getPluginConfig('p2').secret);
+  });
+});
+
+describe('PluginRegistry — permission allowlist', () => {
+  it('isToolAllowed returns false by default', () => {
+    const r = new PluginRegistry();
+    assert.equal(r.isToolAllowed('run_bash_command'), false);
+  });
+
+  it('allowTool adds tool to allowlist', () => {
+    const r = new PluginRegistry();
+    r.allowTool('run_bash_command');
+    assert.equal(r.isToolAllowed('run_bash_command'), true);
+  });
+
+  it('allowlist persists across multiple calls', () => {
+    const r = new PluginRegistry();
+    r.allowTool('tool_a');
+    r.allowTool('tool_b');
+    assert.equal(r.isToolAllowed('tool_a'), true);
+    assert.equal(r.isToolAllowed('tool_b'), true);
+    assert.equal(r.isToolAllowed('tool_c'), false);
+  });
+
+  it('getAllowedTools returns allowed tool names', () => {
+    const r = new PluginRegistry();
+    r.allowTool('a');
+    r.allowTool('b');
+    const allowed = r.getAllowedTools();
+    assert.equal(allowed.length, 2);
+    assert.ok(allowed.includes('a'));
+    assert.ok(allowed.includes('b'));
+  });
+
+  it('clearPermissions resets allowlist', () => {
+    const r = new PluginRegistry();
+    r.allowTool('run_bash_command');
+    assert.equal(r.isToolAllowed('run_bash_command'), true);
+    r.clearPermissions();
+    assert.equal(r.isToolAllowed('run_bash_command'), false);
+  });
+
+  it('skipPermissionScope skips all permission checks', () => {
+    const r = new PluginRegistry();
+    assert.equal(r.isSkipPermissionScope(), false);
+    r.setSkipPermissionScope(true);
+    assert.equal(r.isSkipPermissionScope(), true);
+    r.setSkipPermissionScope(false);
+    assert.equal(r.isSkipPermissionScope(), false);
+  });
+});
+
+describe('PluginRegistry — output handler', () => {
+  it('getOutputHandler returns undefined when not set', () => {
+    const r = new PluginRegistry();
+    assert.equal(r.getOutputHandler(), undefined);
+  });
+
+  it('getOutputHandler returns the handler set by setOutputHandler', () => {
+    const r = new PluginRegistry();
+    const captured: string[] = [];
+    const handler: CommandOutputHandler = {
+      stdout(chunk: string) { captured.push(chunk); },
+      stderr() {},
+    };
+    r.setOutputHandler(handler);
+    assert.equal(r.getOutputHandler(), handler);
+    // 验证 handler 可正常调用
+    r.getOutputHandler()!.stdout('test');
+    assert.deepEqual(captured, ['test']);
   });
 });

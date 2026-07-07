@@ -6,6 +6,7 @@ import { NanoPlugin, PluginRegistry } from '#src/core/plugin.js';
 import { ToolDefinition, ToolResponse, ToolContext } from '#src/core/contract.js';
 import { SK } from '#src/core/store-keys.js';
 import { getPatchForDisplay, newFileHunk } from '#src/utils/diff.js';
+import { logManager } from '#src/core/logger.js';
 
 // ── 文件读取缓存（用于压缩后恢复上下文）──
 // 模块级缓存，但写入时校验 ctx.skipPermission 以避免子 agent 污染主 agent 缓存
@@ -76,9 +77,9 @@ const writerConfirmation = {
 
 const patchConfirmation = {
   async ask(path: string, search: string, replace: string): Promise<boolean> {
-    console.log(`\n[!]  AI 正在申请对文件实施微创修改：\x1b[36m${path}\x1b[0m`);
-    console.log(`\x1b[31m[-] 修改前:\x1b[0m\n${search}`);
-    console.log(`\x1b[32m[+] 修改后:\x1b[0m\n${replace}`);
+    logManager.info('fs', `\n[!]  AI 正在申请对文件实施微创修改：\x1b[36m${path}\x1b[0m`);
+    logManager.info('fs', `\x1b[31m[-] 修改前:\x1b[0m\n${search}`);
+    logManager.info('fs', `\x1b[32m[+] 修改后:\x1b[0m\n${replace}`);
     const result = await confirm({ message: '[?] 是否批准此文件修改？', initialValue: true });
     return !(typeof result === 'symbol' || !result);
   }

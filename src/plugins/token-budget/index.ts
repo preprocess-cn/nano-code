@@ -1,11 +1,12 @@
 import { NanoPlugin, PluginRegistry, ToolCall, LLMResponse } from '#src/core/plugin.js';
-import { ToolResponse, ToolContext, ToolDefinition } from '#src/core/contract.js';
+import { ToolResponse, ToolContext, ToolDefinition, type SessionRestoreContext } from '#src/core/contract.js';
 import { ChatMessage } from '#src/core/llm.js';
 import { countMessagesTokens } from '#src/plugins/token-budget/counter.js';
 import { initTokenizer } from '#src/plugins/token-budget/counter.js';
 import type { LLMClient } from '#src/core/llm.js';
 import type { DisplayManager } from '#src/display.js';
 import { SK } from '#src/core/store-keys.js';
+import { logManager } from '#src/core/logger.js';
 
 // ── Plugin ──
 
@@ -116,24 +117,30 @@ export function createTokenBudgetPlugin(config?: TokenBudgetConfig): NanoPlugin 
       _registry.store.set(SK.CompactRetry, false);
     },
 
+    async onSessionRestore(ctx: SessionRestoreContext): Promise<void> {
+      const tokens = countMessagesTokens(ctx.messages);
+      ctx.store.set(SK.TokenBudgetInitialAccumulated, tokens);
+    },
+
     onBeforeRequest(messages: ChatMessage[]): ChatMessage[] {
       const estimated = countMessagesTokens(messages);
 
       // Check single-request limit
       if (estimated > cfg.maxTokensPerRequest) {
-        console.warn(`\n[token-budget] 请求过大 (~${estimated} tokens)，添加压缩指令`);
+        logManager.warn('token-budget', `请求过大 (~${estimated} tokens)，添加压缩指令`);
         return [
           ...messages,
           {
             role: 'user',
             content: '注意：当前请求消息过长。请优先关注最近的消息，回复尽量简洁。',
+            isMeta: true,
           },
         ];
       }
 
       // Check session limit — hard stop
       if (totalTokensAccumulated + estimated > cfg.maxTokensPerSession) {
-        console.warn(`\n[token-budget] 会话预算已超 (${totalTokensAccumulated + estimated}/${cfg.maxTokensPerSession})，终止工具调用`);
+        logManager.warn('token-budget', `会话预算已超 (${totalTokensAccumulated + estimated}/${cfg.maxTokensPerSession})，终止工具调用`);
         return [
           ...messages,
           {
@@ -143,6 +150,7 @@ export function createTokenBudgetPlugin(config?: TokenBudgetConfig): NanoPlugin 
               'You must NOT call any more tools.',
               'Please summarize what was accomplished and suggest next steps the user can take manually.',
             ].join(' '),
+            isMeta: true,
           },
         ];
       }
@@ -150,7 +158,7 @@ export function createTokenBudgetPlugin(config?: TokenBudgetConfig): NanoPlugin 
       // Warning at threshold
       if (!warned && totalTokensAccumulated > cfg.warnAtTokens) {
         warned = true;
-        console.warn(`\n[token-budget] 已使用 ${totalTokensAccumulated} tokens，接近预算 (${cfg.maxTokensPerSession})`);
+        logManager.warn('token-budget', `已使用 ${totalTokensAccumulated} tokens，接近预算 (${cfg.maxTokensPerSession})`);
       }
 
       // Compression hint at threshold
@@ -161,6 +169,7 @@ export function createTokenBudgetPlugin(config?: TokenBudgetConfig): NanoPlugin 
           {
             role: 'user',
             content: '注意：当前会话较长，请尽量简洁回复，避免不必要的工具调用。',
+            isMeta: true,
           },
         ];
       }
@@ -206,13 +215,5 @@ export function createTokenBudgetPlugin(config?: TokenBudgetConfig): NanoPlugin 
       }
     },
 
-    onBeforeToolCall(toolCall: ToolCall): ToolCall | null {
-      // Reject tool calls if over budget
-      if (totalTokensAccumulated > cfg.maxTokensPerSession) {
-        console.warn(`[token-budget] 预算耗尽，拒绝工具调用: ${toolCall.function.name}`);
-        return null;
-      }
-      return toolCall;
-    },
   };
 }

@@ -32,4 +32,11 @@ describe('Command Runner 环境与执行测试', () => {
     assert.ok((response.data || '').length < 25000, '截断机制失效，返回的日志体积过大！');
     assert.match(response.data || '', /系统已自动截断以节省 Context/);
   });
+
+  test('静默命令无输出时，应返回无输出提示', async () => {
+    const silentCmd = process.platform === 'win32' ? 'ver > nul' : 'true';
+    const response = await commandPlugin.execute('run_bash_command', { command: silentCmd }, NO_CONFIRM);
+    assert.strictEqual(response.status, 'success');
+    assert.match(response.data || '', /Command executed with no output/);
+  });
 });

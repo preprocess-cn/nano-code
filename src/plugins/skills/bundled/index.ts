@@ -11,6 +11,7 @@
  * - whenToUse: 追加到描述后，帮助 LLM 判断调用时机
  */
 import type { PluginRegistry } from '#src/core/plugin.js';
+import type { CommandInterceptResult } from '#src/core/contract.js';
 
 export interface BundledSkillContext {
   cwd: string;
@@ -34,6 +35,8 @@ export interface BundledSkillDef {
   userInvocable?: boolean;
   /** 生成注入给 LLM 的 prompt 文本 */
   getPrompt(args: string, ctx: BundledSkillContext): Promise<string>;
+  /** 可选：直接执行操作，返回非 null 则绕过 LLM（适用于 ! 前缀等无需 LLM 解析的场景） */
+  execute?(args: string, ctx: BundledSkillContext): Promise<CommandInterceptResult | null>;
 }
 
 // ── Global registry ──
@@ -90,7 +93,6 @@ import { createKeybindingsSkill } from '#src/plugins/skills/bundled/keybindings.
 import { createReviewSkill } from '#src/plugins/skills/bundled/review.js';
 import { createCommitSkill } from '#src/plugins/skills/bundled/commit.js';
 import { createCommitPrSkill } from '#src/plugins/skills/bundled/commit-pr.js';
-import { createLoopSkill } from '#src/plugins/skills/bundled/loop.js';
 
 export function registerAllDefaultBundledSkills(): void {
   // Phase 2 — Tier 1
@@ -109,8 +111,6 @@ export function registerAllDefaultBundledSkills(): void {
   // Phase 4 — Tier 3
   registerBundledSkill(createSkillifySkill());
   registerBundledSkill(createKeybindingsSkill());
-  // Phase 5 — Cron / Loop
-  registerBundledSkill(createLoopSkill());
 }
 
 /** 格式化技能描述（对齐 Claude Code formatCommandDescription） */
