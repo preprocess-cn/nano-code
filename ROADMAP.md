@@ -163,6 +163,10 @@
 | **Display 事件携带 tool_call_id**（onToolCall/onToolResult 含 id 字段，便于前后端事件关联） | ✅ 已实现 |
 | **ESC 不退出主视图**（类似 vim，ESC 仅退出编辑模式） | ✅ 已实现 |
 | **工具调用显示美化**（displayName + 统一 formatToolCall） | ✅ 已实现 |
+| **多行输入支持**（Shift+Enter / `\`+Enter 换行） | ✅ 已实现 |
+| **多行光标导航**（↑/↓ 在输入行间移动，到首/末行进历史，列位置保持） | ✅ 已实现 |
+| **输入框自动增高**（随行数自动扩展，maxHeight 限制） | ✅ 已实现 |
+| **xterm modifyOtherKeys 始终启用**（Shift+Enter 修饰键检测覆盖所有 xterm 类终端） | ✅ 已实现 |
 | **极简模式**（`readline` 裸输入） | ☐ 未实现 |
 | **CLI one-shot 模式**（stdin/stdout 管道，cli-display 插件就绪） | ☐ 待接入 |
 | **Web UI**（HTTP/WebSocket） | ☐ 未实现 |

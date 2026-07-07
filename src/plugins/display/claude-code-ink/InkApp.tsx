@@ -207,6 +207,15 @@ function MessageItem({ msg }: { msg: UIMessage }): React.ReactElement {
     );
   }
 
+  if (msg.kind === 'userInput') {
+    return React.createElement(
+      Box,
+      { flexDirection: 'row' },
+      React.createElement(Text, { color: '#93c5fd' }, '▶ '),
+      React.createElement(Text, null, msg.text),
+    );
+  }
+
   if (msg.kind === 'info') {
     const label = msg.agentName !== 'main'
       ? React.createElement(AgentLabel, { agentName: msg.agentName })
@@ -405,6 +414,23 @@ function AgentHeader({ name }: { name: string }): React.ReactElement {
   );
 }
 
+// Convert display width to character position within a line (used for multi-line cursor column preservation)
+function charIdxAtWidth(line: string, targetWidth: number): number {
+  let w = 0;
+  for (let i = 0; i < line.length; i++) {
+    if (w >= targetWidth) return i;
+    w += stringWidth(line[i]);
+  }
+  return line.length;
+}
+
+// Compute character offset in input from (lineIndex, column) where lineIndex is \n-based
+function offsetFromLineCol(lines: string[], lineIdx: number, col: number): number {
+  let off = 0;
+  for (let i = 0; i < lineIdx; i++) off += lines[i].length + 1;
+  return off + col;
+}
+
 function AppContent(props: InkAppProps): React.ReactElement {
   const { messages, onInputSubmit, onExit, greeting, pendingPermission, onPermissionResponse, activeAgentName, viewAgent, onViewAgentClear, onViewAgentChange } = props;
   const { setRawMode } = useStdin();
@@ -412,6 +438,7 @@ function AppContent(props: InkAppProps): React.ReactElement {
   const [cursorPos, setCursorPos] = useState(0);
   const [historyIdx, setHistoryIdx] = useState(-1);
   const draftRef = useRef('');
+  const desiredColumnRef = useRef<number | null>(null);
   const [, setScrollTick] = useState(0);
   const scrollRef = useRef<ScrollBoxHandle>(null);
   const [suggestionFiltered, setSuggestionFiltered] = useState<CommandSuggestion[]>([]);
@@ -453,12 +480,26 @@ function AppContent(props: InkAppProps): React.ReactElement {
     setRawMode(true);
   }, [setRawMode]);
 
-  // Native cursor position within the input text.
-  // The cursor Box is right after "> " prompt (sibling in a row layout),
-  // so column is the display width of input up to cursorPos.
+  // Max input height: at least 3 lines, at most ~50% of terminal rows
+  const maxInputLines = Math.max(3, Math.floor((process.stdout.rows ?? 24) / 2) - 5);
+
+  // Multi-line input: split by \n into separate Text elements inside a column
+  // Box (right after "> " prompt). renderedLines is the visible viewport slice
+  // (last maxInputLines lines). cursorLine/Column are relative to the column Box.
+  const inputLines = input.length === 0 ? [' '] : input.split('\n');
+  const renderedLines = inputLines.length > maxInputLines
+    ? inputLines.slice(inputLines.length - maxInputLines)
+    : inputLines;
+  const renderOffset = inputLines.length - renderedLines.length;
+
+  const beforeCursor = input.slice(0, cursorPos);
+  const lastNl = beforeCursor.lastIndexOf('\n');
+  const cursorLine = lastNl === -1 ? 0 : beforeCursor.split('\n').length - 1;
+  const cursorColumn = stringWidth(beforeCursor.slice(lastNl + 1));
+  const declaredCursorLine = Math.max(0, cursorLine - renderOffset);
   const cursorRef = useDeclaredCursor({
-    line: 0,
-    column: stringWidth(input.slice(0, cursorPos)),
+    line: declaredCursorLine,
+    column: cursorColumn,
     active: true,
   });
 
@@ -549,7 +590,7 @@ function AppContent(props: InkAppProps): React.ReactElement {
   const headerRow = scrollHeader ?? React.createElement(Box, { height: 1 });
 
   useInput((_input: string, key: {
-    escape: boolean; ctrl: boolean; return: boolean; backspace: boolean;
+    escape: boolean; ctrl: boolean; shift: boolean; meta: boolean; return: boolean; backspace: boolean;
     upArrow: boolean; downArrow: boolean; leftArrow: boolean; rightArrow: boolean;
     delete: boolean; pageUp: boolean; pageDown: boolean;
     wheelUp: boolean; wheelDown: boolean; tab: boolean;
@@ -608,6 +649,17 @@ function AppContent(props: InkAppProps): React.ReactElement {
       }
       // Enter: complete + submit (/) or switch view (@)
       if (key.return) {
+        // Shift+Enter bypasses suggestion popup → insert newline
+        if (key.shift) {
+          setInput(prev => prev.slice(0, cursorPos) + '\n' + prev.slice(cursorPos));
+          setCursorPos(p => p + 1);
+          return;
+        }
+        // Backslash + Enter bypasses suggestion popup → insert newline
+        if (cursorPos > 0 && input[cursorPos - 1] === '\\') {
+          setInput(prev => prev.slice(0, cursorPos - 1) + '\n' + prev.slice(cursorPos));
+          return;
+        }
         const selected = suggestionFiltered[selectedSuggestionIndex];
         if (selected) {
           if (isAtPrefix) {
@@ -630,7 +682,7 @@ function AppContent(props: InkAppProps): React.ReactElement {
       }
     }
 
-    // Up arrow: navigate agents (cron view) or input history (main view)
+    // Up arrow: multi-line line-up, then input history
     if (key.upArrow) {
       if (viewAgent) {
         // Agent 视图中上箭头切换到前一个 agent
@@ -641,7 +693,20 @@ function AppContent(props: InkAppProps): React.ReactElement {
         }
         return;
       }
-      // 主视图：输入历史
+      // 多行输入：先尝试在行间移动
+      const lines = input.split('\n');
+      if (lines.length > 1 && cursorLine > 0) {
+        if (desiredColumnRef.current === null) {
+          desiredColumnRef.current = cursorColumn;
+        }
+        const targetLine = cursorLine - 1;
+        const targetDisplayWidth = stringWidth(lines[targetLine]);
+        const clampedWidth = Math.min(desiredColumnRef.current, targetDisplayWidth);
+        const targetCol = charIdxAtWidth(lines[targetLine], clampedWidth);
+        setCursorPos(offsetFromLineCol(lines, targetLine, targetCol));
+        return;
+      }
+      // 首行：输入历史
       if (userMessages.length === 0) return;
       if (historyIdx === -1) {
         draftRef.current = input;
@@ -653,10 +718,11 @@ function AppContent(props: InkAppProps): React.ReactElement {
       const text = userMessages[newIdx]!.text;
       setInput(text);
       setCursorPos(text.length);
+      desiredColumnRef.current = null;
       return;
     }
 
-    // Down arrow: navigate agents (cron view) or input history (main view)
+    // Down arrow: multi-line line-down, then input history
     if (key.downArrow) {
       if (viewAgent) {
         // Agent 视图中下箭头切换到后一个 agent
@@ -667,7 +733,20 @@ function AppContent(props: InkAppProps): React.ReactElement {
         }
         return;
       }
-      // 主视图：输入历史
+      // 多行输入：先尝试在行间移动
+      const lines = input.split('\n');
+      if (lines.length > 1 && cursorLine < lines.length - 1) {
+        if (desiredColumnRef.current === null) {
+          desiredColumnRef.current = cursorColumn;
+        }
+        const targetLine = cursorLine + 1;
+        const targetDisplayWidth = stringWidth(lines[targetLine]);
+        const clampedWidth = Math.min(desiredColumnRef.current, targetDisplayWidth);
+        const targetCol = charIdxAtWidth(lines[targetLine], clampedWidth);
+        setCursorPos(offsetFromLineCol(lines, targetLine, targetCol));
+        return;
+      }
+      // 末行：输入历史
       if (historyIdx >= 0) {
         const newIdx = historyIdx + 1;
         if (newIdx >= userMessages.length) {
@@ -680,6 +759,7 @@ function AppContent(props: InkAppProps): React.ReactElement {
           setInput(text);
           setCursorPos(text.length);
         }
+        desiredColumnRef.current = null;
       }
       return;
     }
@@ -691,12 +771,14 @@ function AppContent(props: InkAppProps): React.ReactElement {
 
     // Left arrow: move cursor left
     if (key.leftArrow) {
+      desiredColumnRef.current = null;
       setCursorPos(p => Math.max(0, p - 1));
       return;
     }
 
     // Right arrow: move cursor right
     if (key.rightArrow) {
+      desiredColumnRef.current = null;
       setCursorPos(p => Math.min(input.length, p + 1));
       return;
     }
@@ -714,6 +796,19 @@ function AppContent(props: InkAppProps): React.ReactElement {
       return;
     }
     if (key.return) {
+      // Shift+Enter (modifyOtherKeys / CSI u) → insert newline
+      if (key.shift) {
+        setInput(prev => prev.slice(0, cursorPos) + '\n' + prev.slice(cursorPos));
+        setCursorPos(p => p + 1);
+        return;
+      }
+
+      // Backslash + Enter: delete \ and insert \n (Claude Code convention)
+      if (cursorPos > 0 && input[cursorPos - 1] === '\\') {
+        setInput(prev => prev.slice(0, cursorPos - 1) + '\n' + prev.slice(cursorPos));
+        return;
+      }
+
       const trimmed = input.trim();
       if (!trimmed) return;
 
@@ -755,6 +850,7 @@ function AppContent(props: InkAppProps): React.ReactElement {
     }
     // Accept any printable input — insert at cursor position
     if (_input) {
+      desiredColumnRef.current = null;
       setInput(prev => prev.slice(0, cursorPos) + _input + prev.slice(cursorPos));
       setCursorPos(p => p + _input.length);
     }
@@ -805,8 +901,10 @@ function AppContent(props: InkAppProps): React.ReactElement {
             React.createElement(Text, { bold: true, color: '#9ca3af' }, '> '),
             React.createElement(
               Box,
-              { ref: cursorRef, flexGrow: 1 },
-              React.createElement(Text, null, input),
+              { ref: cursorRef, flexDirection: 'column', flexGrow: 1 },
+              ...renderedLines.map((line, i) =>
+                React.createElement(Text, { key: i }, line || ' '),
+              ),
             ),
           ),
           // Suggestion popup
@@ -881,8 +979,10 @@ function AppContent(props: InkAppProps): React.ReactElement {
         React.createElement(Text, { bold: true, color: '#9ca3af' }, '> '),
         React.createElement(
           Box,
-          { ref: cursorRef, flexGrow: 1 },
-          React.createElement(Text, null, input),
+          { ref: cursorRef, flexDirection: 'column', flexGrow: 1 },
+          ...renderedLines.map((line, i) =>
+            React.createElement(Text, { key: i }, line || ' '),
+          ),
         ),
       ),
       // Suggestion popup

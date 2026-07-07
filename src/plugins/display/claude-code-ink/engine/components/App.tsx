@@ -234,14 +234,14 @@ export default class App extends PureComponent<Props, State> {
         this.props.stdout.write(EBP);
         // Enable terminal focus reporting (DECSET 1004)
         this.props.stdout.write(EFE);
-        // Enable extended key reporting so ctrl+shift+<letter> is
-        // distinguishable from ctrl+<letter>. We write both the kitty stack
-        // push (CSI >1u) and xterm modifyOtherKeys level 2 (CSI >4;2m) —
-        // terminals honor whichever they implement (tmux only accepts the
-        // latter).
+        // Enable xterm modifyOtherKeys level 2 (CSI >4;2m) — safe, widely
+        // supported by all xterm-derivative terminals since 2012. This gives
+        // us Shift+Enter / Alt+Enter keycode+modifier detection.
+        this.props.stdout.write(ENABLE_MODIFY_OTHER_KEYS);
+        // Kitty keyboard protocol stack push (CSI >1u) — only for terminals
+        // known to correctly implement it (iTerm, Kitty, WezTerm, etc.).
         if (supportsExtendedKeys()) {
           this.props.stdout.write(ENABLE_KITTY_KEYBOARD);
-          this.props.stdout.write(ENABLE_MODIFY_OTHER_KEYS);
         }
         // nano-code: skip XTVERSION probe (CSI >0q). It is only needed for
         // xterm.js wheel-scroll detection; in xterm its response can leak

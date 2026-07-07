@@ -153,7 +153,7 @@ display:
 | 插件 | 说明 |
 |------|------|
 | `repl` | 默认（交互式），基于 `@clack/prompts` + `console` 的简单 REPL 交互 |
-| `claude-code-ink` | 基于 React + Ink 的全屏终端 UI，支持 ScrollBox 滚动、`--think` 思考内容灰色斜体区分、agent 前缀、keybinding 系统等 |
+| `claude-code-ink` | 基于 React + Ink 的全屏终端 UI，支持 ScrollBox 滚动、`--think` 思考内容灰色斜体区分、agent 前缀、keybinding 系统、多行输入（Shift+Enter / `\`+Enter 换行）等 |
 | `cli` | 非交互式 CLI 展示，AI 响应输出到 stdout，状态/错误输出到 stderr；`display.enabled: false` 时的兜底方案 |
 
 ### 快捷键
@@ -164,7 +164,10 @@ display:
 |--------|-----------|--------|
 | `Ctrl+C` | 退出程序 | 取消当前操作（中断 LLM + 停止 agent） |
 | `Escape` | 退出程序 | 取消当前操作 |
-| `↑`/`↓` | 历史命令浏览 | — |
+| `↑`/`↓`（单行输入） | 历史命令浏览 | — |
+| `↑`/`↓`（多行输入） | 在输入行间移动光标，到首/末行再进历史 | — |
+| `Shift+Enter` | 插入换行（多行输入） | — |
+| `\` + `Enter` | 反斜杠换行：删除 `\` 并插入 `\n` | — |
 | `PageUp`/`PageDown` | 滚动浏览历史消息 | 滚动浏览历史消息 |
 | `Tab` | 命令名补全 / 补全建议切换 | — |
 | `@<agent名>` | 切换到对应 agent 的子视图（仅 Ink 模式） | — |
