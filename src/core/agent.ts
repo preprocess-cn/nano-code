@@ -3,6 +3,7 @@ import { PluginRegistry, ToolCall } from '#src/core/plugin.js';
 import { SystemPromptConfig } from '#src/core/config.js';
 import { buildSystemPrompt, formatToolResponse } from '#src/core/prompt.js';
 import { ToolResponse, ToolContext, InjectedMessage, isMainAgent, AgentDisplay } from '#src/core/contract.js';
+import { getToolDisplayName } from '#src/core/tool-display.js';
 import { SK } from '#src/core/store-keys.js';
 
 export interface NanoCodeAgentOptions {
@@ -263,9 +264,11 @@ export class NanoCodeAgent {
       } else if (!this.registry.isToolAllowed(toolName)) {
         const confirmCb = this.registry.getConfirmCallback();
         if (confirmCb) {
+          const displayName = getToolDisplayName(toolName, this.registry.getAllSchemas());
           const response = await confirmCb({
             toolName,
-            message: `工具 "${toolName}" 需要执行操作，是否批准？`,
+            displayName,
+            message: `${displayName} 需要执行操作，是否批准？`,
             details: JSON.stringify(toolArgs, null, 2).slice(0, 1000),
           });
           if (response === 'always_allow') {

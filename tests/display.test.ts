@@ -7,7 +7,7 @@ import { DisplayManager } from '../src/display.js';
 import { PluginRegistry } from '../src/core/plugin.js';
 import { replDisplay } from '../src/plugins/display/repl.js';
 import { resolveDisplayPlugin } from '../src/plugins/display/loader.js';
-import { getToolArgsPreview, formatToolCall } from '../src/plugins/display/claude-code-ink/index.js';
+import { getToolArgsPreview, formatToolCall, getToolDisplayName } from '../src/core/tool-display.js';
 import { collectPlugins, buildPluginList } from '../src/plugins/commands/builtin.js';
 
 describe('DisplayPlugin — repl', () => {
@@ -426,7 +426,7 @@ describe('formatToolCall / getToolArgsPreview', () => {
   });
 
   it('Bash — shows truncated command', () => {
-    assert.equal(getToolArgsPreview({ command: 'npm run build' }), 'command: npm run build');
+    assert.equal(getToolArgsPreview({ command: 'npm run build' }), 'npm run build');
 
     const longCmd = 'echo ' + 'a'.repeat(200);
     const long = getToolArgsPreview({ command: longCmd });
@@ -442,13 +442,10 @@ describe('formatToolCall / getToolArgsPreview', () => {
     assert.equal(getToolArgsPreview(args), 'language=ts, model=gpt-4');
   });
 
-  it('unknown tool — falls back to JSON truncation', () => {
-    const big: Record<string, string> = {};
-    for (let i = 0; i < 50; i++) big[`k${i}`] = 'x'.repeat(20);
-    assert.equal(getToolArgsPreview(big), null);
-    const formatted = formatToolCall('Foo', big);
-    assert.ok(formatted.length < 300);
-    assert.ok(formatted.includes('…'));
+  it('unknown tool — generic fallback shows key=value pairs', () => {
+    const args = { query: 'hello', limit: '10' };
+    assert.equal(getToolArgsPreview(args), 'query=hello, limit=10');
+    assert.equal(formatToolCall('Foo', args), '🔧 Foo(query=hello, limit=10)');
   });
 
   it('null / non-object args', () => {
@@ -458,7 +455,85 @@ describe('formatToolCall / getToolArgsPreview', () => {
   });
 
   it('empty args', () => {
-    assert.equal(formatToolCall('Foo', {}), '🔧 Foo({})');
+    assert.equal(formatToolCall('Foo', {}), '🔧 Foo()');
+  });
+
+  describe('getToolDisplayName', () => {
+
+    it('Bash — maps run_bash_command to Bash', () => {
+      assert.equal(getToolDisplayName('run_bash_command'), 'Bash');
+    });
+
+    it('Read — maps view_file_content to Read', () => {
+      assert.equal(getToolDisplayName('view_file_content'), 'Read');
+    });
+
+    it('Write — maps write_file_content to Write', () => {
+      assert.equal(getToolDisplayName('write_file_content'), 'Write');
+    });
+
+    it('Patch — maps patch_file to Patch', () => {
+      assert.equal(getToolDisplayName('patch_file'), 'Patch');
+    });
+
+    it('List — maps list_project_files to List', () => {
+      assert.equal(getToolDisplayName('list_project_files'), 'List');
+    });
+
+    it('Glob — maps glob_files to Glob', () => {
+      assert.equal(getToolDisplayName('glob_files'), 'Glob');
+    });
+
+    it('Grep — maps grep_file_content to Grep', () => {
+      assert.equal(getToolDisplayName('grep_file_content'), 'Grep');
+    });
+
+    it('agent-xxx — strips agent- prefix and capitalizes', () => {
+      assert.equal(getToolDisplayName('agent-deploy'), 'Deploy');
+      assert.equal(getToolDisplayName('agent-code-review'), 'Code Review');
+    });
+
+    it('unknown tool — snake_case to Title Case', () => {
+      assert.equal(getToolDisplayName('github_create_issue'), 'Github Create Issue');
+    });
+
+    it('prefers definition displayName over built-in', () => {
+      const defs = [{ type: 'function' as const, function: { name: 'run_bash_command', displayName: 'CustomBash', description: '', parameters: {} } }];
+      assert.equal(getToolDisplayName('run_bash_command', defs), 'CustomBash');
+    });
+
+  });
+
+  describe('formatToolCall with real tool names', () => {
+
+    it('Bash — shows command without label', () => {
+      assert.equal(formatToolCall('run_bash_command', { command: 'npm run build' }), '🔧 Bash(npm run build)');
+    });
+
+    it('Read — shows path without label', () => {
+      assert.equal(formatToolCall('view_file_content', { path: 'src/index.ts' }), '🔧 Read(src/index.ts)');
+    });
+
+    it('Write — shows path, skips content', () => {
+      assert.equal(formatToolCall('write_file_content', { path: 'src/new.ts', content: 'let x = 1;' }), '🔧 Write(src/new.ts)');
+    });
+
+    it('Grep — shows pattern and path', () => {
+      assert.equal(formatToolCall('grep_file_content', { pattern: 'TODO', path: 'src/' }), '🔧 Grep(TODO, src/)');
+    });
+
+    it('Grep — shows pattern only when path absent', () => {
+      assert.equal(formatToolCall('grep_file_content', { pattern: 'TODO' }), '🔧 Grep(TODO)');
+    });
+
+    it('Glob — shows pattern', () => {
+      assert.equal(formatToolCall('glob_files', { pattern: '**/*.ts' }), '🔧 Glob(**/*.ts)');
+    });
+
+    it('List — empty args', () => {
+      assert.equal(formatToolCall('list_project_files', {}), '🔧 List()');
+    });
+
   });
 
 });

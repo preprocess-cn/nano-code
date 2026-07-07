@@ -26,6 +26,7 @@ export interface UIMessage {
 
 export interface PermissionPrompt {
   toolName: string;
+  displayName?: string;
   message: string;
   details?: string;
   diff?: DiffHunk[];
@@ -314,7 +315,7 @@ function DiffView({ hunks, filePath }: { hunks: DiffHunk[]; filePath: string }):
 }
 
 function PermissionDialog({
-  toolName, message, details, diff, filePath, onResponse,
+  toolName, displayName, message, details, diff, filePath, onResponse,
 }: PermissionPrompt & { onResponse: (response: PermissionResponse) => void }): React.ReactElement {
   const options: SelectOption<PermissionResponse>[] = [
     { label: '批准 (Yes)', value: 'allow_once' },
@@ -337,7 +338,7 @@ function PermissionDialog({
     React.createElement(
       Box,
       { flexDirection: 'column', paddingX: 1 },
-      React.createElement(Text, { bold: true, color: '#fbbf24' }, toolName),
+      React.createElement(Text, { bold: true, color: '#fbbf24' }, displayName ?? toolName),
       React.createElement(Text, { dimColor: true }, message),
     ),
     // Details (optional) — command content
@@ -700,13 +701,12 @@ function AppContent(props: InkAppProps): React.ReactElement {
       return;
     }
 
-    // Ctrl+C / Escape：agent 视图中 Esc 返回主视图
+    // Ctrl+C / Escape：agent 视图中 Esc 返回主视图，主视图中 Esc 无效果（类似 vim 的 ESC 仅退出编辑模式）
     if (key.escape) {
       if (viewAgent) {
         onViewAgentClear?.();
         return;
       }
-      onExit();
       return;
     }
     if (key.ctrl && _input === 'c') {

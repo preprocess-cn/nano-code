@@ -42,6 +42,7 @@ export function createAgentToolPlugin(
         type: 'function',
         function: {
           name: `agent-${def.name}`,
+          displayName: def.name.charAt(0).toUpperCase() + def.name.slice(1),
           description: def.description,
           parameters: {
             type: 'object',

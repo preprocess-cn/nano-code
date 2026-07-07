@@ -1,5 +1,6 @@
 import type { DisplayPlugin, StartConfig, StatusEvent, StreamEvent, ToolCallEvent, ToolResultEvent, ErrorEvent, DebugEvent, MessageLevel } from '#src/display.js';
 import type { PluginRegistry } from '#src/core/plugin.js';
+import { formatToolCall } from '#src/core/tool-display.js';
 
 /**
  * 非交互式 CLI 展示插件 — 用于管道模式或无展示层的兜底。
@@ -45,7 +46,7 @@ export const cliDisplay: DisplayPlugin = {
   },
 
   onToolCall(event: ToolCallEvent): void {
-    process.stderr.write(`[调用] ${event.toolName}\n`);
+    process.stderr.write(`${formatToolCall(event.toolName, event.args)}\n`);
   },
 
   onToolResult(event: ToolResultEvent): void {

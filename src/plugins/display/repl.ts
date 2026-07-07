@@ -1,6 +1,7 @@
 import { intro, text, outro, isCancel, confirm } from '@clack/prompts';
 import { DisplayPlugin, StartConfig, StatusEvent, StreamEvent, ToolCallEvent, ToolResultEvent, ErrorEvent, DebugEvent, BackgroundTaskEvent, MessageLevel } from '#src/display.js';
 import { isMainAgent } from '#src/core/contract.js';
+import { formatToolCall } from '#src/core/tool-display.js';
 import { ThinkStream } from '#src/plugins/display/think-stream.js';
 
 import type { PluginRegistry } from '#src/core/plugin.js';
@@ -32,7 +33,7 @@ export const replDisplay: DisplayPlugin = {
   async onInit(registry: PluginRegistry): Promise<void> {
     _store = registry.store;
     registry.setConfirmCallback(async (req) => {
-      console.log(`\n[!]  AI 正在申请执行：${req.toolName}`);
+      console.log(`\n[!]  AI 正在申请执行：${req.displayName ?? req.toolName}`);
       if (req.details) console.log(`-> \x1b[33m${req.details}\x1b[0m`);
       const result = await confirm({ message: req.message, initialValue: true });
       if (typeof result === 'symbol' || !result) return false;
@@ -131,7 +132,7 @@ export const replDisplay: DisplayPlugin = {
 
   onToolCall(event: ToolCallEvent): void {
     thinkFilter.reset();
-    console.log(p(event.agentName, `\n#  AI 申请调用本地工具: [ ${event.toolName} ]`));
+    console.log(p(event.agentName, `\n#  ${formatToolCall(event.toolName, event.args)}`));
   },
 
   onToolResult(event: ToolResultEvent): void {

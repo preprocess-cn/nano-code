@@ -49,6 +49,7 @@ export const commandPlugin: NanoPlugin = {
         type: 'function',
         function: {
           name: 'run_bash_command',
+          displayName: 'Bash',
           description: '在用户的本地终端执行一个 Bash 命令行指令（例如：安装依赖、运行测试、编译代码等）。该操作会在物理磁盘生效，请谨慎输入。',
           parameters: {
             type: 'object',

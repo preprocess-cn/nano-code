@@ -178,6 +178,7 @@ export const searchPlugin: NanoPlugin = {
         type: 'function',
         function: {
           name: 'glob_files',
+          displayName: 'Glob',
           description: 'Search for files matching a glob pattern. Supports ** (recursive), * (single segment), and ? (single char). Examples: "**/*.ts" finds all TypeScript files, "src/**/*.css" finds all CSS files under src/, "*.json" finds JSON files in root. Results sorted for consistency.',
           parameters: {
             type: 'object',
@@ -194,6 +195,7 @@ export const searchPlugin: NanoPlugin = {
         type: 'function',
         function: {
           name: 'grep_file_content',
+          displayName: 'Grep',
           description: 'Search for a pattern across file contents. Returns matching files with line numbers and line content. Supports regex patterns and optional glob to narrow search scope. To search for a plain string, use case-insensitive matching.',
           parameters: {
             type: 'object',

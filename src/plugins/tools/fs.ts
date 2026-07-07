@@ -99,6 +99,7 @@ export const fsPlugin: NanoPlugin = {
         type: 'function',
         function: {
           name: 'list_project_files',
+          displayName: 'List',
           description: '列出当前工作目录下的所有文件和文件夹结构（已自动排除 node_modules 和编译产物）。当需要了解项目整体架构、寻找特定代码文件时使用。',
           parameters: { type: 'object', properties: {} },
           sideEffect: false,
@@ -108,6 +109,7 @@ export const fsPlugin: NanoPlugin = {
         type: 'function',
         function: {
           name: 'view_file_content',
+          displayName: 'Read',
           description: '读取项目中指定文件的完整文本内容。当需要分析某个文件的代码逻辑、定位 Bug 或了解上下文时使用。',
           parameters: {
             type: 'object',
@@ -123,6 +125,7 @@ export const fsPlugin: NanoPlugin = {
         type: 'function',
         function: {
           name: 'write_file_content',
+          displayName: 'Write',
           description: '创建新文件或完全覆写已有文件。当需要新建代码、修改 Bug、或者重构整个文件时使用。必须提供完整的目标文件内容。',
           parameters: {
             type: 'object',
@@ -139,6 +142,7 @@ export const fsPlugin: NanoPlugin = {
         type: 'function',
         function: {
           name: 'patch_file',
+          displayName: 'Patch',
           description: 'Perform a precise single-replacement "surgery" on a specific file. Use this for small, targeted code modifications rather than overwriting the whole file.',
           parameters: {
             type: 'object',

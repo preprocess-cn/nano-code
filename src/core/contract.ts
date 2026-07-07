@@ -33,6 +33,8 @@ export interface ToolDefinition {
     parameters: Record<string, any>;
     /** Whether this tool changes external state. false = read-only, auto-execute without user confirmation. */
     sideEffect?: boolean;
+    /** User-friendly display name (e.g., "Bash" for "run_bash_command"). When set, display plugins show this instead of the raw tool name. */
+    displayName?: string;
   };
 }
 
@@ -53,6 +55,8 @@ export interface DiffHunk {
 
 export interface PermissionConfirmRequest {
   toolName: string;
+  /** User-friendly tool name for permission dialog display. Falls back to toolName when not set. */
+  displayName?: string;
   message: string;
   details?: string;
   /** Diff hunks for file edit/write operations. When set, display plugins should render a diff view. */

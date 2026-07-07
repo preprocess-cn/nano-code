@@ -161,6 +161,8 @@
 | **输入框模式变色**（`!` → 粉框 / `/` → 紫框） | ✅ 已实现 |
 | **Plan Mode 状态指示器**（底栏 plan badge + 任务数量） | ✅ 已实现 |
 | **Display 事件携带 tool_call_id**（onToolCall/onToolResult 含 id 字段，便于前后端事件关联） | ✅ 已实现 |
+| **ESC 不退出主视图**（类似 vim，ESC 仅退出编辑模式） | ✅ 已实现 |
+| **工具调用显示美化**（displayName + 统一 formatToolCall） | ✅ 已实现 |
 | **极简模式**（`readline` 裸输入） | ☐ 未实现 |
 | **CLI one-shot 模式**（stdin/stdout 管道，cli-display 插件就绪） | ☐ 待接入 |
 | **Web UI**（HTTP/WebSocket） | ☐ 未实现 |
