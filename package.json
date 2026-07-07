@@ -1,6 +1,6 @@
 {
   "name": "@preprocess-cn/nano-code",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A lightweight, CLI-based AI coding assistant with file operations.",
   "imports": {
     "#src/*": "./src/*"
