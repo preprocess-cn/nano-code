@@ -89,3 +89,7 @@ CLI (cac) → Agent Loop → PluginRegistry → LLM Client (OpenAI API)
 - **ThinkStream**: The REPL display uses `ThinkStream` to strip `<think>...</think>` tags from stream output unless `--think` is on.
 - **MCP transport**: Supports both stdio (child process) and HTTP transports, with exponential backoff retry, timeout per request, and cleanup on destroy.
 - 当要求浏览代码时候，优先使用codebase-memory-mcp工具进行
+
+## Versioning
+
+- Tags 统一使用 `v` 前缀语义化版本，如 `v0.1.0`、`v0.1.1`
