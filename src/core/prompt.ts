@@ -5,31 +5,44 @@ import { PluginRegistry } from '#src/core/plugin.js';
 import { ChatMessage } from '#src/core/llm.js';
 import { SystemPromptConfig } from '#src/core/config.js';
 import { ToolResponse } from '#src/core/contract.js';
-import { SK } from '#src/core/store-keys.js';
 
-const PLAN_MODE_PROMPT = `\n\n## Plan Mode Active
+/**
+ * 生成 Plan Mode 指令内容（作为 <system-reminder> 注入，不修改 system prompt）。
+ */
+export function getPlanModeInstructions(): string {
+  return `Plan mode is active. You are in PLAN MODE. You MUST NOT make any edits (except the plan file mentioned below), run any non-readonly tools, or otherwise make any changes to the system. This supersedes any other instructions you have received.
 
-You are currently in PLAN MODE. You MUST NOT make any edits to files (with the exception of the plan file), run any non-readonly tools (including changing configs or making commits), or otherwise make any changes to the system.
-
-### Plan File
+## Plan File
 Your plan must be written to \`.nano-code/plan.md\` using the file_write tool. Build your plan incrementally — this is the ONLY file you are allowed to edit.
 
-### Workflow
+## Workflow
 
 **Phase 1: Initial Understanding**
+Goal: Gain a comprehensive understanding of the user's request by reading through code and asking them questions.
 - Thoroughly explore the codebase to understand existing patterns, relevant files, and architectural approaches.
 - Search for existing functions, utilities, and patterns that can be reused.
-- Ask the user questions if you need to clarify requirements.
+- Use AskUserQuestion if you need to clarify requirements or choose between approaches.
 
 **Phase 2: Design**
-- Design a concrete implementation strategy based on your exploration.
+Goal: Design an implementation approach based on your exploration.
+- Design a concrete implementation strategy.
 - Consider multiple approaches and their trade-offs.
 - Write your plan to \`.nano-code/plan.md\`.
 
-**Phase 3: Review & Exit**
-- Review your plan against the user's original request.
-- Use \`exit_plan_mode\` to present your plan for approval.
-- Once approved, you can start implementing.`;
+**Phase 3: Review**
+Goal: Review your plan to ensure alignment with the user's intentions.
+- Read the critical files identified during exploration.
+- Ensure the plan aligns with the user's original request.
+
+**Phase 4: Final Plan**
+Goal: Write your final plan to the plan file.
+- Begin with a Context section explaining why this change is being made.
+- Include only your recommended approach.
+- Reference existing functions and utilities to be reused.
+
+**Phase 5: Call ExitPlanMode**
+At the very end, call \`exit_plan_mode\` to present your plan for approval. This is the only way to exit plan mode and start implementation.`;
+}
 
 /**
  * 组装系统提示词。
@@ -74,13 +87,7 @@ export function buildSystemPrompt(
   }
 
   // ③ 插件贡献
-  let finalPrompt = registry.execSystemPrompt(parts.join('\n\n'));
-
-  // ④ Plan Mode 指令注入
-  const mode = registry.store.get<string>(SK.Mode);
-  if (mode === 'plan') {
-    finalPrompt += PLAN_MODE_PROMPT;
-  }
+  const finalPrompt = registry.execSystemPrompt(parts.join('\n\n'));
 
   return { role: 'system', content: finalPrompt };
 }

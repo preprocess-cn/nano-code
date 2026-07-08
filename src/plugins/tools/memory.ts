@@ -242,7 +242,7 @@ export function createMemoryPlugin(config?: MemoryPluginConfig): NanoPlugin {
               },
               required: ['content'],
             },
-            sideEffect: true,
+            sideEffect: false,
           },
         },
         {

@@ -56,6 +56,8 @@
 | ✅ | Ink 后台任务指示器 | `BackgroundTaskBar` 底栏组件，实时展示运行/完成/失败状态，5 秒自动清理 |
 | ✅ | 后台任务展示层事件 | `BackgroundTaskEvent` + `onBackgroundTask` 回调，REPL 和 Ink 双实现 |
 | ✅ | **Ink 上下文可视化** | `InkApp.tsx` 内联 `ContextVis` 组件渲染色块网格，数据源为 `analyzer.ts` 的 8 维度分析 |
+| ✅ | **工具级自定义超时** | `ToolDefinition.function.timeout` 字段，按工具设定超时时间；`Infinity` 永不超时（`ask_user_question`），未指定沿用全局默认 |
+| ✅ | **工具 sideEffect 修正** | `task_create`/`task_update`/`task_stop`/`save_memory`/`skill`/`exit_plan_mode` 改为 `sideEffect: false`，内建读操作无需审批 |
 | ✅ | 多轮摘要记忆 | 自动压缩默认启用（`autoCompactEnabled: true`），触发策略改为基于当前消息大小 + slide window 多次压缩，压缩前全量备份至 `.nano-code-session.pre-compact.json` |
 | ✅ | 角色模式 & 斜杠命令 | profiles/ 通过 `--profile` 启动时加载，主 agent 可通过斜杠 `/` 切换 agent；profile 运行时切换暂不支持 |
 | ✅ | 内置 Skill 系统 | 13 个对齐 Claude Code 的内置技能：simplify/verify/batch/debug/lorem-ipsum/update-config/remember/stuck/skillify/keybindings/review/commit/commit-pr |
@@ -91,7 +93,7 @@
 | 状态 | 功能 | 说明 |
 |------|------|------|
 | ✅ | `/diff` / `/status` 命令 | 查看 git diff 和变更状态，支持 `--staged`、`--stat` 等原生 git 参数 |
-| ✅ | Monitor 工具 | 实时监控进程输出/日志文件事件流，覆盖「等 build 完成」「监视错误日志」场景 |
+| ~~✅ Monitor 工具~~ | ~~实时监控进程输出/日志文件事件流，覆盖「等 build 完成」「监视错误日志」场景~~ |
 | ✅ | 插件生命周期钩子增强 | `onAgentExit` 子 agent 退出清理钩子 + `setStatusBar` 状态栏段落机制 + `AgentExitContext` |
 | ☐ | Agent 工具增强 | run_agent 升级为一级工具，支持 structured_output schema、isolation 隔离模式、丰富 prompt 描述 |
 | ➖ | **Cron + Loop（后端）** | 旧 `node-cron` 实现已移除，迁移至 Agent 框架内置的 `CronCreate`/`CronDelete` 工具（由主循环调度，不依赖 `node-cron` 包） |
@@ -168,11 +170,13 @@
 | **多行光标导航**（↑/↓ 在输入行间移动，到首/末行进历史，列位置保持） | ✅ 已实现 |
 | **输入框自动增高**（随行数自动扩展，maxHeight 限制） | ✅ 已实现 |
 | **xterm modifyOtherKeys 始终启用**（Shift+Enter 修饰键检测覆盖所有 xterm 类终端） | ✅ 已实现 |
+| **弹框 ESC/Ctrl+C 关闭**（权限/问题弹框可通过 ESC 或 Ctrl+C 关闭并终止 ReAct） | ✅ 已实现 |
+| **问题对话框自定义输入**（「其它」选项 + 多行输入 + 提交前确认） | ✅ 已实现 |
 | **极简模式**（`readline` 裸输入） | ☐ 未实现 |
 | **CLI one-shot 模式**（stdin/stdout 管道，cli-display 插件就绪） | ☐ 待接入 |
 | **Web UI**（HTTP/WebSocket） | ☐ 未实现 |
 
-Ink 展示层（`claude-code-ink`）基于 React + 自研 Ink 引擎（fork 自 Claude Code），支持 ScrollBox 滚动、全屏 terminal UI、`--think` 思考内容灰色斜体视觉区分、`/` 斜杠命令建议弹出与实时过滤、`!`/`/` 输入框模式边框变色、Plan Mode 状态指示器（底栏黄色 `● plan on` 徽标 + 任务数量）等功能。
+Ink 展示层（`claude-code-ink`）基于 React + 自研 Ink 引擎（fork 自 Claude Code），支持 ScrollBox 滚动、全屏 terminal UI、`--think` 思考内容灰色斜体视觉区分、`/` 斜杠命令建议弹出与实时过滤、`!`/`/` 输入框模式边框变色、Plan Mode 状态指示器（底栏 `○ normal`/`● PLAN` 徽标 + 任务数量）、问题对话框自定义输入（「其它」选项 + 多行文本 + 提交前确认）、弹框 ESC/Ctrl+C 关闭等功能。
 
 ## Agent 架构
 

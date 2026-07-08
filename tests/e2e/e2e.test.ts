@@ -6,7 +6,7 @@ import * as os from 'os';
 import { NanoCodeAgent } from '#src/core/agent.js';
 import { PluginRegistry } from '#src/core/plugin.js';
 import { registerBuiltinPlugin } from '#src/core/plugin.js';
-import { SK } from '#src/core/store-keys.js';
+import { SK, agentCancelledKey } from '#src/core/store-keys.js';
 import { StubLLMClient, createSpyDisplay, createToolCall, getMemoryProjectDir } from './e2e-helper.js';
 
 describe('E2E — ReAct 循环全链路', () => {
@@ -221,7 +221,7 @@ describe('E2E — ReAct 循环全链路', () => {
 
   it('场景 5a: 取消 — 预置 cancellation flag，LLM 不会被调用', async () => {
     const registry = new PluginRegistry();
-    registry.store.set(SK.AgentCancelled, true);
+    registry.store.set(agentCancelledKey('main'), true);
 
     let llmCalled = false;
     const stub = {
@@ -237,7 +237,7 @@ describe('E2E — ReAct 循环全链路', () => {
 
     assert.equal(llmCalled, false);
     assert.equal(result, undefined);
-    assert.equal(registry.store.get(SK.AgentCancelled), undefined); // 标志被清除
+    assert.equal(registry.store.get(agentCancelledKey('main')), undefined); // 标志被清除
   });
 
   it('场景 5b: 取消 — 通过 AbortController 中断 LLM 调用', async () => {

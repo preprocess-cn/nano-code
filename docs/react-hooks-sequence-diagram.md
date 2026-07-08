@@ -244,7 +244,6 @@ sequenceDiagram
 | **memory** | 创建记忆目录 | 注入 AGENT.md + MEMORY.md 索引 | — | — | save_memory / recall_memory | — |
 | **token-budget** | — | — | **自动压缩**消息历史 | **累计 token 用量** | — | onSessionRestore 恢复计数 |
 | **file-search** | — | — | — | — | glob/grep 搜索 | — |
-| **monitor** | — | — | — | — | 后台进程监控 | — |
 | **mcp-loader** | **加载 MCP 插件**（stdio/HTTP） | — | — | — | — | 动态注册子插件 |
 
 ### Feature 插件（可通过 config 禁用）
@@ -277,8 +276,8 @@ graph LR
     
     subgraph Store["IStore (InMemoryStore)"]
         SK_AgentStatus["AgentStatus"]
-        SK_AgentCancelled["AgentCancelled"]
-        SK_AgentAbort["AgentAbort"]
+        SK_AgentCancelled["agentCancelledKey(name) ← 命名空间化"]
+        SK_AgentAbort["agentAbortKey(name) ← 命名空间化"]
         SK_AgentMessages["AgentMessages"]
         SK_CompactResult["CompactResult"]
         SK_CompactSignal["CompactSignal"]
@@ -288,7 +287,7 @@ graph LR
     end
     
     subgraph Consumers["读取者"]
-        Agent2["NanoCodeAgent（取消检测）"]
+        Agent2["NanoCodeAgent（取消检测，按 name 读取）"]
         Compact["token-budget（压缩）"]
         Analyzer["Context Analyzer"]
         LLM["LLMClient（模型覆盖）"]
@@ -357,15 +356,21 @@ onAgentTurnEnd()
    - **Broadcast**（`onAfterRequest`、`onInit`、`onDestroy`）：独立通知，互不依赖
    - **Merge**（`onExtraParams`）：各插件独立贡献部分配置，目标对象合并
 
-2. **Read-only 工具并行 + Write 工具串行**
+2. **工具级超时覆盖**
+   - `ToolDefinition.function.timeout` 支持为每个工具设定独立超时，未指定时使用全局 `defaultTimeout`（默认 120s）
+   - `Infinity` 表示永不超时（`ask_user_question` 等交互式工具），跳过 `PluginRegistry.execute()` 的 `Promise.race` 超时包装
+   - 按工具粒度存储于 `PluginRegistry.toolTimeouts` map，与 `toolSideEffects` 相同的登记/清理模式
+
+3. **Read-only 工具并行 + Write 工具串行**
    - `sideEffect: false` 的 read-only 工具（如文件读、搜索）通过 `Promise.all` 并行执行
    - `sideEffect: true` 的 write 工具（文件写、命令执行）串行执行，保持顺序和权限流
 
-3. **Store 为隐式协议**
+4. **Store 为隐式协议**
    - 核心不知晓 Store key 的业务含义，谁 set 谁定义结构
    - `store-keys.ts` 集中管理所有 key 常量，使协议可追踪
+   - `agentCancelledKey(name)` / `agentAbortKey(name)` 等命名空间化 key 函数，支持按 agent 名称隔离取消/中止信号
 
-4. **AgentDisplay 窄接口**
+5. **AgentDisplay 窄接口**
    - `NanoCodeAgent` 只依赖 `AgentDisplay` 5 个方法，不依赖完整 `DisplayPlugin`
    - `DisplayManager` 通过 `asAgentDisplay()` 适配两个接口
    - 这样 display 层可独立替换而不影响 agent 核心逻辑

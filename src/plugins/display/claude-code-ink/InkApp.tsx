@@ -8,6 +8,7 @@ import { Markdown, StreamingMarkdown } from '#src/plugins/display/claude-code-in
 import { BackgroundTaskBar } from '#src/plugins/display/claude-code-ink/components/BackgroundTaskBar.js';
 import type { DiffHunk } from '#src/core/contract.js';
 import type { ContextAnalysis } from '#src/plugins/token-budget/analyzer.js';
+import { QuestionsDialog } from './QuestionsDialog.js';
 
 export type PermissionResponse = 'allow_once' | 'always_allow' | 'deny';
 
@@ -57,6 +58,8 @@ export interface InkAppProps {
   activeAgentName?: string;
   pendingPermission?: PermissionPrompt | null;
   onPermissionResponse?: (response: PermissionResponse) => void;
+  pendingQuestions?: { questions: Array<{ question: string; header: string; options: Array<{ label: string; description: string; preview?: string }>; multiSelect?: boolean }>; resolve: (answers: Record<string, string>) => void } | null;
+  onQuestionsResponse?: (answers: Record<string, string>) => void;
   mode?: 'normal' | 'plan';
   taskCount?: number;
   backgroundTasks?: BackgroundTaskInfo[];
@@ -68,6 +71,8 @@ export interface InkAppProps {
   onViewAgentChange?: (name: string) => void;
   /** 返回主视图 */
   onViewAgentClear?: () => void;
+  /** Shift+Tab 切换 normal/plan 模式 */
+  onModeToggle?: () => void;
 }
 
 function AgentLabel({ agentName }: { agentName: string }): React.ReactElement | null {
@@ -75,19 +80,19 @@ function AgentLabel({ agentName }: { agentName: string }): React.ReactElement | 
   return React.createElement(Text, { dimColor: true }, `[${agentName}] `);
 }
 
-function ModeIndicator({ mode, taskCount }: { mode?: string; taskCount?: number }): React.ReactElement | null {
+function ModeIndicator({ mode, taskCount }: { mode?: string; taskCount?: number }): React.ReactElement {
   const parts: React.ReactElement[] = [];
   if (mode === 'plan') {
-    parts.push(React.createElement(Text, { key: 'mode', color: '#f59e0b' }, '● plan on'));
+    parts.push(React.createElement(Text, { key: 'mode', color: '#f59e0b', bold: true }, '● PLAN'));
+  } else {
+    parts.push(React.createElement(Text, { key: 'mode', color: '#9ca3af' }, '○ normal'));
   }
+  parts.push(React.createElement(Text, { key: 'shortcut', color: '#6b7280' }, '  [Shift+Tab]'));
   if (taskCount && taskCount > 0) {
-    if (parts.length > 0) {
-      parts.push(React.createElement(Text, { key: 'sep', dimColor: true }, ' · '));
-    }
-    parts.push(React.createElement(Text, { key: 'tasks', dimColor: true }, `${taskCount} task${taskCount > 1 ? 's' : ''}`));
+    parts.push(React.createElement(Text, { key: 'sep', color: '#6b7280' }, ' · '));
+    parts.push(React.createElement(Text, { key: 'tasks', color: '#6b7280' }, `${taskCount} task${taskCount > 1 ? 's' : ''}`));
   }
-  if (parts.length === 0) return null;
-  return React.createElement(Box, { height: 1, paddingLeft: 1, paddingBottom: 1 }, ...parts);
+  return React.createElement(Box, { paddingLeft: 1, paddingBottom: 1, flexShrink: 0 }, ...parts);
 }
 
 const DIM_COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#06b6d4', '#f97316', '#ef4444'];
@@ -432,7 +437,7 @@ function offsetFromLineCol(lines: string[], lineIdx: number, col: number): numbe
 }
 
 function AppContent(props: InkAppProps): React.ReactElement {
-  const { messages, onInputSubmit, onExit, greeting, pendingPermission, onPermissionResponse, activeAgentName, viewAgent, onViewAgentClear, onViewAgentChange } = props;
+  const { messages, onInputSubmit, onExit, greeting, pendingPermission, onPermissionResponse, pendingQuestions, onQuestionsResponse, activeAgentName, viewAgent, onViewAgentClear, onViewAgentChange } = props;
   const { setRawMode } = useStdin();
   const [input, setInput] = useState('');
   const [cursorPos, setCursorPos] = useState(0);
@@ -595,11 +600,34 @@ function AppContent(props: InkAppProps): React.ReactElement {
     delete: boolean; pageUp: boolean; pageDown: boolean;
     wheelUp: boolean; wheelDown: boolean; tab: boolean;
   }) => {
+    // Any dialog active: ESC/Ctrl+C cancels the ReAct process
+    if ((pendingPermission && onPermissionResponse) || (pendingQuestions && onQuestionsResponse)) {
+      if (key.ctrl && _input === 'c') {
+        if (pendingPermission && onPermissionResponse) onPermissionResponse('deny');
+        if (pendingQuestions && onQuestionsResponse) onQuestionsResponse({});
+        onExit();
+        return;
+      }
+      if (key.escape) {
+        if (pendingPermission && onPermissionResponse) {
+          onPermissionResponse('deny');
+          onExit();
+        }
+        // For questions, ESC is handled contextually by QuestionsDialog
+        return;
+      }
+    }
+
     // When permission dialog is active, suppress normal input handling
     // (PermissionDialog has its own useInput for Allow/Deny)
     if (pendingPermission && onPermissionResponse) {
       if (key.pageUp || key.pageDown || key.wheelUp || key.wheelDown) return; // allow scroll
-      return; // suppress all other input — PermissionDialog handles allow/deny
+      return; // suppress all other input
+    }
+    // When questions dialog is active, suppress normal input
+    // (QuestionsDialog has its own useInput)
+    if (pendingQuestions && onQuestionsResponse) {
+      return;
     }
 
     const sb = scrollRef.current;
@@ -616,6 +644,12 @@ function AppContent(props: InkAppProps): React.ReactElement {
         const maxScroll = Math.max(0, sb.getScrollHeight() - sb.getViewportHeight());
         sb.scrollTo(Math.min(st, maxScroll));
       }
+      return;
+    }
+
+    // Shift+Tab: toggle normal/plan mode
+    if (key.shift && key.tab) {
+      props.onModeToggle?.();
       return;
     }
 
@@ -875,19 +909,24 @@ function AppContent(props: InkAppProps): React.ReactElement {
       null,
       React.createElement(
         Box,
-        { flexDirection: 'column', height: '100%' },
+        { flexDirection: 'column', height: '100%', overflow: 'hidden' },
         React.createElement(
           Box,
-          { flexDirection: 'column', flexGrow: 1, alignItems: 'center', justifyContent: 'center' },
-          React.createElement(Text, { bold: true, color: '#00aaff' }, 'nano-code 终端 AI 编程助手'),
+          { flexDirection: 'column', flexGrow: 1, justifyContent: 'flexStart' },
           React.createElement(Box, { height: 1 }),
-          React.createElement(Text, { dimColor: true }, greeting),
+          React.createElement(Text, { bold: true, color: '#00aaff' }, '  █   █   ██   █   █   ██           ██    ██   ██    ████'),
+          React.createElement(Text, { bold: true, color: '#00aaff' }, '  ██  █  █  █  ██  █  █  █         █     █  █  █  █  █   '),
+          React.createElement(Text, { bold: true, color: '#00aaff' }, '  █ █ █  ████  █ █ █  █  █   ███   █     █  █  █  █  ███ '),
+          React.createElement(Text, { bold: true, color: '#00aaff' }, '  █  ██  █  █  █  ██  █  █         █     █  █  █  █  █   '),
+          React.createElement(Text, { bold: true, color: '#00aaff' }, '  █   █  █  █  █   █   ██           ██    ██   ██    ████'),
           React.createElement(Box, { height: 1 }),
-          React.createElement(Text, { dimColor: true }, '输入 exit 或 quit 退出'),
+          React.createElement(Text, { dimColor: true }, `  ${greeting}`),
+          React.createElement(Text, { dimColor: true }, '  输入 exit 或 quit 退出'),
         ),
         React.createElement(
           Box,
-          { flexDirection: 'column', paddingLeft: 1, paddingRight: 1, paddingBottom: 1 },
+          { flexDirection: 'column', flexShrink: 0, paddingLeft: 1, paddingRight: 1, paddingBottom: 1 },
+          React.createElement(ModeIndicator, { mode: props.mode, taskCount: props.taskCount }),
           React.createElement(
             Box,
             {
@@ -950,6 +989,12 @@ function AppContent(props: InkAppProps): React.ReactElement {
           ? React.createElement(PermissionDialog, {
               ...pendingPermission,
               onResponse: onPermissionResponse,
+            })
+          : null,
+        pendingQuestions && onQuestionsResponse
+          ? React.createElement(QuestionsDialog, {
+              questions: pendingQuestions.questions,
+              onResponse: onQuestionsResponse,
             })
           : null,
       ),

@@ -2,7 +2,7 @@ import { describe, it } from 'node:test';
 import * as assert from 'node:assert/strict';
 import { NanoCodeAgent } from '../src/core/agent.js';
 import { PluginRegistry } from '../src/core/plugin.js';
-import { SK } from '../src/core/store-keys.js';
+import { SK, agentStatusKey, agentCancelledKey, agentAbortKey } from '../src/core/store-keys.js';
 
 /** Minimal mock that satisfies the LLMClient shape without calling the API. */
 function mockLLM() {
@@ -149,10 +149,11 @@ describe('NanoCodeAgent — lifecycle hooks', () => {
     const registry = new PluginRegistry();
     let storeAgentState: any = null;
     // capture state after runTask completes
+    const targetKey = agentStatusKey('store-test');
     const origSet = registry.store.set.bind(registry.store);
     registry.store.set = (key: string, value: any) => {
       origSet(key, value);
-      if (key === 'agent') storeAgentState = registry.store.get('agent');
+      if (key === targetKey) storeAgentState = registry.store.get(targetKey);
     };
 
     const agent = new NanoCodeAgent({ registry: registry, llmClient: mockLLM(), name: 'store-test' });
@@ -691,7 +692,7 @@ describe('NanoCodeAgent — cancellation', () => {
 
   it('breaks immediately when cancelled before runTask', async () => {
     const registry = new PluginRegistry();
-    registry.store.set('agent:cancelled', true);
+    registry.store.set(agentCancelledKey('main'), true);
     let llmCalled = false;
     const mock = {
       sendSystemMessage: async (..._args: any[]) => {
@@ -721,8 +722,8 @@ describe('NanoCodeAgent — cancellation', () => {
     };
 
     const agent = new NanoCodeAgent({ registry: registry, llmClient: mock as any });
-    registry.store.set(SK.AgentAbort, new AbortController());
-    registry.store.set(SK.AgentCancelled, true);
+    registry.store.set(agentAbortKey('main'), new AbortController());
+    registry.store.set(agentCancelledKey('main'), true);
 
     const result = await agent.runTask('hello');
     assert.equal(result, undefined);
@@ -730,12 +731,12 @@ describe('NanoCodeAgent — cancellation', () => {
 
   it('clears cancel flag from store after handling', async () => {
     const registry = new PluginRegistry();
-    registry.store.set(SK.AgentCancelled, true);
+    registry.store.set(agentCancelledKey('main'), true);
 
     const agent = new NanoCodeAgent({ registry: registry, llmClient: mockLLM() });
     await agent.runTask('hello');
 
-    assert.equal(registry.store.get(SK.AgentCancelled), undefined);
+    assert.equal(registry.store.get(agentCancelledKey('main')), undefined);
   });
 
 });

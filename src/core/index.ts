@@ -6,18 +6,21 @@
 
 // ── 插件体系 ──
 export { NanoPlugin, PluginRegistry, registerBuiltinPlugin } from '#src/core/plugin.js';
-export type { LLMResponse, ToolCall } from '#src/core/plugin.js';
 
 // ── Agent ──
 export { NanoCodeAgent } from '#src/core/agent.js';
 export type { NanoCodeAgentOptions } from '#src/core/agent.js';
+export { AgentManager } from '#src/core/agent-manager.js';
+export type { AgentInfo, CreateAgentOptions } from '#src/core/contract.js';
 
 // ── 合约类型 ──
 export type {
   ToolResponse,
   ToolStatus,
   ToolDefinition,
+  ToolCall,
   ToolContext,
+  LLMResponse,
   DiffHunk,
   DiffLine,
   PermissionConfirmRequest,
@@ -31,7 +34,7 @@ export { isMainAgent } from '#src/core/contract.js';
 
 // ── LLM 客户端 ──
 export { LLMClient } from '#src/core/llm.js';
-export type { LLMConfig, ChatMessage, ToolCallDelta, AssembledToolCall } from '#src/core/llm.js';
+export type { LLMConfig, ChatMessage, ToolCallDelta } from '#src/core/llm.js';
 
 // ── 提示词构建 ──
 export { buildSystemPrompt, formatToolResponse } from '#src/core/prompt.js';

@@ -2,6 +2,7 @@ import { NanoPlugin, PluginRegistry } from '#src/core/plugin.js';
 import { ToolDefinition, ToolResponse, ToolContext } from '#src/core/contract.js';
 import { LLMClient } from '#src/core/llm.js';
 import { NanoCodeAgent } from '#src/core/agent.js';
+import { AgentManager } from '#src/core/agent-manager.js';
 import { DisplayManager } from '#src/display.js';
 import { loadAllSkills, findSkill, listSkillFiles, readSkillFile, getSkillsDir, substituteArgs, SkillDefinition } from '#src/plugins/skills/loader.js';
 import {
@@ -43,6 +44,7 @@ function buildSkillList(disabled?: string[]): Array<{ name: string; description:
 export function createSkillsPlugin(
   llmClient?: LLMClient,
   display?: DisplayManager,
+  agentManager?: AgentManager,
   options?: SkillsPluginOptions,
 ): NanoPlugin {
   const disabled = options?.disabled ?? [];
@@ -96,7 +98,7 @@ export function createSkillsPlugin(
               },
               required: ['skill'],
             },
-            sideEffect: true,
+            sideEffect: false,
           },
         });
       }
@@ -129,9 +131,9 @@ export function createSkillsPlugin(
         case 'skill_view':
           return handleSkillView(args, disabled);
         case 'skill':
-          return handleSkillExecute(args, llmClient, display, disabled);
+          return handleSkillExecute(args, llmClient, display, disabled, agentManager);
         case 'run_agent':
-          return handleRunAgent(args, llmClient, display);
+          return handleRunAgent(args, llmClient, display, agentManager);
         default:
           return { status: 'error', message: `Unknown tool: ${name}` };
       }
@@ -234,6 +236,7 @@ async function handleSkillExecute(
   llmClient?: LLMClient,
   display?: DisplayManager,
   disabled?: string[],
+  agentManager?: AgentManager,
 ): Promise<ToolResponse> {
   const skillName = args?.skill?.trim();
   if (!skillName) return { status: 'error', message: '参数 skill 不能为空' };
@@ -248,7 +251,7 @@ async function handleSkillExecute(
     const argsStr = typeof args?.args === 'string' ? args.args : '';
     const mode = fsSkill.context;
     if (mode === 'fork') {
-      return executeForkedSkill(fsSkill, argsStr, llmClient, display);
+      return executeForkedSkill(fsSkill, argsStr, llmClient, display, agentManager);
     }
     const content = substituteArgs(fsSkill.body, argsStr);
     const baseDirNote = fsSkill.dir ? `技能目录: ${fsSkill.dir}\n解析此技能中的相对路径时，请基于该目录计算。\n\n` : '';
@@ -283,6 +286,7 @@ async function executeForkedSkill(
   argsStr: string,
   llmClient?: LLMClient,
   display?: DisplayManager,
+  agentManager?: AgentManager,
 ): Promise<ToolResponse> {
   if (!llmClient) {
     const content = substituteArgs(skill.body, argsStr);
@@ -297,7 +301,7 @@ async function executeForkedSkill(
   const baseDirNote = `技能目录: ${skill.dir}\n\n`;
   const fullPrompt = baseDirNote + content;
 
-  const subRegistry = new PluginRegistry();
+  const subRegistry = new PluginRegistry({ store: agentManager?.getStore() });
   subRegistry.setAgentName(skill.name);
   subRegistry.setDefaultContext({ skipPermission: true, defaultTimeout: 120000 });
 
@@ -308,7 +312,9 @@ async function executeForkedSkill(
   await registerBuiltinPlugin(subRegistry, 'token-budget');
   await registerBuiltinPlugin(subRegistry, 'file-search');
 
-  const subAgent = new NanoCodeAgent({ registry: subRegistry, llmClient, agentRole: `技能: ${skill.name}`, name: skill.name, display });
+  const subAgent = agentManager
+    ? agentManager.createAgent({ registry: subRegistry, agentRole: `技能: ${skill.name}`, name: skill.name, display })
+    : new NanoCodeAgent({ registry: subRegistry, llmClient, agentRole: `技能: ${skill.name}`, name: skill.name, display });
 
   try {
     const result = await subAgent.runTask(fullPrompt);
@@ -318,6 +324,8 @@ async function executeForkedSkill(
     };
   } catch (err: any) {
     return { status: 'error', message: `技能执行失败: ${err.message}` };
+  } finally {
+    if (agentManager) agentManager.removeAgent(subAgent.getName());
   }
 }
 
@@ -325,6 +333,7 @@ async function handleRunAgent(
   args: any,
   llmClient?: LLMClient,
   display?: DisplayManager,
+  agentManager?: AgentManager,
 ): Promise<ToolResponse> {
   const query = args?.query?.trim();
   if (!query) return { status: 'error', message: '参数 query 不能为空' };
@@ -332,7 +341,7 @@ async function handleRunAgent(
 
   const role = args?.role?.trim() || '助手';
 
-  const subRegistry = new PluginRegistry();
+  const subRegistry = new PluginRegistry({ store: agentManager?.getStore() });
   subRegistry.setAgentName('run_agent');
   subRegistry.setDefaultContext({ skipPermission: true, defaultTimeout: 120000 });
 
@@ -343,7 +352,9 @@ async function handleRunAgent(
   await registerBuiltinPlugin(subRegistry, 'token-budget');
   await registerBuiltinPlugin(subRegistry, 'file-search');
 
-  const subAgent = new NanoCodeAgent({ registry: subRegistry, llmClient, agentRole: role, name: 'run_agent', display });
+  const subAgent = agentManager
+    ? agentManager.createAgent({ registry: subRegistry, agentRole: role, name: 'run_agent', display })
+    : new NanoCodeAgent({ registry: subRegistry, llmClient, agentRole: role, name: 'run_agent', display });
 
   try {
     const result = await subAgent.runTask(query);
@@ -353,5 +364,7 @@ async function handleRunAgent(
     };
   } catch (err: any) {
     return { status: 'error', message: `子 agent 执行失败: ${err.message}` };
+  } finally {
+    if (agentManager) agentManager.removeAgent(subAgent.getName());
   }
 }

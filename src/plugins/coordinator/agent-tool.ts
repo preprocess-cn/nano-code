@@ -1,6 +1,7 @@
 import { NanoPlugin, PluginRegistry, registerBuiltinPlugin } from '#src/core/plugin.js';
 import { ToolResponse, ToolContext, ToolDefinition } from '#src/core/contract.js';
 import { NanoCodeAgent } from '#src/core/agent.js';
+import { AgentManager } from '#src/core/agent-manager.js';
 import { LLMClient } from '#src/core/llm.js';
 import { AgentDefinition } from '#src/plugins/coordinator/agent-loader.js';
 import { DisplayManager } from '#src/display.js';
@@ -13,8 +14,8 @@ import {
   type AgentIdentity,
 } from '#src/plugins/coordinator/messaging-plugins.js';
 
-async function createSubRegistry(def: AgentDefinition): Promise<PluginRegistry> {
-  const subRegistry = new PluginRegistry();
+async function createSubRegistry(def: AgentDefinition, store?: import('#src/core/store.js').IStore): Promise<PluginRegistry> {
+  const subRegistry = store ? new PluginRegistry({ store }) : new PluginRegistry();
   subRegistry.setAgentName(def.name);
   subRegistry.setDefaultContext({ skipPermission: true, defaultTimeout: 120000 });
 
@@ -32,6 +33,7 @@ export function createAgentToolPlugin(
   def: AgentDefinition,
   llmClient: LLMClient,
   display?: DisplayManager,
+  agentManager?: AgentManager,
 ): NanoPlugin {
   return {
     name: `agent:${def.name}`,
@@ -80,7 +82,7 @@ export function createAgentToolPlugin(
           // 使用 BackgroundTaskManager 的 taskId 创建生命周期控制器，与 cancelTask 的 key 一致
           const taskController = lifecycle.createTaskController(assignedTaskId);
           try {
-            const subRegistry = await createSubRegistry(def);
+            const subRegistry = await createSubRegistry(def, agentManager?.getStore());
 
             // Register inter-agent communication plugins
             const identity: AgentIdentity = { taskId: assignedTaskId, agentName: def.name };
@@ -88,16 +90,16 @@ export function createAgentToolPlugin(
             await subRegistry.register(createMessageDeliveryPlugin(assignedTaskId));
 
             // Background agents run headless (no display)
-            const subAgent = new NanoCodeAgent({
-              registry: subRegistry,
-              llmClient,
-              agentRole: def.role,
-              promptConfig: def.systemPrompt,
-              name: def.name,
-              abortController: taskController,
-            });
+            const agentName = `${def.name}_bg_${assignedTaskId}`;
+            const subAgent = agentManager
+              ? agentManager.createAgent({ registry: subRegistry, agentRole: def.role, promptConfig: def.systemPrompt, name: agentName, abortController: taskController })
+              : new NanoCodeAgent({ registry: subRegistry, llmClient, agentRole: def.role, promptConfig: def.systemPrompt, name: def.name, abortController: taskController });
 
-            return await subAgent.runTask(query);
+            try {
+              return await subAgent.runTask(query);
+            } finally {
+              if (agentManager) agentManager.removeAgent(subAgent.getName());
+            }
           } finally {
             MessageBus.getInstance().unregisterAgent(assignedTaskId);
             lifecycle.cleanup(assignedTaskId);
@@ -128,22 +130,18 @@ export function createAgentToolPlugin(
       // Synchronous execution
       const lifecycle = AgentLifecycle.getInstance();
       const syncControllerId = `sync_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-      const subRegistry = await createSubRegistry(def);
+      const subRegistry = await createSubRegistry(def, agentManager?.getStore());
 
-      const subAgent = new NanoCodeAgent({
-        registry: subRegistry,
-        llmClient,
-        agentRole: def.role,
-        promptConfig: def.systemPrompt,
-        name: def.name,
-        display,
-        abortController: lifecycle.createTaskController(syncControllerId),
-      });
+      const agentName = `${def.name}_sync_${syncControllerId.slice(0, 8)}`;
+      const subAgent = agentManager
+        ? agentManager.createAgent({ registry: subRegistry, agentRole: def.role, promptConfig: def.systemPrompt, name: agentName, display, abortController: lifecycle.createTaskController(syncControllerId) })
+        : new NanoCodeAgent({ registry: subRegistry, llmClient, agentRole: def.role, promptConfig: def.systemPrompt, name: def.name, display, abortController: lifecycle.createTaskController(syncControllerId) });
 
       let result;
       try {
         result = await subAgent.runTask(query);
       } finally {
+        if (agentManager) agentManager.removeAgent(subAgent.getName());
         lifecycle.cleanup(syncControllerId);
       }
 

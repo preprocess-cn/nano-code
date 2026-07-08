@@ -159,6 +159,76 @@ describe('task-plan 插件 — exit_plan_mode', () => {
     // Mode should remain plan
     assert.equal(store.get(SK.Mode), 'plan');
   });
+
+  test('exit_plan_mode 恢复 PrePlanMode', async () => {
+    const planDir = path.join(tmpDir, '.nano-code');
+    fs.mkdirSync(planDir, { recursive: true });
+    fs.writeFileSync(getPlanFilePath(), 'Test plan', 'utf-8');
+
+    store.set(SK.PrePlanMode, 'custom-mode');
+    const res = await taskPlanPlugin.execute('exit_plan_mode', {}, {
+      ...CTX,
+      confirmCallback: async () => true,
+    });
+    assert.equal(res.status, 'success');
+    assert.equal(store.get(SK.Mode), 'custom-mode');
+    assert.equal(store.get(SK.PrePlanMode), undefined);
+  });
+
+  test('exit_plan_mode 无 PrePlanMode 时恢复 normal', async () => {
+    const planDir = path.join(tmpDir, '.nano-code');
+    fs.mkdirSync(planDir, { recursive: true });
+    fs.writeFileSync(getPlanFilePath(), 'Plan content', 'utf-8');
+
+    const res = await taskPlanPlugin.execute('exit_plan_mode', {}, {
+      ...CTX,
+      confirmCallback: async () => true,
+    });
+    assert.equal(res.status, 'success');
+    assert.equal(store.get(SK.Mode), 'normal');
+  });
+});
+
+describe('task-plan 插件 — PrePlanMode', () => {
+  let origCwd: typeof process.cwd;
+  let tmpDir: string;
+  let store: ReturnType<typeof createTestStore>;
+
+  beforeEach(async () => {
+    tmpDir = createTempDir();
+    origCwd = process.cwd;
+    (process.cwd as any) = () => tmpDir;
+    store = createTestStore();
+    await taskPlanPlugin.onInit!({
+      store,
+      getPluginConfig: () => ({}),
+    } as any);
+  });
+
+  afterEach(() => {
+    (process.cwd as any) = origCwd;
+    removeTempDir(tmpDir);
+  });
+
+  test('enter_plan_mode 存储前一个模式到 PrePlanMode', async () => {
+    store.set(SK.Mode, 'normal');
+    await taskPlanPlugin.execute('enter_plan_mode', {}, CTX);
+    assert.equal(store.get(SK.PrePlanMode), 'normal');
+    assert.equal(store.get(SK.Mode), 'plan');
+  });
+
+  test('enter_plan_mode 从其他模式进入时存储原模式', async () => {
+    store.set(SK.Mode, 'custom');
+    await taskPlanPlugin.execute('enter_plan_mode', {}, CTX);
+    assert.equal(store.get(SK.PrePlanMode), 'custom');
+  });
+
+  test('enter_plan_mode 重复进入不覆盖 PrePlanMode', async () => {
+    store.set(SK.Mode, 'plan');
+    store.set(SK.PrePlanMode, 'normal');
+    await taskPlanPlugin.execute('enter_plan_mode', {}, CTX);
+    assert.equal(store.get(SK.PrePlanMode), 'normal');
+  });
 });
 
 describe('task-plan 插件 — task_create', () => {

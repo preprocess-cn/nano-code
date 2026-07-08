@@ -235,8 +235,10 @@ const BUILTIN_COMMANDS: BuiltinCommand[] = [
       }
 
       if (args === 'exit') {
-        store.set(SK.Mode, 'normal');
-        return { handled: true, skipAgent: true, message: '已退出 Plan Mode，恢复为常规模式。' };
+        const preMode = store.get<string>(SK.PrePlanMode) || 'normal';
+        store.set(SK.Mode, preMode);
+        store.set(SK.PrePlanMode, undefined);
+        return { handled: true, skipAgent: true, message: `已退出 Plan Mode，恢复为 ${preMode} 模式。` };
       }
 
       // Show plan content
@@ -461,6 +463,44 @@ const BUILTIN_COMMANDS: BuiltinCommand[] = [
           content: INIT_PROMPT,
         }],
       };
+    },
+  },
+  {
+    name: 'agent',
+    description: '管理 agent — /agent list, /agent status <name>, /agent kill <name>',
+    handler: async (ctx?: BuiltinContext) => {
+      const registry = ctx?.registry;
+      if (!registry) return { handled: true, skipAgent: true, message: '不可用' };
+
+      const mgr = registry.getAgentManager();
+      if (!mgr) return { handled: true, skipAgent: true, message: 'AgentManager 不可用（当前模式不支持 agent 管理）' };
+
+      const args = (ctx?.args || '').trim();
+      const [subcmd, ...rest] = args.split(/\s+/);
+
+      if (!subcmd || subcmd === 'list') {
+        const agents = mgr.listAgents();
+        if (agents.length === 0) return { handled: true, skipAgent: true, message: '没有运行的 agent。' };
+        const lines = agents.map(a =>
+          `  ${a.name.padEnd(24)} ${a.status.padEnd(8)} ${a.messageCount} 条消息${a.role ? ` (${a.role})` : ''}`
+        );
+        return { handled: true, skipAgent: true, message: `\n  运行中的 agent (${agents.length}):\n${lines.join('\n')}\n` };
+      }
+
+      if (subcmd === 'status' && rest.length > 0) {
+        const name = rest.join(' ');
+        const info = mgr.getAgentInfo(name);
+        if (!info) return { handled: true, skipAgent: true, message: `Agent "${name}" 未找到。` };
+        return { handled: true, skipAgent: true, message: `  ${info.name}: ${info.status}, ${info.messageCount} 条消息${info.role ? `, 角色: ${info.role}` : ''}，创建于 ${info.createdAt}` };
+      }
+
+      if (subcmd === 'kill' && rest.length > 0) {
+        const name = rest.join(' ');
+        const killed = mgr.killAgent(name);
+        return { handled: true, skipAgent: true, message: killed ? `已发送终止信号给 agent "${name}"。` : `Agent "${name}" 未找到。` };
+      }
+
+      return { handled: true, skipAgent: true, message: '用法: /agent [list|status <name>|kill <name>]' };
     },
   },
 ];

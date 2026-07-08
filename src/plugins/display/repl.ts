@@ -1,4 +1,4 @@
-import { intro, text, outro, isCancel, confirm } from '@clack/prompts';
+import { intro, text, outro, isCancel, confirm, select, multiselect } from '@clack/prompts';
 import { DisplayPlugin, StartConfig, StatusEvent, StreamEvent, ToolCallEvent, ToolResultEvent, ErrorEvent, DebugEvent, BackgroundTaskEvent, MessageLevel } from '#src/display.js';
 import { isMainAgent } from '#src/core/contract.js';
 import { formatToolCall } from '#src/core/tool-display.js';
@@ -22,7 +22,8 @@ function getModeLabel(): string {
   const mode = _store.get<string>(SK.Mode);
   const taskCount = _store.get<number>(SK.TaskCount) ?? 0;
   const parts: string[] = [];
-  if (mode === 'plan') parts.push('\x1b[33mplan mode\x1b[0m');
+  if (mode === 'plan') parts.push('\x1b[33mplan mode\x1b[0m [⇧+Tab]');
+  else if (mode) parts.push('\x1b[2mnormal [⇧+Tab plan]\x1b[0m');
   if (taskCount > 0) parts.push(`${taskCount} tasks`);
   return parts.length > 0 ? ` [${parts.join(' · ')}]` : '';
 }
@@ -42,6 +43,29 @@ export const replDisplay: DisplayPlugin = {
     registry.setOutputHandler({
       stdout(chunk: string) { process.stdout.write(chunk); },
       stderr(chunk: string) { process.stderr.write(chunk); },
+    });
+    // Register AskUserQuestion handler via shared store (no core changes)
+    registry.store.set('askQuestions', async (questions: Array<{ question: string; header: string; options: Array<{ label: string; description: string; preview?: string }>; multiSelect?: boolean }>) => {
+      const answers: Record<string, string> = {};
+      for (const q of questions) {
+        console.log(`\n\x1b[33m❓ ${q.header}\x1b[0m`);
+        console.log(`  ${q.question}`);
+        if (q.multiSelect) {
+          const result = await multiselect({
+            message: '请选择（空格切换选中，回车确认）',
+            options: q.options.map((o: { label: string; description: string }) => ({ value: o.label, label: o.label, hint: o.description })),
+            required: true,
+          });
+          answers[q.question] = typeof result === 'symbol' ? '' : (result as string[]).join(', ');
+        } else {
+          const result = await select({
+            message: '请选择一个选项',
+            options: q.options.map((o: { label: string; description: string }) => ({ value: o.label, label: o.label, hint: o.description })),
+          });
+          answers[q.question] = typeof result === 'symbol' ? '' : (result as string);
+        }
+      }
+      return answers;
     });
   },
 

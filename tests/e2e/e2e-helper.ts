@@ -1,8 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import type { LLMResponse, ToolCall } from '#src/core/plugin.js';
-import type { AgentDisplay, ToolStatus } from '#src/core/contract.js';
+import type { LLMResponse, ToolCall, AgentDisplay, ToolStatus } from '#src/core/contract.js';
 import type { ChatMessage } from '#src/core/llm.js';
 import { sanitizeProjectPath } from '#src/plugins/tools/memory.js';
 
@@ -86,7 +85,7 @@ export function createToolCall(
   args: Record<string, unknown>,
   id = 'e2e_call_1',
 ): ToolCall {
-  return { id, function: { name, arguments: JSON.stringify(args) } };
+  return { id, type: 'function', function: { name, arguments: JSON.stringify(args) } };
 }
 
 // ── Temp directory ──

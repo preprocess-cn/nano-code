@@ -253,7 +253,7 @@ describe('Skills Plugin with Bundled Skills', () => {
 
     // Create skills plugin without disabled skills
     const { createSkillsPlugin } = await import('../src/plugins/skills/index.js');
-    skillsPlugin = createSkillsPlugin(undefined, undefined, {
+    skillsPlugin = createSkillsPlugin(undefined, undefined, undefined, {
       disabled: [],
       disableSkillTool: false,
     });
@@ -300,7 +300,7 @@ describe('Skills Plugin with Bundled Skills', () => {
     bundled.registerAllDefaultBundledSkills();
 
     const { createSkillsPlugin: createPlugin } = await import('../src/plugins/skills/index.js');
-    const plugin = createPlugin(undefined, undefined, {
+    const plugin = createPlugin(undefined, undefined, undefined, {
       disabled: ['simplify', 'verify'],
       disableSkillTool: false,
     });
@@ -326,7 +326,7 @@ describe('Skills Plugin with Bundled Skills', () => {
     bundled.registerAllDefaultBundledSkills();
 
     const { createSkillsPlugin: createPlugin } = await import('../src/plugins/skills/index.js');
-    const plugin = createPlugin(undefined, undefined, {
+    const plugin = createPlugin(undefined, undefined, undefined, {
       disabled: ['simplify'],
       disableSkillTool: false,
     });
@@ -351,7 +351,7 @@ describe('Skills Plugin with Bundled Skills', () => {
     bundled.registerAllDefaultBundledSkills();
 
     const { createSkillsPlugin: createPlugin } = await import('../src/plugins/skills/index.js');
-    const plugin = createPlugin(undefined, undefined, {
+    const plugin = createPlugin(undefined, undefined, undefined, {
       disabled: ['simplify'],
       disableSkillTool: false,
     });
@@ -376,7 +376,7 @@ FS version`, 'utf-8');
     bundled.registerAllDefaultBundledSkills();
 
     const { createSkillsPlugin: createPlugin } = await import('../src/plugins/skills/index.js');
-    const plugin = createPlugin(undefined, undefined, {
+    const plugin = createPlugin(undefined, undefined, undefined, {
       disabled: ['simplify'],
       disableSkillTool: false,
     });
@@ -392,7 +392,7 @@ FS version`, 'utf-8');
     bundled.registerAllDefaultBundledSkills();
 
     const { createSkillsPlugin: createPlugin } = await import('../src/plugins/skills/index.js');
-    const plugin = createPlugin(undefined, undefined, {
+    const plugin = createPlugin(undefined, undefined, undefined, {
       disableSkillTool: true,
     });
     const tools = plugin.getTools();

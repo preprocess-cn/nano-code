@@ -1,23 +1,7 @@
-import { ToolDefinition, ToolResponse, ToolContext, CommandInterceptResult, type PermissionConfirmRequest, type PermissionConfirmResponse, type CommandOutputHandler, type AgentReadyContext, type SessionRestoreContext, type AgentExitContext } from '#src/core/contract.js';
+import { ToolDefinition, ToolResponse, ToolContext, ToolCall, LLMResponse, CommandInterceptResult, type PermissionConfirmRequest, type PermissionConfirmResponse, type CommandOutputHandler, type AgentReadyContext, type SessionRestoreContext, type AgentExitContext } from '#src/core/contract.js';
 import { logManager } from '#src/core/logger.js';
 import { ChatMessage } from '#src/core/llm.js';
 import { IStore, InMemoryStore } from '#src/core/store.js';
-
-// ── Companion types for hooks ──
-
-export interface LLMResponse {
-  text: string | null;
-  toolCalls?: ToolCall[];
-  stopReason?: string;
-}
-
-export interface ToolCall {
-  id: string;
-  function: {
-    name: string;
-    arguments: string;
-  };
-}
 
 // ── Plugin interface ──
 
@@ -66,6 +50,7 @@ export class PluginRegistry {
   private plugins: Map<string, NanoPlugin> = new Map();
   private toolIndex: Map<string, string> = new Map();
   private toolSideEffects: Map<string, boolean> = new Map();
+  private toolTimeouts: Map<string, number | undefined> = new Map();
   private configs: Map<string, Record<string, any>> = new Map();
   private defaultCtx: Partial<ToolContext> = {};
   private agentName: string = 'main';
@@ -74,7 +59,16 @@ export class PluginRegistry {
   private _schemaCache: ToolDefinition[] | null = null;
 
   /** 插件间共享状态通道。核心只做透传，不知晓任何 key 的业务含义 */
-  store: IStore = new InMemoryStore();
+  store: IStore;
+
+  constructor(options?: { store?: IStore }) {
+    this.store = options?.store ?? new InMemoryStore();
+  }
+
+  /** 返回共享 store 中的 AgentManager（若有） */
+  getAgentManager(): import('#src/core/agent-manager.js').AgentManager | undefined {
+    return this.store.get('agent:manager') as import('#src/core/agent-manager.js').AgentManager | undefined;
+  }
 
   setDefaultContext(ctx: Partial<ToolContext>): void {
     this.defaultCtx = ctx;
@@ -160,6 +154,7 @@ export class PluginRegistry {
       }
       this.toolIndex.set(tool.function.name, plugin.name);
       this.toolSideEffects.set(tool.function.name, tool.function.sideEffect ?? true);
+      this.toolTimeouts.set(tool.function.name, tool.function.timeout);
     }
     this._schemaCache = null;
 
@@ -184,6 +179,7 @@ export class PluginRegistry {
     this.plugins.clear();
     this.toolIndex.clear();
     this.toolSideEffects.clear();
+    this.toolTimeouts.clear();
     this.configs.clear();
     this._allowlist.clear();
     this._schemaCache = null;
@@ -205,6 +201,7 @@ export class PluginRegistry {
       if (pluginName === name) {
         this.toolIndex.delete(toolName);
         this.toolSideEffects.delete(toolName);
+        this.toolTimeouts.delete(toolName);
       }
     }
     this.plugins.delete(name);
@@ -239,24 +236,32 @@ export class PluginRegistry {
       };
     }
 
+    const toolTimeout = this.toolTimeouts.get(name);
+    const effectiveTimeout = toolTimeout !== undefined ? toolTimeout : (ctx?.defaultTimeout ?? this.defaultCtx.defaultTimeout ?? 30000);
+
     const fullContext: ToolContext = {
       skipPermission: ctx?.skipPermission ?? this.defaultCtx.skipPermission ?? false,
       cwd: ctx?.cwd ?? this.defaultCtx.cwd ?? process.cwd(),
-      defaultTimeout: ctx?.defaultTimeout ?? this.defaultCtx.defaultTimeout ?? 30000,
+      defaultTimeout: effectiveTimeout,
       sideEffect: this.toolSideEffects.get(name) ?? true,
       confirmCallback: this._confirmCallback,
       outputHandler: this._outputHandler,
     };
 
     try {
+      // Infinity means never timeout — skip Promise.race entirely
+      if (effectiveTimeout === Infinity) {
+        return await plugin.execute(name, args, fullContext);
+      }
+
       const timer: { ref: NodeJS.Timeout | null } = { ref: null };
       try {
         return await Promise.race([
           plugin.execute(name, args, fullContext),
           new Promise<ToolResponse>((_, reject) => {
             timer.ref = setTimeout(
-              () => reject(new Error(`Tool execution timed out after ${fullContext.defaultTimeout}ms`)),
-              fullContext.defaultTimeout,
+              () => reject(new Error(`Tool execution timed out after ${effectiveTimeout}ms`)),
+              effectiveTimeout,
             );
           }),
         ]);
@@ -418,19 +423,19 @@ const BUILTIN_LOADERS: Record<string, (settings?: Record<string, any>) => Promis
   command: async () => (await import('#src/plugins/tools/command.js')).commandPlugin,
   memory: async (s) => (await import('#src/plugins/tools/memory.js')).createMemoryPlugin(s || {}),
   'token-budget': async (s) => (await import('#src/plugins/token-budget/index.js')).createTokenBudgetPlugin(s || {}),
-  skills: async (s) => (await import('#src/plugins/skills/index.js')).createSkillsPlugin(s?.llmClient, s?.displayMgr, { disabled: s?.disabled, disableSkillTool: s?.disableSkillTool }),
+  skills: async (s) => (await import('#src/plugins/skills/index.js')).createSkillsPlugin(s?.llmClient, s?.displayMgr, s?.agentManager, { disabled: s?.disabled, disableSkillTool: s?.disableSkillTool }),
   'file-search': async () => (await import('#src/plugins/tools/search.js')).searchPlugin,
   web: async () => (await import('#src/plugins/tools/web.js')).webPlugin,
   'model-registry': async (s) => (await import('#src/plugins/model-registry/index.js')).createModelRegistryPlugin(s || {}),
-  monitor: async () => (await import('#src/plugins/tools/monitor.js')).monitorPlugin,
   // ── Feature plugins (loaded via registerBuiltinPlugin) ──
-  coordinator: async (s) => (await import('#src/plugins/coordinator/coordinator.js')).createAgentCoordinatorPlugin(s?.llmClient, s?.displayMgr),
+  coordinator: async (s) => (await import('#src/plugins/coordinator/coordinator.js')).createAgentCoordinatorPlugin(s?.llmClient, s?.displayMgr, s?.agentManager),
   commands: async (s) => (await import('#src/plugins/commands/index.js')).createCommandsPlugin(s?.displayMgr),
-  'skills-slash': async (s) => (await import('#src/plugins/commands/skills-slash.js')).createSkillsSlashPlugin(s?.llmClient, s?.displayMgr),
+  'skills-slash': async (s) => (await import('#src/plugins/commands/skills-slash.js')).createSkillsSlashPlugin(s?.llmClient, s?.displayMgr, s?.agentManager),
   'agent-slash': async () => (await import('#src/plugins/commands/agent-slash.js')).createAgentSlashPlugin(),
   bang: async (s) => (await import('#src/plugins/commands/bang.js')).createBangPlugin(s?.displayMgr),
   'task-plan': async () => (await import('#src/plugins/tools/task-plan.js')).taskPlanPlugin,
   'npm-loader': async () => (await import('#src/plugins/npm-loader.js')).npmLoaderPlugin,
+  'ask-user-question': async () => (await import('#src/plugins/tools/ask-user-question.js')).askUserQuestionPlugin,
   'mcp-loader': async (s) => (await import('#src/plugins/mcp/adapter.js')).createMcpLoaderPlugin(s?.config, s?.debug),
 };
 
@@ -445,7 +450,6 @@ export const DEFAULT_SYSTEM_PLUGINS: readonly string[] = [
   'memory',
   'token-budget',
   'file-search',
-  'monitor',
   'mcp-loader',
 ];
 
@@ -461,6 +465,7 @@ export const DEFAULT_FEATURE_PLUGINS: readonly string[] = [
   'agent-slash',
   'bang',
   'task-plan',
+  'ask-user-question',
   'npm-loader',
 ];
 

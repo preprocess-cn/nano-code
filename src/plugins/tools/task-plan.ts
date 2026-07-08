@@ -1,7 +1,7 @@
 import { NanoPlugin, PluginRegistry } from '#src/core/plugin.js';
 import { ToolDefinition, ToolResponse, ToolContext, PermissionConfirmRequest } from '#src/core/contract.js';
 import {
-  PlanMode, Task, TaskStatus,
+  Task, TaskStatus,
 } from '#src/plugins/task-plan/types.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
@@ -99,14 +99,15 @@ async function handleEnterPlanMode(): Promise<ToolResponse> {
   if (!_store) {
     return { status: 'error', message: 'Internal error: store not available' };
   }
-  const currentMode = _store.get<PlanMode>(SK.Mode) || 'normal';
+  const currentMode = _store.get<string>(SK.Mode) || 'normal';
   if (currentMode === 'plan') {
     return { status: 'success', data: 'Already in plan mode.' };
   }
+  _store.set(SK.PrePlanMode, currentMode);
   _store.set(SK.Mode, 'plan');
   return {
     status: 'success',
-    data: 'Entered plan mode. You should now focus on exploring the codebase and designing an implementation approach.\n\nIn plan mode, you MUST NOT edit any files (except the plan file at .nano-code/plan.md) or run any non-readonly tools. Use exit_plan_mode when you are ready to present your plan for approval.',
+    data: 'Entered plan mode. In plan mode, you MUST NOT edit any files (except the plan file at .nano-code/plan.md) or run any non-readonly tools. Use exit_plan_mode when you are ready to present your plan for approval.',
   };
 }
 
@@ -116,7 +117,7 @@ async function handleExitPlanMode(ctx: ToolContext): Promise<ToolResponse> {
   if (!_store) {
     return { status: 'error', message: 'Internal error: store not available' };
   }
-  const currentMode = _store.get<PlanMode>(SK.Mode) || 'normal';
+  const currentMode = _store.get<string>(SK.Mode) || 'normal';
   if (currentMode !== 'plan') {
     return { status: 'error', message: 'Not in plan mode. Use enter_plan_mode first.' };
   }
@@ -145,8 +146,10 @@ async function handleExitPlanMode(ctx: ToolContext): Promise<ToolResponse> {
   // Store approved plan content
   _store.set(SK.PlanContent, planContent);
 
-  // Switch back to normal mode
-  _store.set(SK.Mode, 'normal');
+  // Restore previous mode
+  const preMode = _store.get<string>(SK.PrePlanMode) || 'normal';
+  _store.set(SK.Mode, preMode);
+  _store.set(SK.PrePlanMode, undefined);
 
   return {
     status: 'success',
@@ -339,7 +342,7 @@ const TOOLS: ToolDefinition[] = [
       name: 'exit_plan_mode',
       description: 'Present your plan for approval and exit plan mode. Call this after writing your plan to .nano-code/plan.md. The user will be prompted to approve or reject the plan. If approved, normal mode resumes.',
       parameters: { type: 'object', properties: {}, required: [] },
-      sideEffect: true,
+      sideEffect: false,
     },
   },
   {
@@ -357,7 +360,7 @@ const TOOLS: ToolDefinition[] = [
         },
         required: ['subject', 'description'],
       },
-      sideEffect: true,
+      sideEffect: false,
     },
   },
   {
@@ -389,7 +392,7 @@ const TOOLS: ToolDefinition[] = [
         },
         required: ['taskId'],
       },
-      sideEffect: true,
+      sideEffect: false,
     },
   },
   {
@@ -404,7 +407,7 @@ const TOOLS: ToolDefinition[] = [
         },
         required: ['taskId'],
       },
-      sideEffect: true,
+      sideEffect: false,
     },
   },
 ];

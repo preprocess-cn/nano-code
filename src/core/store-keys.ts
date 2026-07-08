@@ -11,22 +11,33 @@
 
 import type { ChatMessage } from '#src/core/llm.js';
 
+// ── Per-agent 动态键（共享 store 下按 agent 名隔离） ──
+export const agentStatusKey = (name: string): string => `agent:status:${name}`;
+export const agentAbortKey = (name: string): string => `agent:abort:${name}`;
+export const agentMessagesKey = (name: string): string => `agent:messages:${name}`;
+export const agentCancelledKey = (name: string): string => `agent:cancelled:${name}`;
+export const compactResultKey = (name: string): string => `compact:result:${name}`;
+export const compactCompletedKey = (name: string): string => `compact:completed:${name}`;
+export const compactRetryKey = (name: string): string => `compact:retry:${name}`;
+
 export const SK = {
-  /** 当前 agent 状态快照 */
+  /** AgentManager 实例引用（存入共享 store 供插件获取） */
+  AgentManager: 'agent:manager',
+  /** @deprecated 使用 agentStatusKey(name) 替代 */
   AgentStatus: 'agent',
-  /** Boolean: 是否收到取消信号 */
+  /** @deprecated 使用 agentCancelledKey(name) 替代 */
   AgentCancelled: 'agent:cancelled',
-  /** AbortController: LLM 流式请求的中止控制器 */
+  /** @deprecated 使用 agentAbortKey(name) 替代 */
   AgentAbort: 'agent:abort',
-  /** ChatMessage[]: 当前 agent 的消息历史快照 */
+  /** @deprecated 使用 agentMessagesKey(name) 替代 */
   AgentMessages: 'agent:messages',
-  /** ChatMessage[]: 自动压缩结果 */
+  /** @deprecated 使用 compactResultKey(name) 替代 */
   CompactResult: 'compact:result',
   /** boolean: 自动压缩信号 */
   CompactSignal: 'compact:signal',
-  /** boolean: 压缩是否已完成 */
+  /** @deprecated 使用 compactCompletedKey(name) 替代 */
   CompactCompleted: 'compact:completed',
-  /** boolean: 压缩是否需要重试 */
+  /** @deprecated 使用 compactRetryKey(name) 替代 */
   CompactRetry: 'compact:retry',
   /** number: 从 session 恢复时的初始累计 token */
   TokenBudgetInitialAccumulated: 'token-budget:initialAccumulated',
@@ -38,6 +49,8 @@ export const SK = {
   AgentMode: 'agent:mode',
   /** PlanMode: 当前 agent 模式 */
   Mode: 'task-plan:mode',
+  /** PlanMode: plan 模式之前的模式（退出时恢复） */
+  PrePlanMode: 'task-plan:preMode',
   /** string: 计划文件内容 */
   PlanContent: 'task-plan:planContent',
   /** Task[]: 当前任务列表 */

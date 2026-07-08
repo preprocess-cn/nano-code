@@ -6,7 +6,7 @@ import { ThinkStream } from '#src/plugins/display/think-stream.js';
 import type { PluginRegistry } from '#src/core/plugin.js';
 import type { AgentModeInfo } from '#src/core/store-keys.js';
 
-import { SK } from '#src/core/store-keys.js';
+import { SK, agentCancelledKey, agentAbortKey } from '#src/core/store-keys.js';
 import type { ModelEntry } from '#src/core/llm.js';
 import { logManager } from '#src/core/logger.js';
 import { formatToolCall, getToolArgsPreview } from '#src/core/tool-display.js';
@@ -79,16 +79,18 @@ function createPlugin(): DisplayPlugin {
   // Permission confirm state — 支持 allow_once / always_allow / deny
   let pendingPermission: PermissionPrompt | null = null;
   let permissionResolve: ((value: boolean | 'always_allow') => void) | null = null;
+  let pendingQuestions: { questions: any[]; resolve: (answers: Record<string, string>) => void } | null = null;
   let registry: PluginRegistry | null = null;
   // Plugin manager overlay state
   let pluginManagerResolve: (() => void) | null = null;
   // Background task display state
   let backgroundTasks: BackgroundTaskInfo[] = [];
+  let unsubMode: (() => void) | null = null;
 
   function cancelExecution(): void {
     if (registry) {
-      registry.store.set(SK.AgentCancelled, true);
-      const abortCtrl = registry.store.get<AbortController>(SK.AgentAbort);
+      registry.store.set(agentCancelledKey(agentName), true);
+      const abortCtrl = registry.store.get<AbortController>(agentAbortKey(agentName));
       if (abortCtrl && !abortCtrl.signal.aborted) abortCtrl.abort();
     }
   }
@@ -127,6 +129,20 @@ function createPlugin(): DisplayPlugin {
       return true;
     }
     return false;
+  }
+
+  function handleModeToggle(): void {
+    if (!registry) return;
+    const currentMode = registry.store.get<string>(SK.Mode) || 'normal';
+    if (currentMode === 'plan') {
+      const preMode = registry.store.get<string>(SK.PrePlanMode) || 'normal';
+      registry.store.set(SK.Mode, preMode);
+      registry.store.set(SK.PrePlanMode, undefined);
+    } else {
+      registry.store.set(SK.PrePlanMode, currentMode);
+      registry.store.set(SK.Mode, 'plan');
+    }
+    render();
   }
 
   function render(): void {
@@ -203,6 +219,16 @@ function createPlugin(): DisplayPlugin {
               render();
             }
           },
+          pendingQuestions,
+          onQuestionsResponse: (answers: Record<string, string>) => {
+            if (pendingQuestions) {
+              const r = pendingQuestions.resolve;
+              pendingQuestions = null;
+              r(answers);
+              render();
+            }
+          },
+          onModeToggle: handleModeToggle,
         }),
       );
     } catch (err) {
@@ -232,6 +258,16 @@ function createPlugin(): DisplayPlugin {
       });
       // Ink owns the terminal — suppress direct stderr writes
       logManager.unregister('stderr');
+      // Register AskUserQuestion handler via shared store
+      registry.store.set('askQuestions', async (questions: Array<{ question: string; header: string; options: Array<{ label: string; description: string; preview?: string }>; multiSelect?: boolean }>) => {
+        return new Promise<Record<string, string>>((resolve) => {
+          pendingQuestions = { questions, resolve };
+          render();
+        });
+      });
+
+      // 订阅 mode 变化，确保 Ink 显示及时更新
+      unsubMode = registry.store.subscribe(SK.Mode, () => render());
     },
 
     onStart(config: StartConfig): void {
@@ -241,6 +277,8 @@ function createPlugin(): DisplayPlugin {
     },
 
     onStop(message: string): void {
+      unsubMode?.();
+      unsubMode = null;
       if (inkInstance) {
         try { inkInstance.unmount(); } catch {}
         inkInstance = null;
@@ -264,6 +302,7 @@ function createPlugin(): DisplayPlugin {
           greetingShown = true;
         }
         const initSuggestions = _suggestionProvider?.() ?? [];
+        const initMode = (registry?.store?.get<string>(SK.Mode) ?? 'normal') as 'normal' | 'plan';
         const initPromise = inkRender(
           React.createElement(InkApp, {
             greeting,
@@ -271,6 +310,7 @@ function createPlugin(): DisplayPlugin {
             inputBuffer: '',
             suggestions: initSuggestions,
             activeAgentName: registry?.store?.get<AgentModeInfo>(SK.AgentMode)?.name,
+            mode: initMode,
             backgroundTasks,
             viewAgent: undefined,
             viewAgents: [{ name: 'main', label: '主对话' }],
@@ -302,6 +342,7 @@ function createPlugin(): DisplayPlugin {
                 cancelExecution();
               }
             },
+            onModeToggle: handleModeToggle,
           }),
           { stdout: process.stdout, stdin: process.stdin, stderr: process.stderr, exitOnCtrlC: false, patchConsole: false },
         );

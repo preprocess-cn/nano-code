@@ -1,5 +1,39 @@
 export type ToolStatus = 'success' | 'rejected_by_user' | 'error';
 
+// ── 展示层事件类型（AgentDisplay/DisplayPlugin 共享） ──
+
+export type MessageLevel = 'status' | 'info' | 'warn' | 'error' | 'success';
+
+export interface AgentEvent {
+  agentName: string;
+}
+
+export interface StatusEvent extends AgentEvent {
+  message: string;
+  level: MessageLevel;
+}
+
+export interface StreamEvent extends AgentEvent {
+  text: string;
+}
+
+export interface ToolCallEvent extends AgentEvent {
+  id?: string;
+  toolName: string;
+  args: any;
+}
+
+export interface ToolResultEvent extends AgentEvent {
+  id?: string;
+  status: ToolStatus;
+  message?: string;
+}
+
+export interface StateSnapshot {
+  agentName: string;
+  messageCount: number;
+}
+
 /**
  * 工具注入到主循环的额外消息。
  * 用于 inline skill 展开：skill 的内容以 user 消息形式注入消息历史，
@@ -33,9 +67,24 @@ export interface ToolDefinition {
     parameters: Record<string, any>;
     /** Whether this tool changes external state. false = read-only, auto-execute without user confirmation. */
     sideEffect?: boolean;
+    /** Tool-level timeout override in ms. undefined uses global defaultTimeout. Infinity = never timeout. */
+    timeout?: number;
     /** User-friendly display name (e.g., "Bash" for "run_bash_command"). When set, display plugins show this instead of the raw tool name. */
     displayName?: string;
   };
+}
+
+/** 拼合后的完整 tool call（用于消息历史 / 插件 hook 链） */
+export interface ToolCall {
+  id: string;
+  type: 'function';
+  function: { name: string; arguments: string };
+}
+
+export interface LLMResponse {
+  text: string | null;
+  toolCalls?: ToolCall[];
+  stopReason?: string;
 }
 
 export interface DiffLine {
@@ -106,6 +155,25 @@ export function isMainAgent(agentName: string): boolean {
   return agentName === 'main';
 }
 
+// ── AgentManager 合约类型 ──
+
+export interface AgentInfo {
+  name: string;
+  status: 'idle' | 'running';
+  messageCount: number;
+  role?: string;
+  createdAt: string;
+}
+
+export interface CreateAgentOptions {
+  name: string;
+  registry: import('#src/core/plugin.js').PluginRegistry;
+  agentRole?: string;
+  promptConfig?: import('#src/core/config.js').SystemPromptConfig;
+  display?: AgentDisplay;
+  abortController?: AbortController;
+}
+
 /**
  * Agent 对展示层的窄接口。
  * NanoCodeAgent 只依赖这个子集接口，不依赖完整的 DisplayPlugin。
@@ -131,7 +199,7 @@ export interface SessionRestoreContext {
 
 /**
  * onAgentExit hook 上下文。
- * Agent 退出时触发（runTask 结束），插件可在此清理该 agent 衍生的资源（如 monitor 进程）。
+ * Agent 退出时触发（runTask 结束），插件可在此清理该 agent 衍生的资源（如后台进程）。
  */
 export interface AgentExitContext {
   /** 退出的 agent 名称 */
@@ -139,12 +207,12 @@ export interface AgentExitContext {
 }
 
 export interface AgentDisplay {
-  onStatus?(event: { message: string; agentName: string; level: string }): void;
-  onStreamChunk?(event: { text: string; agentName: string }): void;
-  onToolCall?(event: { id?: string; toolName: string; args: any; agentName: string }): void;
-  onToolResult?(event: { id?: string; status: ToolStatus; message?: string; agentName: string }): void;
-  onStateSnapshot?(snapshot: { agentName: string; messageCount: number }): void;
-  onAgentTurnStart?(event: { agentName: string }): void;
-  onAgentTurnEnd?(event: { agentName: string }): void;
+  onStatus?(event: StatusEvent): void;
+  onStreamChunk?(event: StreamEvent): void;
+  onToolCall?(event: ToolCallEvent): void;
+  onToolResult?(event: ToolResultEvent): void;
+  onStateSnapshot?(snapshot: StateSnapshot): void;
+  onAgentTurnStart?(event: AgentEvent): void;
+  onAgentTurnEnd?(event: AgentEvent): void;
 }
 

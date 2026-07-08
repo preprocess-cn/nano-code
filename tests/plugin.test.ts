@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import * as assert from 'node:assert/strict';
-import { PluginRegistry, NanoPlugin, ToolCall, LLMResponse } from '../src/core/plugin.js';
-import { ToolResponse, ToolDefinition, CommandOutputHandler } from '../src/core/contract.js';
+import { PluginRegistry, NanoPlugin } from '../src/core/plugin.js';
+import { ToolResponse, ToolDefinition, ToolCall, LLMResponse, CommandOutputHandler } from '../src/core/contract.js';
 import { ChatMessage } from '../src/core/llm.js';
 
 // ── Helpers ──
@@ -22,7 +22,7 @@ function createMockPlugin(name: string, tools: string[] = []): NanoPlugin {
 }
 
 function createToolCall(name = 'test_tool', args = '{}'): ToolCall {
-  return { id: 'call_1', function: { name, arguments: args } };
+  return { id: 'call_1', type: 'function', function: { name, arguments: args } };
 }
 
 // ── register / unregister ──

@@ -5,7 +5,8 @@ import { LLMClient } from '#src/core/llm.js';
 import { loadSession, saveSession } from '#src/core/session.js';
 import { handlePluginCommand, printPluginList } from '#src/plugin-cli.js';
 import { DisplayManager, resolveDisplayPlugin } from '#src/display.js';
-import { SK } from '#src/core/store-keys.js';
+import { AgentManager } from '#src/core/agent-manager.js';
+import { SK, agentCancelledKey, agentAbortKey } from '#src/core/store-keys.js';
 import type { ModelEntry } from '#src/core/llm.js';
 import { cac } from 'cac';
 import { getPackageVersion } from '#src/core/version.js';
@@ -59,6 +60,7 @@ async function initializePlugins(
   displayMgr: DisplayManager,
   skipPermission: boolean,
   debug = false,
+  agentManager?: AgentManager,
 ): Promise<void> {
   registry.setAgentName('main');
   registry.setDefaultContext({
@@ -71,7 +73,7 @@ async function initializePlugins(
   registry.setPluginConfig('token-budget', { ...(tbSettings ?? {}), llmClient, displayMgr });
   registry.setPluginConfig('mcp-loader', { config, debug });
 
-  // 2. Register system plugins (fs, command, memory, token-budget, file-search, monitor, mcp-loader)
+  // 2. Register system plugins (fs, command, memory, token-budget, file-search, mcp-loader)
   const systemWhitelist = getSystemWhitelist(config);
   for (const name of systemWhitelist) {
     if (config.plugins[name]) continue;
@@ -98,11 +100,15 @@ async function initializePlugins(
   // 4. Register feature plugins with runtime deps
   for (const name of DEFAULT_FEATURE_PLUGINS) {
     if (config.plugins[name]?.enabled === false) continue;
+    if (name === 'npm-loader') {
+      // npmEntries 直接作为配置传给 npm-loader，避免嵌套在 { entries: ... } 中
+      await registerBuiltinPlugin(registry, name, npmEntries as Record<string, any>);
+      continue;
+    }
     const s: Record<string, any> = {};
-    if (['skills', 'coordinator', 'skills-slash'].includes(name)) s.llmClient = llmClient;
+    if (['skills', 'coordinator', 'skills-slash'].includes(name)) { s.llmClient = llmClient; s.agentManager = agentManager; }
     if (['skills', 'coordinator', 'commands', 'skills-slash', 'bang'].includes(name)) s.displayMgr = displayMgr;
     if (name === 'skills') { s.disabled = config.skills?.disabled ?? []; s.disableSkillTool = config.skills?.disableSkillTool ?? false; }
-    if (name === 'npm-loader') s.entries = npmEntries;
     await registerBuiltinPlugin(registry, name, s);
   }
 
@@ -159,8 +165,8 @@ async function runMainLoop(
   let isPrompting = false;
   const cancelHandler = () => {
     if (!isPrompting) {
-      registry.store.set(SK.AgentCancelled, true);
-      const abortCtrl = registry.store.get<AbortController>(SK.AgentAbort);
+      registry.store.set(agentCancelledKey('main'), true);
+      const abortCtrl = registry.store.get<AbortController>(agentAbortKey('main'));
       if (abortCtrl && !abortCtrl.signal.aborted) abortCtrl.abort();
     }
     // At prompt: SIGINT is ignored — clack's text() or Ink's useInput handles \x03 directly
@@ -194,7 +200,7 @@ async function runMainLoop(
       await agent.runTask(effectiveInput);
     } catch (error: any) {
       if (error?.name === 'AbortError' || error?.message === 'CANCELLED') {
-        registry.store.set(SK.AgentCancelled, undefined);
+        registry.store.set(agentCancelledKey('main'), undefined);
         continue;
       }
       displayMgr.onError({
@@ -203,7 +209,7 @@ async function runMainLoop(
         stack: error instanceof Error ? error.stack : undefined,
       });
     } finally {
-      registry.store.set(SK.AgentCancelled, undefined);
+      registry.store.set(agentCancelledKey('main'), undefined);
       saveSession(process.cwd(), agent.getHistory());
     }
   }
@@ -243,8 +249,11 @@ async function startCLI(options: { debug?: boolean; think?: boolean; skipPermiss
     process.exit(1);
   }
 
+  // ── AgentManager（持有共享 store，管理所有 agent） ──
+  const manager = new AgentManager({ llmClient, store: registry.store });
+
   // ── Plugin initialization ──
-  await initializePlugins(config, registry, llmClient, displayMgr, options.skipPermission ?? false, options.debug);
+  await initializePlugins(config, registry, llmClient, displayMgr, options.skipPermission ?? false, options.debug, manager);
 
   // --model CLI 覆盖：在插件初始化后生效，优先级高于 model-registry 默认（models[0]）
   if (options.model) {
@@ -305,7 +314,7 @@ async function startCLI(options: { debug?: boolean; think?: boolean; skipPermiss
   else if (options.think) displayMgr.onStatus({ message: MSG_THINK_MODE, agentName: 'main', level: 'info' });
   if (options.skipPermission) displayMgr.onStatus({ message: MSG_SKIP_PERMISSION, agentName: 'main', level: 'info' });
 
-  const agent = new NanoCodeAgent({ registry, llmClient, agentRole: config.agent?.role, promptConfig: config.systemPrompt, name: 'main', display: displayMgr.asAgentDisplay() });
+  const agent = manager.createAgent({ registry, agentRole: config.agent?.role, promptConfig: config.systemPrompt, name: 'main', display: displayMgr.asAgentDisplay() });
   await registry.execAgentReady({ agent, display: displayMgr });
 
   // ── Session restore ──

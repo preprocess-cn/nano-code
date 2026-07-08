@@ -1,10 +1,10 @@
-import { LLMClient, ChatMessage, AssembledToolCall } from '#src/core/llm.js';
-import { PluginRegistry, ToolCall } from '#src/core/plugin.js';
+import { LLMClient, ChatMessage } from '#src/core/llm.js';
+import { PluginRegistry } from '#src/core/plugin.js';
 import { SystemPromptConfig } from '#src/core/config.js';
-import { buildSystemPrompt, formatToolResponse } from '#src/core/prompt.js';
-import { ToolResponse, ToolContext, InjectedMessage, isMainAgent, AgentDisplay } from '#src/core/contract.js';
+import { buildSystemPrompt, formatToolResponse, getPlanModeInstructions } from '#src/core/prompt.js';
+import { ToolResponse, ToolContext, ToolCall, InjectedMessage, isMainAgent, AgentDisplay } from '#src/core/contract.js';
 import { getToolDisplayName } from '#src/core/tool-display.js';
-import { SK } from '#src/core/store-keys.js';
+import { SK, agentStatusKey, agentAbortKey, agentMessagesKey, agentCancelledKey, compactResultKey } from '#src/core/store-keys.js';
 
 export interface NanoCodeAgentOptions {
   registry: PluginRegistry;
@@ -86,10 +86,10 @@ export class NanoCodeAgent {
     this.display?.onAgentTurnStart?.({ agentName: this.name });
 
     // 检查插件是否已执行自动压缩（如 token-budget），加载结果
-    const compacted = this.registry.store.get<ChatMessage[]>(SK.CompactResult);
+    const compacted = this.registry.store.get<ChatMessage[]>(compactResultKey(this.name));
     if (compacted) {
       this.loadHistory(compacted);
-      this.registry.store.set(SK.CompactResult, undefined);
+      this.registry.store.set(compactResultKey(this.name), undefined);
     }
 
     this.messageHistory.push({
@@ -97,19 +97,29 @@ export class NanoCodeAgent {
       content: userPrompt,
     });
 
-    this.registry.store.set(SK.AgentStatus, { agentName: this.name, status: 'running', messageCount: this.messageHistory.length });
+    this.registry.store.set(agentStatusKey(this.name), { agentName: this.name, status: 'running', messageCount: this.messageHistory.length });
 
     try {
       while (true) {
-        if (this.registry.store.get(SK.AgentCancelled)) {
+        if (this.registry.store.get(agentCancelledKey(this.name))) {
           this.endTurn();
-          this.registry.store.set(SK.AgentCancelled, undefined);
+          this.registry.store.set(agentCancelledKey(this.name), undefined);
           break;
         }
       this.display?.onStatus?.({ message: 'thinking', agentName: this.name, level: 'status' });
 
       const systemMessage = buildSystemPrompt(this.registry, this.promptConfig, this.agentRole);
       let messagesWithSystem: ChatMessage[] = [systemMessage, ...this.messageHistory];
+
+      // Plan mode: inject instructions as <system-reminder> attachment (keeps system prompt cached)
+      const mode = this.registry.store.get<string>(SK.Mode);
+      if (mode === 'plan') {
+        messagesWithSystem.splice(1, 0, {
+          role: 'user',
+          content: `<system-reminder>\n${getPlanModeInstructions()}\n</system-reminder>`,
+        });
+      }
+
       messagesWithSystem = this.registry.execBeforeRequest(messagesWithSystem);
 
       const isSubAgent = !isMainAgent(this.name);
@@ -126,8 +136,8 @@ export class NanoCodeAgent {
 
       // Set up cancellation: AbortController for LLM stream, flag for checkpoints
       const abortController = this.abortController ?? new AbortController();
-      this.registry.store.set(SK.AgentAbort, abortController);
-      const isCancelled = () => this.registry.store.get(SK.AgentCancelled) === true || abortController.signal.aborted;
+      this.registry.store.set(agentAbortKey(this.name), abortController);
+      const isCancelled = () => this.registry.store.get(agentCancelledKey(this.name)) === true || abortController.signal.aborted;
 
       let response;
       try {
@@ -141,14 +151,14 @@ export class NanoCodeAgent {
         );
       } catch (err: any) {
         if (err?.name === 'AbortError' || err?.message === 'CANCELLED' || isCancelled()) {
-          this.registry.store.set(SK.AgentAbort, undefined);
+          this.registry.store.set(agentAbortKey(this.name), undefined);
           this.endTurn();
           break;
         }
         throw err;
       }
 
-      this.registry.store.set(SK.AgentAbort, undefined);
+      this.registry.store.set(agentAbortKey(this.name), undefined);
 
       if (isCancelled()) {
         this.endTurn();
@@ -203,20 +213,20 @@ export class NanoCodeAgent {
       }
 
       // 更新存储中的消息快照，供 token-budget 等插件在下轮循环中做准确的大小判断
-      this.registry.store.set(SK.AgentMessages, this.getHistory());
+      this.registry.store.set(agentMessagesKey(this.name), this.getHistory());
 
       this.display?.onStateSnapshot?.({ agentName: this.name, messageCount: this.messageHistory.length });
-      this.registry.store.set(SK.AgentStatus, { agentName: this.name, status: "running", messageCount: this.messageHistory.length });
+      this.registry.store.set(agentStatusKey(this.name), { agentName: this.name, status: "running", messageCount: this.messageHistory.length });
     }
     } finally {
-      // 子 agent 退出时通知插件清理资源（如 monitor 进程），主 agent 不在此处触发（跨轮存活）
+      // 子 agent 退出时通知插件清理资源，主 agent 不在此处触发（跨轮存活）
       if (!isMainAgent(this.name)) {
         await this.registry.execOnAgentExit(this.name);
       }
     }
 
-    this.registry.store.set(SK.AgentStatus, { agentName: this.name, status: 'idle', messageCount: this.messageHistory.length });
-    this.registry.store.set(SK.AgentMessages, this.getHistory());
+    this.registry.store.set(agentStatusKey(this.name), { agentName: this.name, status: 'idle', messageCount: this.messageHistory.length });
+    this.registry.store.set(agentMessagesKey(this.name), this.getHistory());
 
     const lastMsg = this.messageHistory[this.messageHistory.length - 1];
     if (lastMsg?.role === 'assistant') {
@@ -225,25 +235,20 @@ export class NanoCodeAgent {
     return undefined;
   }
 
-  private async executeToolCall(rawToolCall: AssembledToolCall): Promise<{ status: 'rejected' | 'ok'; toolMessages: ChatMessage[] }> {
-    const toolName = rawToolCall.function.name;
+  private async executeToolCall(toolCall: ToolCall): Promise<{ status: 'rejected' | 'ok'; toolMessages: ChatMessage[] }> {
+    const toolName = toolCall.function.name;
     const toolMessages: ChatMessage[] = [];
 
     let toolArgs: any;
     try {
-      toolArgs = JSON.parse(rawToolCall.function.arguments);
+      toolArgs = JSON.parse(toolCall.function.arguments);
     } catch {
       toolMessages.push({
-        role: 'tool', tool_call_id: rawToolCall.id, name: toolName,
-        content: JSON.stringify({ status: 'error', message: `工具调用 "${toolName}" 的参数不是合法的 JSON 格式：${rawToolCall.function.arguments}。请修正参数格式后重试。` }),
+        role: 'tool', tool_call_id: toolCall.id, name: toolName,
+        content: JSON.stringify({ status: 'error', message: `工具调用 "${toolName}" 的参数不是合法的 JSON 格式：${toolCall.function.arguments}。请修正参数格式后重试。` }),
       });
       return { status: 'ok', toolMessages };
     }
-
-    const toolCall: ToolCall = {
-      id: rawToolCall.id,
-      function: { name: toolName, arguments: rawToolCall.function.arguments },
-    };
 
     const allowedCall = this.registry.execBeforeToolCall(toolCall);
     if (allowedCall === null) {
@@ -258,7 +263,7 @@ export class NanoCodeAgent {
     // ── 先展示工具调用信息，再检查权限 ──
     // 顺序：onToolCall → permission gate → execute
     // 用户拒绝时也会显示被拒绝的工具调用及结果
-    this.display?.onToolCall?.({ id: rawToolCall.id, toolName, args: toolArgs, agentName: this.name });
+    this.display?.onToolCall?.({ id: toolCall.id, toolName, args: toolArgs, agentName: this.name });
 
     // ── Permission gate ──
     // sideEffect=true 且不在 allowlist 中的工具需要用户确认
@@ -284,9 +289,9 @@ export class NanoCodeAgent {
           } else if (response) {
             agentConfirmed = true;
           } else {
-            this.display?.onToolResult?.({ id: rawToolCall.id, status: 'rejected_by_user', message: '用户拒绝', agentName: this.name });
+            this.display?.onToolResult?.({ id: toolCall.id, status: 'rejected_by_user', message: '用户拒绝', agentName: this.name });
             toolMessages.push({
-              role: 'tool', tool_call_id: rawToolCall.id, name: toolName,
+              role: 'tool', tool_call_id: toolCall.id, name: toolName,
               content: JSON.stringify({ status: 'rejected_by_user', message: '用户拒绝工具调用' }),
             });
             return { status: 'rejected', toolMessages };
@@ -315,10 +320,10 @@ export class NanoCodeAgent {
       }
     }
 
-    this.display?.onToolResult?.({ id: rawToolCall.id, status: toolResult.status, message: toolResult.message, agentName: this.name });
+    this.display?.onToolResult?.({ id: toolCall.id, status: toolResult.status, message: toolResult.message, agentName: this.name });
 
     toolMessages.push({
-      role: 'tool', tool_call_id: rawToolCall.id, name: toolName,
+      role: 'tool', tool_call_id: toolCall.id, name: toolName,
       content: formatToolResponse(toolResult),
     });
 

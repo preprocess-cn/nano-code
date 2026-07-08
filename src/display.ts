@@ -1,6 +1,6 @@
 import { PluginRegistry } from '#src/core/plugin.js';
 import type { NanoConfig } from '#src/core/config.js';
-import type { ToolStatus, AgentDisplay } from '#src/core/contract.js';
+import type { ToolStatus, AgentDisplay, AgentEvent, MessageLevel, StatusEvent, StreamEvent, ToolCallEvent, ToolResultEvent, StateSnapshot } from '#src/core/contract.js';
 import type { ContextAnalysis } from '#src/plugins/token-budget/analyzer.js';
 import { logManager } from '#src/core/logger.js';
 import { replDisplay } from '#src/plugins/display/repl.js';
@@ -25,33 +25,6 @@ export interface StartConfig {
   stdin?: NodeJS.ReadStream;
 }
 
-export interface AgentEvent {
-  agentName: string;
-}
-
-export type MessageLevel = 'status' | 'info' | 'warn' | 'error' | 'success';
-
-export interface StatusEvent extends AgentEvent {
-  message: string;
-  level: MessageLevel;
-}
-
-export interface StreamEvent extends AgentEvent {
-  text: string;
-}
-
-export interface ToolCallEvent extends AgentEvent {
-  id?: string;
-  toolName: string;
-  args: any;
-}
-
-export interface ToolResultEvent extends AgentEvent {
-  id?: string;
-  status: ToolStatus;
-  message?: string;
-}
-
 export interface ErrorEvent extends AgentEvent {
   message: string;
   stack?: string;
@@ -67,16 +40,8 @@ export interface BackgroundTaskEvent extends AgentEvent {
   message: string;
 }
 
-// ════════════════════════════════════════════
-// StateSnapshot — agent 循环结束时的状态快照
-// ════════════════════════════════════════════
-
-export interface StateSnapshot {
-  /** 当前 agent 名称 */
-  agentName: string;
-  /** 消息总数（含 system） */
-  messageCount: number;
-}
+// ── 共享事件类型（定义在 contract.ts） ──
+export type { AgentEvent, MessageLevel, StatusEvent, StreamEvent, ToolCallEvent, ToolResultEvent, StateSnapshot };
 
 // ════════════════════════════════════════════
 // DisplayPlugin — 展示层插件接口
@@ -138,7 +103,7 @@ export interface DisplayPlugin {
 
   /**
    * 可选的状态栏内容更新。
-   * 传入各段落的键值映射（如 { monitor: "2 monitors", tokens: "85K/128K" }）。
+   * 传入各段落的键值映射（如 { tasks: "3 active", tokens: "85K/128K" }）。
    * 外部插件通过 DisplayManager.setStatusBar(key, value) 设置各自段落，
    * DisplayManager 合并后传入此方法。display 实现可选择展示方式。
    */
@@ -280,7 +245,7 @@ export class DisplayManager {
   private _statusBarSegments: Map<string, string> = new Map();
 
   /**
-   * 设置状态栏段落。key 为段落标识（如 "monitor"），value 为展示文本，空串/null 表示移除。
+   * 设置状态栏段落。key 为段落标识（如 "tasks"），value 为展示文本，空串/null 表示移除。
    * 每次调用合并到内部状态后，将完整段落映射广播给所有 display 插件。
    */
   setStatusBar(key: string, value: string | null): void {

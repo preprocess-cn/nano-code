@@ -2,13 +2,14 @@ import { NanoPlugin, PluginRegistry } from '#src/core/plugin.js';
 import { CommandInterceptResult } from '#src/core/contract.js';
 import { LLMClient } from '#src/core/llm.js';
 import { NanoCodeAgent } from '#src/core/agent.js';
+import { AgentManager } from '#src/core/agent-manager.js';
 import { DisplayManager } from '#src/display.js';
 import { findSkill, substituteArgs } from '#src/plugins/skills/loader.js';
 import { findBundledSkill } from '#src/plugins/skills/bundled/index.js';
 
 let _registry: PluginRegistry | undefined;
 
-export function createSkillsSlashPlugin(llmClient?: LLMClient, display?: DisplayManager): NanoPlugin {
+export function createSkillsSlashPlugin(llmClient?: LLMClient, display?: DisplayManager, agentManager?: AgentManager): NanoPlugin {
   return {
     name: 'skills-slash',
     description: '斜杠技能调用 — /<技能名> [参数]',
@@ -32,7 +33,7 @@ export function createSkillsSlashPlugin(llmClient?: LLMClient, display?: Display
       // Try file-based skill first
       const fsSkill = findSkill(skillName);
       if (fsSkill) {
-        return handleFsSkill(fsSkill, skillName, argsStr, llmClient, display);
+        return handleFsSkill(fsSkill, skillName, argsStr, llmClient, display, agentManager);
       }
 
       // Fallback to bundled skill — 优先 execute（绕过 LLM），fallback getPrompt
@@ -64,6 +65,7 @@ async function handleFsSkill(
   argsStr: string,
   llmClient?: LLMClient,
   display?: DisplayManager,
+  agentManager?: AgentManager,
 ): Promise<CommandInterceptResult | null> {
   if (skill.context === 'fork') {
     if (!llmClient) {
@@ -80,7 +82,7 @@ async function handleFsSkill(
     const baseDirNote = `技能目录: ${skill.dir}\n\n`;
     const fullPrompt = baseDirNote + content;
 
-    const subRegistry = new PluginRegistry();
+    const subRegistry = new PluginRegistry({ store: agentManager?.getStore() });
     subRegistry.setAgentName(skill.name);
     subRegistry.setDefaultContext({ skipPermission: true, defaultTimeout: 120000 });
 
@@ -91,7 +93,9 @@ async function handleFsSkill(
     await registerBuiltinPlugin(subRegistry, 'token-budget');
     await registerBuiltinPlugin(subRegistry, 'file-search');
 
-    const subAgent = new NanoCodeAgent({ registry: subRegistry, llmClient, agentRole: `技能: ${skill.name}`, name: skill.name, display });
+    const subAgent = agentManager
+      ? agentManager.createAgent({ registry: subRegistry, agentRole: `技能: ${skill.name}`, name: skill.name, display })
+      : new NanoCodeAgent({ registry: subRegistry, llmClient, agentRole: `技能: ${skill.name}`, name: skill.name, display });
 
     try {
       const result = await subAgent.runTask(fullPrompt);
@@ -104,6 +108,8 @@ async function handleFsSkill(
     } catch (err: any) {
       display?.onError({ message: `技能执行失败: ${err.message}`, agentName: 'main' });
       return { handled: true, skipAgent: true };
+    } finally {
+      if (agentManager) agentManager.removeAgent(subAgent.getName());
     }
   }
 

@@ -2,7 +2,7 @@ import OpenAI from 'openai';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
 import * as os from 'os';
-import type { ToolDefinition } from '#src/core/contract.js';
+import type { ToolDefinition, ToolCall } from '#src/core/contract.js';
 import type { IStore } from '#src/core/store.js';
 import { SK } from '#src/core/store-keys.js';
 import { withRetry } from '#src/core/retry.js';
@@ -64,17 +64,10 @@ export interface ToolCallDelta {
   function: { name?: string; arguments?: string };
 }
 
-/** 拼合后的完整 tool call（用于消息历史） */
-export interface AssembledToolCall {
-  id: string;
-  type: 'function';
-  function: { name: string; arguments: string };
-}
-
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'system' | 'tool';
   content: string | null;
-  tool_calls?: AssembledToolCall[];
+  tool_calls?: ToolCall[];
   tool_call_id?: string;
   name?: string;
   /** 标记为合成消息（如系统自动注入），下期供 display 过滤 */
@@ -185,7 +178,7 @@ export class LLMClient {
         }, { signal });
 
         let fullText = '';
-        const finalToolCalls: AssembledToolCall[] = [];
+        const finalToolCalls: ToolCall[] = [];
         let finalMeta: Record<string, unknown> | undefined;
 
         for await (const chunk of stream) {

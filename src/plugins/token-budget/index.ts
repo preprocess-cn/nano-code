@@ -1,11 +1,11 @@
-import { NanoPlugin, PluginRegistry, ToolCall, LLMResponse } from '#src/core/plugin.js';
-import { ToolResponse, ToolContext, ToolDefinition, type SessionRestoreContext } from '#src/core/contract.js';
+import { NanoPlugin, PluginRegistry } from '#src/core/plugin.js';
+import { ToolResponse, ToolContext, ToolDefinition, ToolCall, LLMResponse, type SessionRestoreContext } from '#src/core/contract.js';
 import { ChatMessage } from '#src/core/llm.js';
 import { countMessagesTokens } from '#src/plugins/token-budget/counter.js';
 import { initTokenizer } from '#src/plugins/token-budget/counter.js';
 import type { LLMClient } from '#src/core/llm.js';
 import type { DisplayManager } from '#src/display.js';
-import { SK } from '#src/core/store-keys.js';
+import { SK, agentMessagesKey, compactResultKey, compactCompletedKey, compactRetryKey } from '#src/core/store-keys.js';
 import { logManager } from '#src/core/logger.js';
 
 // ── Plugin ──
@@ -43,25 +43,27 @@ export function createTokenBudgetPlugin(config?: TokenBudgetConfig): NanoPlugin 
   let warned = false;
   let compressed = false;
   let _registryRef: PluginRegistry | null = null;
+  const _agentName = (): string => _registryRef?.getAgentName() ?? 'main';
 
   // ── Auto-compact helper (fire-and-forget, runs outside the request lifecycle) ──
   const runCompact = async (llm: LLMClient, display: DisplayManager, reg: PluginRegistry | null) => {
     if (!reg) return;
-    const messages = reg.store.get<ChatMessage[]>(SK.AgentMessages);
+    const name = reg.getAgentName();
+    const messages = reg.store.get<ChatMessage[]>(agentMessagesKey(name));
     if (!messages || messages.length === 0) return;
     try {
       const { CompactService } = await import('#src/plugins/compact/service.js');
       const service = new CompactService(llm, reg, display);
       const result = await service.compactRaw(messages, { preserveCount: 2 });
-      reg.store.set(SK.CompactResult, result.messages);
-      reg.store.set(SK.CompactCompleted, true);
+      reg.store.set(compactResultKey(name), result.messages);
+      reg.store.set(compactCompletedKey(name), true);
       display.onStatus({
         message: `自动压缩: ${result.originalMessageCount} → ${result.compactedMessageCount} 条消息, 节省 ~${(result.savedTokens / 1000).toFixed(1)}K tokens`,
-        agentName: 'main',
+        agentName: name,
         level: 'info',
       });
     } catch {
-      reg.store.set(SK.CompactRetry, true);
+      reg.store.set(compactRetryKey(name), true);
     }
   };
 
@@ -112,9 +114,10 @@ export function createTokenBudgetPlugin(config?: TokenBudgetConfig): NanoPlugin 
       }));
 
       // Initialize auto-compact signals
+      const name = _agentName();
       _registry.store.set(SK.CompactSignal, false);
-      _registry.store.set(SK.CompactCompleted, false);
-      _registry.store.set(SK.CompactRetry, false);
+      _registry.store.set(compactCompletedKey(name), false);
+      _registry.store.set(compactRetryKey(name), false);
     },
 
     async onSessionRestore(ctx: SessionRestoreContext): Promise<void> {
@@ -191,17 +194,18 @@ export function createTokenBudgetPlugin(config?: TokenBudgetConfig): NanoPlugin 
         totalTokensAccumulated = inputTokens + outputTokens;
       }
 
+      const name = _agentName();
       // 失败重试信号清理
       if (_registryRef) {
-        _registryRef.store.set(SK.CompactRetry, false);
+        _registryRef.store.set(compactRetryKey(name), false);
       }
 
       // Auto-compact: 基于当前消息历史实际大小触发，而非累计总值。
       // 压缩后消息减小，下次再超阈值才再次触发（slide window 效果）。
       if (cfg.autoCompactEnabled && cfg.llmClient && cfg.displayMgr && _registryRef) {
         // 已有待消费的压缩结果时不再触发（避免并发重入）
-        if (!_registryRef.store.get(SK.CompactResult)) {
-          const messages = _registryRef.store.get<ChatMessage[]>(SK.AgentMessages);
+        if (!_registryRef.store.get(compactResultKey(name))) {
+          const messages = _registryRef.store.get<ChatMessage[]>(agentMessagesKey(name));
           if (messages && messages.length > 0) {
             const currentTokens = countMessagesTokens(messages);
             const threshold = cfg.autoCompactThreshold > 0
