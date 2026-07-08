@@ -1,4 +1,4 @@
-import { ToolDefinition, ToolResponse, ToolContext, CommandInterceptResult, type PermissionConfirmRequest, type PermissionConfirmResponse, type CommandOutputHandler, type AgentReadyContext, type SessionRestoreContext } from '#src/core/contract.js';
+import { ToolDefinition, ToolResponse, ToolContext, CommandInterceptResult, type PermissionConfirmRequest, type PermissionConfirmResponse, type CommandOutputHandler, type AgentReadyContext, type SessionRestoreContext, type AgentExitContext } from '#src/core/contract.js';
 import { logManager } from '#src/core/logger.js';
 import { ChatMessage } from '#src/core/llm.js';
 import { IStore, InMemoryStore } from '#src/core/store.js';
@@ -52,6 +52,9 @@ export interface NanoPlugin {
 
   /** NanoCodeAgent 创建后触发，插件可在此获取 agent/display 引用 */
   onAgentReady?(context: AgentReadyContext): Promise<void>;
+
+  /** Agent 退出时触发（runTask 结束）。插件可在此清理该 agent 衍生的资源（如 monitor 进程）。 */
+  onAgentExit?(context: AgentExitContext): Promise<void>;
 
   /** --continue 恢复会话时触发，插件可恢复状态（如 token 计数） */
   onSessionRestore?(context: SessionRestoreContext): Promise<void>;
@@ -352,6 +355,14 @@ export class PluginRegistry {
     for (const plugin of this.plugins.values()) {
       try { await plugin.onSessionRestore?.(ctx); }
       catch (err) { logManager.error('plugin', `onSessionRestore failed for "${plugin.name}":`, err); }
+    }
+  }
+
+  async execOnAgentExit(agentName: string): Promise<void> {
+    const ctx: AgentExitContext = { agentName };
+    for (const plugin of this.plugins.values()) {
+      try { await plugin.onAgentExit?.(ctx); }
+      catch (err) { logManager.error('plugin', `onAgentExit failed for "${plugin.name}":`, err); }
     }
   }
 

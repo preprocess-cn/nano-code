@@ -92,6 +92,7 @@
 |------|------|------|
 | ✅ | `/diff` / `/status` 命令 | 查看 git diff 和变更状态，支持 `--staged`、`--stat` 等原生 git 参数 |
 | ✅ | Monitor 工具 | 实时监控进程输出/日志文件事件流，覆盖「等 build 完成」「监视错误日志」场景 |
+| ✅ | 插件生命周期钩子增强 | `onAgentExit` 子 agent 退出清理钩子 + `setStatusBar` 状态栏段落机制 + `AgentExitContext` |
 | ☐ | Agent 工具增强 | run_agent 升级为一级工具，支持 structured_output schema、isolation 隔离模式、丰富 prompt 描述 |
 | ➖ | **Cron + Loop（后端）** | 旧 `node-cron` 实现已移除，迁移至 Agent 框架内置的 `CronCreate`/`CronDelete` 工具（由主循环调度，不依赖 `node-cron` 包） |
 | ➖ | **Cron + Loop（Display 适配）** | 旧 cron 已移除，新定时任务由 Agent 框架的 `onStatus({ level: 'info' })` 统一处理 |

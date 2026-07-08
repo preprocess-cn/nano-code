@@ -203,6 +203,7 @@ interface DisplayPlugin {
   onAgentTurnEnd?(event: AgentEvent): void;    // agent 完成一轮处理
   onStateSnapshot?(snapshot: StateSnapshot): void; // 状态快照（含 messageCount）
   onBackgroundTask?(event: BackgroundTaskEvent): void; // 后台任务状态变更
+  setStatusBar?(segments: Record<string, string>): void; // 状态栏段落更新
 }
 ```
 
@@ -698,6 +699,7 @@ interface NanoPlugin {
   onAfterToolCall?(result): ToolResponse;
   onExtraParams?(): Record<string, unknown>;  // 注入 LLM API 请求参数
   onAgentReady?(context: AgentReadyContext): Promise<void>;  // agent 创建后触发
+  onAgentExit?(context: AgentExitContext): Promise<void>;    // agent 退出时触发（清理资源）
   onSessionRestore?(context: SessionRestoreContext): Promise<void>;  // --continue 恢复会话
 }
 ```

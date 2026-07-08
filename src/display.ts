@@ -135,13 +135,21 @@ export interface DisplayPlugin {
    * 返回 true 表示已处理，false 表示不支持。
    */
   showModelPicker?(registry: PluginRegistry): Promise<boolean>;
+
+  /**
+   * 可选的状态栏内容更新。
+   * 传入各段落的键值映射（如 { monitor: "2 monitors", tokens: "85K/128K" }）。
+   * 外部插件通过 DisplayManager.setStatusBar(key, value) 设置各自段落，
+   * DisplayManager 合并后传入此方法。display 实现可选择展示方式。
+   */
+  setStatusBar?(segments: Record<string, string>): void;
 }
 
 // ════════════════════════════════════════════
 // DisplayManager — 多展示层管理器
 // ════════════════════════════════════════════
 
-export class DisplayManager implements DisplayPlugin {
+export class DisplayManager {
   readonly name = 'display-manager';
   private plugins: DisplayPlugin[] = [];
 
@@ -267,6 +275,26 @@ export class DisplayManager implements DisplayPlugin {
       }
     }
     return false;
+  }
+
+  private _statusBarSegments: Map<string, string> = new Map();
+
+  /**
+   * 设置状态栏段落。key 为段落标识（如 "monitor"），value 为展示文本，空串/null 表示移除。
+   * 每次调用合并到内部状态后，将完整段落映射广播给所有 display 插件。
+   */
+  setStatusBar(key: string, value: string | null): void {
+    if (value === null || value === '') {
+      this._statusBarSegments.delete(key);
+    } else {
+      this._statusBarSegments.set(key, value);
+    }
+    const merged: Record<string, string> = {};
+    for (const [k, v] of this._statusBarSegments) merged[k] = v;
+    for (const p of this.plugins) {
+      try { p.setStatusBar?.(merged); }
+      catch (err) { logManager.error('display', `setStatusBar failed for "${p.name}":`, err); }
+    }
   }
 
   /** 返回 AgentDisplay 适配器，供 NanoCodeAgent 使用（代替完整的 DisplayPlugin） */

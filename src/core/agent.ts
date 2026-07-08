@@ -99,12 +99,13 @@ export class NanoCodeAgent {
 
     this.registry.store.set(SK.AgentStatus, { agentName: this.name, status: 'running', messageCount: this.messageHistory.length });
 
-    while (true) {
-      if (this.registry.store.get(SK.AgentCancelled)) {
-        this.endTurn();
-        this.registry.store.set(SK.AgentCancelled, undefined);
-        break;
-      }
+    try {
+      while (true) {
+        if (this.registry.store.get(SK.AgentCancelled)) {
+          this.endTurn();
+          this.registry.store.set(SK.AgentCancelled, undefined);
+          break;
+        }
       this.display?.onStatus?.({ message: 'thinking', agentName: this.name, level: 'status' });
 
       const systemMessage = buildSystemPrompt(this.registry, this.promptConfig, this.agentRole);
@@ -206,6 +207,12 @@ export class NanoCodeAgent {
 
       this.display?.onStateSnapshot?.({ agentName: this.name, messageCount: this.messageHistory.length });
       this.registry.store.set(SK.AgentStatus, { agentName: this.name, status: "running", messageCount: this.messageHistory.length });
+    }
+    } finally {
+      // 子 agent 退出时通知插件清理资源（如 monitor 进程），主 agent 不在此处触发（跨轮存活）
+      if (!isMainAgent(this.name)) {
+        await this.registry.execOnAgentExit(this.name);
+      }
     }
 
     this.registry.store.set(SK.AgentStatus, { agentName: this.name, status: 'idle', messageCount: this.messageHistory.length });

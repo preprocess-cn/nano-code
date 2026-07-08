@@ -129,6 +129,15 @@ export interface SessionRestoreContext {
   store: import('#src/core/store.js').IStore;
 }
 
+/**
+ * onAgentExit hook 上下文。
+ * Agent 退出时触发（runTask 结束），插件可在此清理该 agent 衍生的资源（如 monitor 进程）。
+ */
+export interface AgentExitContext {
+  /** 退出的 agent 名称 */
+  agentName: string;
+}
+
 export interface AgentDisplay {
   onStatus?(event: { message: string; agentName: string; level: string }): void;
   onStreamChunk?(event: { text: string; agentName: string }): void;
