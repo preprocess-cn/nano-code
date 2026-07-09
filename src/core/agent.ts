@@ -111,10 +111,10 @@ export class NanoCodeAgent {
       const systemMessage = buildSystemPrompt(this.registry, this.promptConfig, this.agentRole);
       let messagesWithSystem: ChatMessage[] = [systemMessage, ...this.messageHistory];
 
-      // Plan mode: inject instructions as <system-reminder> attachment (keeps system prompt cached)
+      // Plan mode: 每次在用户消息前注入 <system-reminder>，时刻提醒 LLM
       const mode = this.registry.store.get<string>(SK.Mode);
       if (mode === 'plan') {
-        messagesWithSystem.splice(1, 0, {
+        messagesWithSystem.splice(messagesWithSystem.length - 1, 0, {
           role: 'user',
           content: `<system-reminder>\n${getPlanModeInstructions()}\n</system-reminder>`,
         });

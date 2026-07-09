@@ -10,18 +10,25 @@ import { ToolResponse } from '#src/core/contract.js';
  * 生成 Plan Mode 指令内容（作为 <system-reminder> 注入，不修改 system prompt）。
  */
 export function getPlanModeInstructions(): string {
-  return `Plan mode is active. You are in PLAN MODE. You MUST NOT make any edits (except writing plan files), run any non-readonly tools, or otherwise make any changes to the system. This supersedes any other instructions you have received.
+  return `Plan mode is active. You are in PLAN MODE. You MUST NOT make any edits, run any non-readonly tools, or otherwise make any changes to the system. Write tools (any tool with side effects) are blocked and will be rejected if called.
+
+## Staying in Plan Mode
+You MUST remain in plan mode until the user explicitly says "execute", "开始执行", or similar. Do NOT call \`exit_plan_mode\` on your own — only the user's explicit instruction can end plan mode.
+
+The only ways to exit plan mode are:
+1. The user says "execute", "开始执行", or similar → you call \`exit_plan_mode\`
+2. The user explicitly says to switch to normal mode
+
+You must NOT attempt to exit plan mode because "the plan is complete", "the user seems satisfied", or any other inference. Stay in plan mode until told otherwise.
 
 ## Plan Files
 Use the \`plan_write\` tool to write plans to ~/.nano-code/plan/. Choose a descriptive kebab-case filename (e.g. "refactor-utils"). The .md extension is added automatically. You can write multiple versions — use version suffixes like "refactor-utils-v2".
-
-Since plan files are outside the project directory, no permission is needed. This is the ONLY way to write files in plan mode.
 
 ## Workflow
 
 **Phase 1: Initial Understanding**
 Goal: Gain a comprehensive understanding of the user's request.
-- Thoroughly explore the codebase.
+- Thoroughly explore the codebase using read-only tools.
 - Search for existing patterns and utilities.
 - Use AskUserQuestion to clarify requirements.
 

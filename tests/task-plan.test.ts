@@ -542,3 +542,149 @@ describe('task-plan 插件 — store 缓存同步', () => {
     assert.equal(tasks[0].status, 'completed');
   });
 });
+
+describe('task-plan 插件 — plan mode 钩子', () => {
+  let store: ReturnType<typeof createTestStore>;
+  let registry: any;
+
+  beforeEach(async () => {
+    store = createTestStore();
+    registry = {
+      store,
+      getPluginConfig: () => ({}),
+      getToolSideEffect: (name: string) => {
+        const map: Record<string, boolean> = {
+          write_file_content: true,
+          patch_file: true,
+          run_bash_command: true,
+          list_project_files: false,
+          view_file_content: false,
+          plan_write: false,
+          plan_list: false,
+        };
+        return map[name] ?? true;
+      },
+    };
+    await taskPlanPlugin.onInit!(registry);
+  });
+
+  test('enter_plan_mode 重置提醒计数器', async () => {
+    store.set('task-plan:turnCounter', 42);
+    store.set('task-plan:attachmentIndex', 7);
+
+    await taskPlanPlugin.execute('enter_plan_mode', {}, CTX);
+    assert.equal(store.get('task-plan:turnCounter'), 0);
+    assert.equal(store.get('task-plan:attachmentIndex'), 0);
+  });
+
+  test('exit_plan_mode 设置退出提醒标志', async () => {
+    store.set(SK.Mode, 'plan');
+    store.set(SK.PrePlanMode, 'normal');
+    await taskPlanPlugin.execute('plan_write', { filename: 'my-plan', content: 'plan content' }, CTX);
+    await taskPlanPlugin.execute('exit_plan_mode', {}, CTX);
+
+    assert.equal(store.get('task-plan:needsExitReminder'), true);
+  });
+
+  test('exit_plan_mode 返回退出通知消息', async () => {
+    store.set(SK.Mode, 'plan');
+    store.set(SK.PrePlanMode, 'normal');
+    await taskPlanPlugin.execute('plan_write', { filename: 'my-plan', content: 'content' }, CTX);
+
+    const res = await taskPlanPlugin.execute('exit_plan_mode', {}, CTX);
+    assert(res.message?.includes('exited plan mode'));
+  });
+
+  test('onBeforeRequest 退出后注入退出提醒', async () => {
+    store.set('task-plan:needsExitReminder', true);
+
+    const msgs = [
+      { role: 'system', content: 'system' },
+      { role: 'user', content: 'continue' },
+    ];
+    const result = taskPlanPlugin.onBeforeRequest!(msgs);
+    assert.equal(result.length, 3);
+    assert(result[1].content?.includes('exited plan mode'));
+    assert.equal(store.get('task-plan:needsExitReminder'), false);
+  });
+
+  test('onBeforeRequest 首次保留完整指令', async () => {
+    store.set(SK.Mode, 'plan');
+
+    const msgs = [
+      { role: 'system', content: 'system' },
+      { role: 'user', content: '<system-reminder>\nPlan mode is active...\n</system-reminder>' },
+      { role: 'user', content: 'explore' },
+    ];
+    const result = taskPlanPlugin.onBeforeRequest!(msgs);
+    assert.equal(result.length, 3);
+    assert.equal(store.get('task-plan:turnCounter'), 1);
+  });
+
+  test('onBeforeRequest 第2轮跳过注入', async () => {
+    store.set(SK.Mode, 'plan');
+    store.set('task-plan:turnCounter', 1);
+
+    const msgs = [
+      { role: 'system', content: 'system' },
+      { role: 'user', content: '<system-reminder>\nPlan mode...\n</system-reminder>' },
+      { role: 'user', content: 'turn 2' },
+    ];
+    const result = taskPlanPlugin.onBeforeRequest!(msgs);
+    assert.equal(result.length, 2, '第2轮应移除 reminder');
+    assert.equal(store.get('task-plan:turnCounter'), 2);
+  });
+
+  test('onBeforeRequest 第6轮注入完整版（首次周期性附件）', async () => {
+    store.set(SK.Mode, 'plan');
+    store.set('task-plan:turnCounter', 5);
+    store.set('task-plan:attachmentIndex', 0);
+
+    const msgs = [
+      { role: 'system', content: 'system' },
+      { role: 'user', content: '<system-reminder>\nPlan mode...\n</system-reminder>' },
+      { role: 'user', content: 'turn 6' },
+    ];
+    const result = taskPlanPlugin.onBeforeRequest!(msgs);
+    assert.equal(result.length, 3);
+    // attachIdx=0 → 0%5===0 → 完整版（agent.ts 注入的原样保留）
+    // 完整版 = agent.ts 注入内容保留（不含 "still active"）
+    assert(!result[1].content?.includes('Plan mode still active'));
+    assert.equal(store.get('task-plan:attachmentIndex'), 1);
+  });
+
+  test('onBeforeRequest 第11轮注入精简版', async () => {
+    store.set(SK.Mode, 'plan');
+    store.set('task-plan:turnCounter', 10);
+    store.set('task-plan:attachmentIndex', 1);
+
+    const msgs = [
+      { role: 'system', content: 'system' },
+      { role: 'user', content: '<system-reminder>\nPlan mode...\n</system-reminder>' },
+      { role: 'user', content: 'turn 11' },
+    ];
+    const result = taskPlanPlugin.onBeforeRequest!(msgs);
+    assert.equal(result.length, 3);
+    // attachIdx=1 → 1%5!==0 → 精简版
+    assert(result[1].content?.includes('Plan mode still active'));
+    assert.equal(store.get('task-plan:attachmentIndex'), 2);
+  });
+
+  test('onBeforeToolCall plan mode 拦截 write_file_content', async () => {
+    store.set(SK.Mode, 'plan');
+    const tc = { id: '1', type: 'function' as const, function: { name: 'write_file_content', arguments: '{}' } };
+    assert.equal(taskPlanPlugin.onBeforeToolCall!(tc), null);
+  });
+
+  test('onBeforeToolCall plan mode 放行 plan_write', async () => {
+    store.set(SK.Mode, 'plan');
+    const tc = { id: '2', type: 'function' as const, function: { name: 'plan_write', arguments: '{}' } };
+    assert.notEqual(taskPlanPlugin.onBeforeToolCall!(tc), null);
+  });
+
+  test('onBeforeToolCall normal mode 放行所有工具', async () => {
+    store.set(SK.Mode, 'normal');
+    const tc = { id: '3', type: 'function' as const, function: { name: 'write_file_content', arguments: '{}' } };
+    assert.notEqual(taskPlanPlugin.onBeforeToolCall!(tc), null);
+  });
+});

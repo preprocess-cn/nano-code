@@ -82,7 +82,7 @@
 
 | 状态 | 功能 | 说明 |
 |------|------|------|
-| ✅ | Plan Mode | `enter_plan_mode`/`exit_plan_mode` + `plan_write`/`plan_list` 工具，`~/.nano-code/plan/` 文件持久化，4 阶段工作流（探索→设计→审查迭代→执行），`/plan [list|show|exec|exit]` 命令 |
+| ✅ | Plan Mode | `enter_plan_mode`/`exit_plan_mode` + `plan_write`/`plan_list` 工具，`~/.nano-code/plan/` 文件持久化，4 阶段工作流（探索→设计→审查迭代→执行），写入工具拦截，`<system-reminder>` 两级节流（每 5 轮精简/完整交替），退出通知 |
 | ✅ | 任务/清单系统 | `task_create`/`task_list`/`task_update`/`task_stop` 工具，文件持久化 |
 | ✅ | 会话语义记忆 | 文件化记忆系统：MEMORY.md 索引 + topic 文件，onSystemPrompt 注入行为规则和索引，save_memory/recall_memory 工具，~/.nano-code/AGENT.md 用户全局偏好 |
 | ✅ | 权限系统 | 轻量权限框架：PluginRegistry allowlist、agent permission gate、/permissions 命令、Ink 三选项弹窗 |

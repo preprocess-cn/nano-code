@@ -89,6 +89,7 @@ CLI (cac) → Agent Loop → PluginRegistry → LLM Client (OpenAI API)
 - **ThinkStream**: The REPL display uses `ThinkStream` to strip `<think>...</think>` tags from stream output unless `--think` is on.
 - **MCP transport**: Supports both stdio (child process) and HTTP transports, with exponential backoff retry, timeout per request, and cleanup on destroy.
 - 当要求浏览代码时候，优先使用codebase-memory-mcp工具进行
+- **核心层不动原则**：新功能开发时，如无必要，尽量不要改动核心层（`src/core/`）和接口层（`src/plugin.ts`、`src/contract.ts`）。优先利用现有的插件钩子（`onBeforeRequest`、`onBeforeToolCall`、`onSystemPrompt` 等）在插件层实现。核心层的稳定比任何单一功能都重要。
 
 ## Versioning
 

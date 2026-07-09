@@ -1,5 +1,6 @@
 import { NanoPlugin, PluginRegistry } from '#src/core/plugin.js';
-import { ToolDefinition, ToolResponse, ToolContext } from '#src/core/contract.js';
+import { ToolDefinition, ToolResponse, ToolContext, ToolCall } from '#src/core/contract.js';
+import { ChatMessage } from '#src/core/llm.js';
 import {
   Task, TaskStatus,
 } from '#src/plugins/task-plan/types.js';
@@ -47,6 +48,8 @@ let _store: {
   get<T>(key: string): T | undefined;
   set(key: string, value: any): void;
 } | null = null;
+
+let _registry: PluginRegistry | null = null;
 
 // ── Exported helpers (for slash commands / other plugins) ──
 
@@ -132,6 +135,9 @@ async function handleEnterPlanMode(): Promise<ToolResponse> {
   }
   _store.set(SK.PrePlanMode, currentMode);
   _store.set(SK.Mode, 'plan');
+  // 重置 plan mode 提醒计数器（每5轮注入一次）
+  _store.set('task-plan:turnCounter', 0);
+  _store.set('task-plan:attachmentIndex', 0);
   return {
     status: 'success',
     data: 'Entered plan mode. Use plan_write to write plans. After writing, summarize the plan and wait for the user. Do NOT call exit_plan_mode until the user says "execute" or "开始执行".',
@@ -200,10 +206,13 @@ async function handleExitPlanMode(): Promise<ToolResponse> {
   const preMode = _store.get<string>(SK.PrePlanMode) || 'normal';
   _store.set(SK.Mode, preMode);
   _store.set(SK.PrePlanMode, undefined);
+  // 标记下一轮注入退出提醒（覆盖旧的 plan mode reminder 遗留）
+  _store.set('task-plan:needsExitReminder', true);
 
   return {
     status: 'success',
     data: planContent,
+    message: 'You have exited plan mode and can now make edits, run tools, and take actions.',
   };
 }
 
@@ -559,7 +568,83 @@ export const taskPlanPlugin: NanoPlugin = {
     }
   },
 
+  onBeforeRequest(messages: ChatMessage[]): ChatMessage[] {
+    // 退出 plan mode 后的一次性提醒（即使 mode 已切回 normal 也要注入）
+    if (_store?.get('task-plan:needsExitReminder')) {
+      _store!.set('task-plan:needsExitReminder', false);
+      messages.splice(messages.length - 1, 0, {
+        role: 'user',
+        content: `<system-reminder>\nYou have exited plan mode. You can now make edits, run tools, and take actions.\n</system-reminder>`,
+      });
+      return messages;
+    }
+
+    // Plan mode 提醒节流：agent.ts 每轮都注入完整指令，
+    // 此钩子根据节流策略保留/替换/删除该注入
+    if (!_registry || _store?.get(SK.Mode) !== 'plan') return messages;
+
+    // 反向搜索最后一条 <system-reminder> 用户消息（不依赖固定位置，
+    // 因为 token-budget 等插件的 onBeforeRequest 可能先于本钩子修改数组长度）
+    let injectionIdx = -1;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const m = messages[i];
+      if (m.role === 'user' && typeof m.content === 'string' &&
+          m.content.includes('<system-reminder>')) {
+        injectionIdx = i;
+        break;
+      }
+    }
+    if (injectionIdx === -1) return messages;
+
+    const TURNS_BETWEEN = 5;
+    const FULL_EVERY_N = 5;
+
+    let turnCounter = (_store!.get<number>('task-plan:turnCounter') ?? 0) + 1;
+    _store!.set('task-plan:turnCounter', turnCounter);
+
+    // 首次进入 plan mode：完整指令
+    if (turnCounter === 1) {
+      _store!.set('task-plan:attachmentIndex', 0);
+      return messages;
+    }
+
+    // 每 TURNS_BETWEEN 轮才注入一次，其余跳过
+    if ((turnCounter - 1) % TURNS_BETWEEN !== 0) {
+      messages.splice(injectionIdx, 1);
+      return messages;
+    }
+
+    // 到此：需要注入。判断完整版还是精简版
+    const attachIdx = _store!.get<number>('task-plan:attachmentIndex') ?? 0;
+
+    if (attachIdx % FULL_EVERY_N === 0) {
+      // 每 FULL_EVERY_N 次附件 = 完整版（agent.ts 已注入，保留原样）
+      _store!.set('task-plan:attachmentIndex', attachIdx + 1);
+      return messages;
+    }
+
+    // 精简版：替换内容
+    messages[injectionIdx] = {
+      role: 'user',
+      content: `<system-reminder>\nPlan mode still active (see full instructions earlier in conversation). Read-only except writing plan files via plan_write. End turns with ask_user_question or exit_plan_mode.\n</system-reminder>`,
+    };
+    _store!.set('task-plan:attachmentIndex', attachIdx + 1);
+    return messages;
+  },
+
+  onBeforeToolCall(toolCall: ToolCall): ToolCall | null {
+    // Plan mode: 拦截所有有 sideEffect 的工具调用
+    if (_registry && _store?.get(SK.Mode) === 'plan') {
+      const sideEffect = _registry.getToolSideEffect(toolCall.function.name);
+      if (sideEffect) {
+        return null; // 核心循环会处理 null 并返回错误给 LLM
+      }
+    }
+    return toolCall;
+  },
+
   async onInit(registry) {
+    _registry = registry;
     _store = registry.store;
     // Sync task cache from disk on startup
     const tasks = await readAllTasks();
