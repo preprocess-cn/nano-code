@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import * as assert from 'node:assert/strict';
-import { _mergeConfigs, getPluginConfig, validateConfigObject } from '../src/core/config.js';
+import { _mergeConfigs, getPluginConfig, validateConfigObject } from '../src/bootstrap/config.js';
 
 describe('Config — merge', () => {
 

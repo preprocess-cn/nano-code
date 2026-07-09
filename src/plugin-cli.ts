@@ -3,8 +3,8 @@ import * as path from 'path';
 import * as os from 'os';
 import * as yaml from 'js-yaml';
 import { execSync } from 'child_process';
-import { loadConfig, getSystemWhitelist } from '#src/core/config.js';
-import { loadAgentDefinitions } from '#src/core/agent-loader.js';
+import { loadConfig, getSystemWhitelist } from '#src/bootstrap/config.js';
+import { loadAgentDefinitions } from '#src/plugins/coordinator/agent-loader.js';
 import {
   getProjectMcpJsonPath,
   getGlobalMcpJsonPath,
@@ -13,7 +13,7 @@ import {
   removeMcpServer,
   readMcpJson,
   importFromClaudeConfig,
-} from '#src/core/mcp-config.js';
+} from '#src/bootstrap/mcp-config.js';
 
 const GLOBAL_DIR = path.join(os.homedir(), '.nano-code');
 const PROJECT_CONFIG = path.join(process.cwd(), '.nano-code.yaml');
@@ -123,7 +123,7 @@ async function detectAndInstallFromDir(dir: string, name: string, source: string
 
   // MCP 模式：package.json 有 bin 字段 → 写入项目 .mcp.json
   if (pkg.bin) {
-    const { addMcpServer, getProjectMcpJsonPath } = await import('#src/core/mcp-config.js');
+    const { addMcpServer, getProjectMcpJsonPath } = await import('#src/bootstrap/mcp-config.js');
     const binName = typeof pkg.bin === 'string' ? name : Object.keys(pkg.bin)[0];
     const binPath = typeof pkg.bin === 'string'
       ? path.join(dir, pkg.bin)

@@ -7,7 +7,7 @@ import { DisplayManager } from '../src/display.js';
 import { PluginRegistry } from '../src/core/plugin.js';
 import { replDisplay } from '../src/plugins/display/repl.js';
 import { resolveDisplayPlugin } from '../src/plugins/display/loader.js';
-import { getToolArgsPreview, formatToolCall, getToolDisplayName } from '../src/core/tool-display.js';
+import { getToolArgsPreview, formatToolCall, getToolDisplayName } from '../src/plugins/display/tool-display.js';
 import { collectPlugins, buildPluginList } from '../src/plugins/commands/builtin.js';
 
 describe('DisplayPlugin — repl', () => {

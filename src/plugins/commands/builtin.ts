@@ -1,7 +1,8 @@
 import { CommandInterceptResult, type InjectedMessage } from '#src/core/contract.js';
 import { NanoCodeAgent } from '#src/core/agent.js';
 import { PluginRegistry } from '#src/core/plugin.js';
-import { loadConfig, NanoConfig, getSystemWhitelist } from '#src/core/config.js';
+import { loadConfig, getSystemWhitelist } from '#src/bootstrap/config.js';
+import type { NanoConfig } from '#src/core/config.js';
 import { DisplayManager } from '#src/display.js';
 import { logManager } from '#src/core/logger.js';
 import { loadAllSkills } from '#src/plugins/skills/loader.js';
@@ -17,9 +18,9 @@ import type { BuiltinCommand } from '#src/plugins/commands/types.js';
 import { readAllTasks, getPlansDir, listPlanFiles } from '#src/plugins/tools/task-plan.js';
 import { SK } from '#src/core/store-keys.js';
 import type { ModelEntry } from '#src/core/llm.js';
-import { runDoctor, formatDoctorResults } from '#src/core/doctor.js';
-import { loadAgentDefinitions } from '#src/core/agent-loader.js';
-import { readMcpJson, getProjectMcpJsonPath, getGlobalMcpJsonPath, getClaudeMcpJsonPath } from '#src/core/mcp-config.js';
+import { runDoctor, formatDoctorResults } from '#src/plugins/commands/doctor.js';
+import { loadAgentDefinitions } from '#src/plugins/coordinator/agent-loader.js';
+import { readMcpJson, getProjectMcpJsonPath, getGlobalMcpJsonPath, getClaudeMcpJsonPath } from '#src/bootstrap/mcp-config.js';
 
 export interface BuiltinContext {
   agent: NanoCodeAgent;

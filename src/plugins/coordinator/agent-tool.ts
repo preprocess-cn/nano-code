@@ -3,7 +3,7 @@ import { ToolResponse, ToolContext, ToolDefinition } from '#src/core/contract.js
 import { NanoCodeAgent } from '#src/core/agent.js';
 import { AgentManager } from '#src/core/agent-manager.js';
 import { LLMClient } from '#src/core/llm.js';
-import { AgentDefinition } from '#src/core/agent-loader.js';
+import { AgentDefinition } from '#src/plugins/coordinator/agent-loader.js';
 import { DisplayManager } from '#src/display.js';
 import { BackgroundTaskManager } from '#src/plugins/coordinator/task-manager.js';
 import { AgentLifecycle } from '#src/plugins/coordinator/lifecycle.js';

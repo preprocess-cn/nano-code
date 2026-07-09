@@ -1,7 +1,7 @@
 import { getBundledSkills } from '#src/plugins/skills/bundled/index.js';
 import { loadAllSkills } from '#src/plugins/skills/loader.js';
 import { getBuiltinCommands } from '#src/plugins/commands/builtin.js';
-import { loadAgentDefinitions } from '#src/core/agent-loader.js';
+import { loadAgentDefinitions } from '#src/plugins/coordinator/agent-loader.js';
 import { setSuggestionProvider, type CommandSuggestion } from '#src/plugins/display/claude-code-ink/index.js';
 
 /**

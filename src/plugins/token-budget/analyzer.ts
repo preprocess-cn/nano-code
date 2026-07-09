@@ -2,7 +2,7 @@ import { NanoCodeAgent } from '#src/core/agent.js';
 import { PluginRegistry } from '#src/core/plugin.js';
 import { NanoConfig } from '#src/core/config.js';
 import { buildSystemPrompt } from '#src/core/prompt.js';
-import { loadAgentDefinitions } from '#src/core/agent-loader.js';
+import { loadAgentDefinitions } from '#src/plugins/coordinator/agent-loader.js';
 import { loadAllSkills } from '#src/plugins/skills/loader.js';
 import { MEMORY_RULES_PROMPT } from '#src/plugins/tools/memory.js';
 import { SK } from '#src/core/store-keys.js';

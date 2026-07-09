@@ -1,7 +1,7 @@
 import { intro, text, outro, isCancel, confirm } from '@clack/prompts';
 import { DisplayPlugin, StartConfig, StatusEvent, StreamEvent, ToolCallEvent, ToolResultEvent, ErrorEvent, DebugEvent, BackgroundTaskEvent, MessageLevel } from '#src/display.js';
 import { isMainAgent } from '#src/core/contract.js';
-import { formatToolCall } from '#src/core/tool-display.js';
+import { formatToolCall } from '#src/plugins/display/tool-display.js';
 import { ThinkStream } from '#src/plugins/display/think-stream.js';
 import { askQuestionsDialog } from '#src/plugins/display/ask-questions-dialog.js';
 import type { AskQuestionRequest } from '#src/plugins/tools/ask-user-question.js';

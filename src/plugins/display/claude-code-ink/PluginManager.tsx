@@ -3,7 +3,7 @@ import { Box, Text, useInput } from '#src/plugins/display/claude-code-ink/ink.js
 import * as fs from 'fs';
 import * as path from 'path';
 import type { PluginRegistry } from '#src/core/plugin.js';
-import { loadConfig, getSystemWhitelist } from '#src/core/config.js';
+import { loadConfig, getSystemWhitelist } from '#src/bootstrap/config.js';
 
 // ── Types ──
 

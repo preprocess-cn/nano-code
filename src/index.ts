@@ -1,6 +1,6 @@
 import { NanoCodeAgent } from '#src/core/agent.js';
 import { PluginRegistry, registerBuiltinPlugin, DEFAULT_SYSTEM_PLUGINS, DEFAULT_FEATURE_PLUGINS } from '#src/core/plugin.js';
-import { loadConfig, applyProfile, getSystemWhitelist } from '#src/core/config.js';
+import { loadConfig, applyProfile, getSystemWhitelist } from '#src/bootstrap/config.js';
 import { LLMClient } from '#src/core/llm.js';
 import { loadSession, saveSession } from '#src/core/session.js';
 import { handlePluginCommand, printPluginList } from '#src/plugin-cli.js';
@@ -12,7 +12,7 @@ import type { ModelEntry } from '#src/core/llm.js';
 import { cac } from 'cac';
 import { getPackageVersion } from '#src/core/version.js';
 import { logManager } from '#src/core/logger.js';
-import { runDoctor, formatDoctorResults } from '#src/core/doctor.js';
+import { runDoctor, formatDoctorResults } from '#src/plugins/commands/doctor.js';
 
 // ── CLI messages ──
 

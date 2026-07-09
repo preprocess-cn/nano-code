@@ -9,7 +9,7 @@ import type { AgentModeInfo } from '#src/core/store-keys.js';
 import { SK, agentCancelledKey, agentAbortKey } from '#src/core/store-keys.js';
 import type { ModelEntry } from '#src/core/llm.js';
 import { logManager } from '#src/core/logger.js';
-import { formatToolCall, getToolArgsPreview } from '#src/core/tool-display.js';
+import { formatToolCall, getToolArgsPreview } from '#src/plugins/display/tool-display.js';
 import type { ToolResponse } from '#src/core/contract.js';
 import React from 'react';
 

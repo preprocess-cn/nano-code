@@ -39,8 +39,7 @@ export type { LLMConfig, ChatMessage, ToolCallDelta } from '#src/core/llm.js';
 // ── 提示词构建 ──
 export { buildSystemPrompt, formatToolResponse } from '#src/core/prompt.js';
 
-// ── 配置 ──
-export { loadConfig, applyProfile, getSystemWhitelist } from '#src/core/config.js';
+// ── 配置（仅类型） ──
 export type { NanoConfig, SystemPromptConfig, AgentConfig, PluginConfigEntry } from '#src/core/config.js';
 
 // ── 会话 ──
@@ -58,6 +57,9 @@ export type { AgentModeInfo } from '#src/core/store-keys.js';
 // ── 版本 ──
 export { getPackageVersion, getPackageName } from '#src/core/version.js';
 
+// ── 工具名格式化 ──
+export { getToolDisplayName } from '#src/core/tool-name.js';
+
 // ── 重试工具 ──
 export { withRetry } from '#src/core/retry.js';
 export type { RetryOptions } from '#src/core/retry.js';
@@ -66,6 +68,3 @@ export type { RetryOptions } from '#src/core/retry.js';
 export { logManager } from '#src/core/logger.js';
 export type { LogPlugin, LogEntry, LogLevel } from '#src/core/logger.js';
 
-// ── 诊断 ──
-export { runDoctor, formatDoctorResults } from '#src/core/doctor.js';
-export type { DoctorResult } from '#src/core/doctor.js';
