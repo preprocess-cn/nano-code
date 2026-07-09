@@ -152,7 +152,7 @@ display:
 
 | 插件 | 说明 |
 |------|------|
-| `repl` | 默认（交互式），基于 `@clack/prompts` + `console` 的简单 REPL 交互 |
+| `repl` | 默认（交互式），基于 `@clack/prompts` + `console` 的 REPL 交互；流分页器（大输出分段展示）、plan mode `(plan)` 提示符前缀 |
 | `claude-code-ink` | 基于 React + Ink 的全屏终端 UI，支持 ScrollBox 滚动、`--think` 思考内容灰色斜体区分、agent 前缀、keybinding 系统、多行输入（Shift+Enter / `\`+Enter 换行）、交互式问题对话框（自定义文本输入 + 确认）、ESC/Ctrl+C 关闭弹框等 |
 | `cli` | 非交互式 CLI 展示，AI 响应输出到 stdout，状态/错误输出到 stderr；`display.enabled: false` 时的兜底方案 |
 
@@ -723,12 +723,34 @@ interface IStore {
 
 默认实现为 `InMemoryStore`（`src/core/store.ts`），可替换为任何后端存储。
 
+### 交互式工具桥接（InteractiveHandler）
+
+工具插件需要用户交互时（如提问、确认），通过 `PluginRegistry` 提供的桥接机制与 display 插件协作：
+
+```typescript
+// Display 插件注册交互处理器
+registry.registerInteractiveHandler('ask_user_question', async (args) => {
+  const answers = await myDialog(args.questions);
+  return { status: 'success', data: JSON.stringify({ questions: args.questions, answers }) };
+});
+
+// 工具插件调用 — display 接管 UI，无处理器则返回结构化数据供 LLM 自行呈现
+const handler = registry.getInteractiveHandler('ask_user_question');
+if (handler) return handler(args);
+return { status: 'success', data: `[交互式提问] ...` };
+```
+
+- 类型安全：`InteractiveHandler = (args: any) => Promise<ToolResponse>`
+- 零耦合：display 插件 import 类型（编译期擦除），不 import 工具插件运行时
+- 优雅降级：无 display 注册处理器时，工具返回结构化 JSON，LLM 自行呈现并等待用户输入
+- 可扩展：同模式支持 `confirm_dangerous_action`、`file_picker` 等未来交互工具
+
 详细指南请参考 [`docs/plugin-development.md`](docs/plugin-development.md)。
 
 ## 测试
 
 ```bash
-npm test         # 单元测试（642 项）
+npm test         # 单元测试（645 项）
 npm run test:e2e # E2E 测试（11 场景，覆盖 ReAct 全链路 + 并发执行 + 混合工具）
 npm run test:all # 全部测试
 ```

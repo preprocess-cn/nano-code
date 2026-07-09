@@ -44,6 +44,14 @@ export interface NanoPlugin {
   onSessionRestore?(context: SessionRestoreContext): Promise<void>;
 }
 
+/**
+ * 交互工具处理器。
+ * 工具插件通过 registry.getInteractiveHandler(toolName) 获取，
+ * display 插件通过 registry.registerInteractiveHandler(toolName, handler) 注册。
+ * handler 接收工具原始 args，返回完整的 ToolResponse。
+ */
+export type InteractiveHandler = (args: any) => Promise<ToolResponse>;
+
 // ── Plugin registry ──
 
 export class PluginRegistry {
@@ -57,6 +65,7 @@ export class PluginRegistry {
   private _confirmCallback?: (req: PermissionConfirmRequest) => Promise<PermissionConfirmResponse>;
   private _outputHandler?: CommandOutputHandler;
   private _schemaCache: ToolDefinition[] | null = null;
+  private _interactiveHandlers: Map<string, InteractiveHandler> = new Map();
 
   /** 插件间共享状态通道。核心只做透传，不知晓任何 key 的业务含义 */
   store: IStore;
@@ -80,6 +89,14 @@ export class PluginRegistry {
 
   getConfirmCallback(): ((req: PermissionConfirmRequest) => Promise<PermissionConfirmResponse>) | undefined {
     return this._confirmCallback;
+  }
+
+  registerInteractiveHandler(toolName: string, handler: InteractiveHandler): void {
+    this._interactiveHandlers.set(toolName, handler);
+  }
+
+  getInteractiveHandler(toolName: string): InteractiveHandler | undefined {
+    return this._interactiveHandlers.get(toolName);
   }
 
   // ── Session-level allowlist ──
@@ -183,6 +200,7 @@ export class PluginRegistry {
     this.configs.clear();
     this._allowlist.clear();
     this._schemaCache = null;
+    this._interactiveHandlers.clear();
   }
 
   async unregister(name: string): Promise<void> {

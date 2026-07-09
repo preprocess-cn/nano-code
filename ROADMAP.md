@@ -64,6 +64,7 @@
 | ☐ | ToolUseContext | 工具执行的共享运行时上下文（模型覆盖、effort、权限绑定等），贯穿 ReAct 循环 |
 | ☐ | contextModifier | 工具可通过 ToolResponse 返回上下文修改器，作用于后续工具调用的执行环境 |
 | ✅ | Skill 系统 | 13 个内置 TypeScript 技能（bundled），skills_list / skill_view / skill 工具，inline（newMessages 注入）+ fork（子 agent）双模式，skills 配置禁用开关 |
+| ✅ | **InteractiveHandler** | PluginRegistry 原生 `registerInteractiveHandler`/`getInteractiveHandler` 替代 store callback，工具插件与 display 通过 registry 桥接，无 handler 自动降级为文本 |
 
 ## P0 — 搜索与审查
 

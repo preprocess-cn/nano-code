@@ -1,6 +1,5 @@
 import { NanoPlugin, PluginRegistry } from '#src/core/plugin.js';
 import { ToolDefinition, ToolResponse, ToolContext } from '#src/core/contract.js';
-import { IStore } from '#src/core/store.js';
 
 // ── Types ──
 
@@ -17,17 +16,9 @@ export interface AskQuestionRequest {
   multiSelect?: boolean;
 }
 
-export type AskQuestionsCallback = (
-  questions: AskQuestionRequest[],
-) => Promise<Record<string, string>>;
+// ── Module-level registry reference ──
 
-// ── Store key ──
-
-const ASK_QUESTIONS_CB_KEY = 'askQuestions';
-
-// ── Module-level store reference ──
-
-let _store: IStore | null = null;
+let _registry: PluginRegistry | null = null;
 
 // ── Tool: ask_user_question ──
 
@@ -122,16 +113,16 @@ async function handleAskUserQuestion(args: any): Promise<ToolResponse> {
     }
   }
 
-  // Ask via display callback (registered by display plugin via shared store)
-  const cb = _store?.get<AskQuestionsCallback>(ASK_QUESTIONS_CB_KEY);
-  if (!cb) {
-    return { status: 'error', message: '当前终端不支持交互式提问，请基于上下文自行判断。' };
+  // Try display-registered interactive handler first
+  const handler = _registry?.getInteractiveHandler('ask_user_question');
+  if (handler) {
+    return handler(args);
   }
 
-  const answers = await cb(questions);
+  // Fallback: no display handler registered — return structured data for the LLM to present
   return {
     status: 'success',
-    data: JSON.stringify({ questions, answers }),
+    data: `[交互式提问] 用户需要回答以下问题，请逐一呈现并等待回答：\n${JSON.stringify(questions, null, 2)}`,
   };
 }
 
@@ -155,6 +146,6 @@ export const askUserQuestionPlugin: NanoPlugin = {
   },
 
   async onInit(registry: PluginRegistry) {
-    _store = registry.store;
+    _registry = registry;
   },
 };

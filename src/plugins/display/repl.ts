@@ -1,11 +1,14 @@
-import { intro, text, outro, isCancel, confirm, select, multiselect } from '@clack/prompts';
+import { intro, text, outro, isCancel, confirm } from '@clack/prompts';
 import { DisplayPlugin, StartConfig, StatusEvent, StreamEvent, ToolCallEvent, ToolResultEvent, ErrorEvent, DebugEvent, BackgroundTaskEvent, MessageLevel } from '#src/display.js';
 import { isMainAgent } from '#src/core/contract.js';
 import { formatToolCall } from '#src/core/tool-display.js';
 import { ThinkStream } from '#src/plugins/display/think-stream.js';
+import { askQuestionsDialog } from '#src/plugins/display/ask-questions-dialog.js';
+import type { AskQuestionRequest } from '#src/plugins/tools/ask-user-question.js';
+import * as readline from 'node:readline';
 
 import type { PluginRegistry } from '#src/core/plugin.js';
-import { SK, type AgentModeInfo } from '#src/core/store-keys.js';
+import { SK } from '#src/core/store-keys.js';
 
 /** 非主 agent 的消息加 [name] 前缀 */
 function p(agentName: string, msg: string): string {
@@ -17,15 +20,57 @@ let debug = false;
 const thinkFilter = new ThinkStream();
 let _store: { get<T>(key: string): T | undefined } | null = null;
 
+// ── Stream pager ──
+const PAGE_THRESHOLD = 3000;  // chars — 超过此长度进入分页模式
+const PAGE_MIN_OVERFLOW = 200; // 超过阈值至少这么多才会触发 pager
+const PAGE_LINES = 20;        // 每页行数
+let _streamBuffer = '';       // 当前 turn 全部输出缓冲
+let _streamTotal = 0;         // 当前 turn 输出总长度
+let _pagerPending = false;    // 是否需要分页展示
+
 function getModeLabel(): string {
   if (!_store) return '';
-  const mode = _store.get<string>(SK.Mode);
   const taskCount = _store.get<number>(SK.TaskCount) ?? 0;
-  const parts: string[] = [];
-  if (mode === 'plan') parts.push('\x1b[33mplan mode\x1b[0m [⇧+Tab]');
-  else if (mode) parts.push('\x1b[2mnormal [⇧+Tab plan]\x1b[0m');
-  if (taskCount > 0) parts.push(`${taskCount} tasks`);
-  return parts.length > 0 ? ` [${parts.join(' · ')}]` : '';
+  return taskCount > 0 ? ` [\x1b[2m${taskCount} tasks\x1b[0m]` : '';
+}
+
+/** 分页展示 buffered 内容。返回 true = 全部显示完毕，false = 用户跳过 */
+async function runPager(buffer: string): Promise<boolean> {
+  const lines = buffer.split('\n');
+  if (lines.length <= PAGE_LINES) {
+    process.stdout.write(buffer);
+    return true;
+  }
+
+  let pos = 0;
+  const totalLines = lines.length;
+
+  while (pos < totalLines) {
+    const end = Math.min(pos + PAGE_LINES, totalLines);
+    for (let i = pos; i < end; i++) {
+      process.stdout.write(lines[i] + (i < totalLines - 1 ? '\n' : ''));
+    }
+    pos = end;
+
+    if (pos >= totalLines) break;
+
+    const remaining = totalLines - pos;
+    const answer = await new Promise<string>(resolve => {
+      const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+      const prompt = `\x1b[2m[-- 剩余 ${remaining} 行 · Enter 继续 · a 全部显示 · Ctrl+C 退出 --]\x1b[0m `;
+      rl.question(prompt, res => { rl.close(); resolve(res.toLowerCase()); });
+      rl.on('SIGINT', () => { rl.close(); resolve('__exit__'); });
+    });
+
+    if (answer === '__exit__' || answer === 'q') return false;
+    if (answer === 'a') {
+      for (let i = pos; i < totalLines; i++) {
+        process.stdout.write(lines[i] + (i < totalLines - 1 ? '\n' : ''));
+      }
+      break;
+    }
+  }
+  return true;
 }
 
 export const replDisplay: DisplayPlugin = {
@@ -44,28 +89,11 @@ export const replDisplay: DisplayPlugin = {
       stdout(chunk: string) { process.stdout.write(chunk); },
       stderr(chunk: string) { process.stderr.write(chunk); },
     });
-    // Register AskUserQuestion handler via shared store (no core changes)
-    registry.store.set('askQuestions', async (questions: Array<{ question: string; header: string; options: Array<{ label: string; description: string; preview?: string }>; multiSelect?: boolean }>) => {
-      const answers: Record<string, string> = {};
-      for (const q of questions) {
-        console.log(`\n\x1b[33m❓ ${q.header}\x1b[0m`);
-        console.log(`  ${q.question}`);
-        if (q.multiSelect) {
-          const result = await multiselect({
-            message: '请选择（空格切换选中，回车确认）',
-            options: q.options.map((o: { label: string; description: string }) => ({ value: o.label, label: o.label, hint: o.description })),
-            required: true,
-          });
-          answers[q.question] = typeof result === 'symbol' ? '' : (result as string[]).join(', ');
-        } else {
-          const result = await select({
-            message: '请选择一个选项',
-            options: q.options.map((o: { label: string; description: string }) => ({ value: o.label, label: o.label, hint: o.description })),
-          });
-          answers[q.question] = typeof result === 'symbol' ? '' : (result as string);
-        }
-      }
-      return answers;
+    // Register AskUserQuestion handler — uses raw-mode box dialog
+    registry.registerInteractiveHandler('ask_user_question', async (args: any) => {
+      const questions = args.questions as AskQuestionRequest[];
+      const answers = await askQuestionsDialog(questions);
+      return { status: 'success', data: JSON.stringify({ questions, answers }) };
     });
   },
 
@@ -96,11 +124,28 @@ export const replDisplay: DisplayPlugin = {
   },
 
   async prompt(): Promise<string | null> {
-    const agentMode = _store?.get<AgentModeInfo>(SK.AgentMode) ?? null;
+    // 处理超出阈值的缓冲内容
+    if (_streamTotal > PAGE_THRESHOLD && _streamBuffer.length > 0) {
+      const overflow = _streamBuffer.slice(PAGE_THRESHOLD);
+      if (_pagerPending && overflow.length > PAGE_MIN_OVERFLOW) {
+        _pagerPending = false;
+        process.stdout.write(`\n${'─'.repeat(40)}\n`);
+        await runPager(overflow);
+      } else {
+        _pagerPending = false;
+        // 溢出量不足分页，直接写入
+        process.stdout.write(overflow);
+      }
+    }
+    // 重置流状态
+    _streamBuffer = '';
+    _streamTotal = 0;
+    _pagerPending = false;
+
+    const mode = _store?.get<string>(SK.Mode) ?? 'normal';
+    const planPrefix = mode === 'plan' ? '\x1b[33m(plan)\x1b[0m ' : '';
     const suffix = getModeLabel();
-    const promptMsg = agentMode
-      ? `[${agentMode.name}${suffix}] >>  请输入开发任务或指令：`
-      : `>>${suffix}  请输入开发任务或指令：`;
+    const promptMsg = `${planPrefix}>>${suffix}  请输入开发任务或指令：`;
     const result = await text({
       message: promptMsg,
       placeholder: '例如："帮我看看这个项目的文件结构" 或 "创建一个 utils.ts 并在里面写一个冒泡排序"',
@@ -124,8 +169,11 @@ export const replDisplay: DisplayPlugin = {
     if (event.level === 'status') {
       if (event.message === 'thinking') {
         console.log(p(event.agentName, '? 正在思考并请求大模型...'));
-      } else if (event.message === 'end') {
-        // no output for end signal
+      } else if (event.message === 'end' && isMainAgent(event.agentName)) {
+        // 检查是否需要 pager：超过阈值且有足够溢出
+        if (_streamTotal > PAGE_THRESHOLD && _streamTotal - PAGE_THRESHOLD > PAGE_MIN_OVERFLOW) {
+          _pagerPending = true;
+        }
       }
       return;
     }
@@ -147,7 +195,20 @@ export const replDisplay: DisplayPlugin = {
       : thinkFilter.next(event.text);
     if (!text) return;
     if (isMainAgent(event.agentName)) {
-      process.stdout.write(text);
+      const prev = _streamTotal;
+      _streamTotal += text.length;
+      _streamBuffer += text;
+
+      if (prev < PAGE_THRESHOLD) {
+        // 阈值内直接输出
+        const remaining = Math.min(text.length, PAGE_THRESHOLD - prev);
+        process.stdout.write(text.slice(0, remaining));
+        // 如果这个 chunk 跨越了阈值，输出阈值提示
+        if (prev + text.length > PAGE_THRESHOLD) {
+          process.stdout.write('\n\x1b[2m[输出较长，后续内容将在完成后分页展示]\x1b[0m\n');
+        }
+      }
+      // 超过阈值后只缓冲，不写入 — 后续通过 pager 展示
     } else {
       const prefixed = text.split('\n').map(l => p(event.agentName, l)).join('\n');
       process.stdout.write(prefixed);

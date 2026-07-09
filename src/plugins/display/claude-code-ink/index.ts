@@ -10,6 +10,7 @@ import { SK, agentCancelledKey, agentAbortKey } from '#src/core/store-keys.js';
 import type { ModelEntry } from '#src/core/llm.js';
 import { logManager } from '#src/core/logger.js';
 import { formatToolCall, getToolArgsPreview } from '#src/core/tool-display.js';
+import type { ToolResponse } from '#src/core/contract.js';
 import React from 'react';
 
 export interface CommandSuggestion {
@@ -258,10 +259,15 @@ function createPlugin(): DisplayPlugin {
       });
       // Ink owns the terminal — suppress direct stderr writes
       logManager.unregister('stderr');
-      // Register AskUserQuestion handler via shared store
-      registry.store.set('askQuestions', async (questions: Array<{ question: string; header: string; options: Array<{ label: string; description: string; preview?: string }>; multiSelect?: boolean }>) => {
-        return new Promise<Record<string, string>>((resolve) => {
-          pendingQuestions = { questions, resolve };
+      registry.registerInteractiveHandler('ask_user_question', async (args: any) => {
+        const questions = args.questions as Array<{ question: string; header: string; options: Array<{ label: string; description: string; preview?: string }>; multiSelect?: boolean }>;
+        return new Promise<ToolResponse>((resolve) => {
+          pendingQuestions = {
+            questions,
+            resolve: (answers: Record<string, string>) => {
+              resolve({ status: 'success', data: JSON.stringify({ questions, answers }) });
+            },
+          };
           render();
         });
       });
