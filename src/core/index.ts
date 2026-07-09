@@ -43,8 +43,8 @@ export { buildSystemPrompt, formatToolResponse } from '#src/core/prompt.js';
 export type { NanoConfig, SystemPromptConfig, AgentConfig, PluginConfigEntry } from '#src/core/config.js';
 
 // ── 会话 ──
-export { saveSession, loadSession, hasSession } from '#src/core/session.js';
-export type { SessionData } from '#src/core/session.js';
+export { saveSession, loadSession, hasSession } from '#src/bootstrap/session.js';
+export type { SessionData } from '#src/bootstrap/session.js';
 
 // ── 存储 ──
 export { InMemoryStore } from '#src/core/store.js';
@@ -55,16 +55,16 @@ export { SK } from '#src/core/store-keys.js';
 export type { AgentModeInfo } from '#src/core/store-keys.js';
 
 // ── 版本 ──
-export { getPackageVersion, getPackageName } from '#src/core/version.js';
+export { getPackageVersion, getPackageName } from '#src/utils/version.js';
 
 // ── 工具名格式化 ──
-export { getToolDisplayName } from '#src/core/tool-name.js';
+export { getToolDisplayName } from '#src/utils/tool-name.js';
 
 // ── 重试工具 ──
-export { withRetry } from '#src/core/retry.js';
-export type { RetryOptions } from '#src/core/retry.js';
+export { withRetry } from '#src/utils/retry.js';
+export type { RetryOptions } from '#src/utils/retry.js';
 
 // ── 日志 ──
-export { logManager } from '#src/core/logger.js';
-export type { LogPlugin, LogEntry, LogLevel } from '#src/core/logger.js';
+export { logManager } from '#src/utils/logger.js';
+export type { LogPlugin, LogEntry, LogLevel } from '#src/utils/logger.js';
 

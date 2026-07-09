@@ -6,7 +6,7 @@ import { NanoPlugin, PluginRegistry } from '#src/core/plugin.js';
 import { ToolDefinition, ToolResponse, ToolContext } from '#src/core/contract.js';
 import { SK } from '#src/core/store-keys.js';
 import { getPatchForDisplay, newFileHunk } from '#src/utils/diff.js';
-import { logManager } from '#src/core/logger.js';
+import { logManager } from '#src/utils/logger.js';
 
 // ── 文件读取缓存（用于压缩后恢复上下文）──
 // 模块级缓存，但写入时校验 ctx.skipPermission 以避免子 agent 污染主 agent 缓存

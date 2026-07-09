@@ -3,7 +3,7 @@ import * as path from 'path';
 import * as os from 'os';
 import * as yaml from 'js-yaml';
 import { DEFAULT_SYSTEM_PLUGINS } from '#src/core/plugin.js';
-import { logManager } from '#src/core/logger.js';
+import { logManager } from '#src/utils/logger.js';
 import type { NanoConfig, AgentConfig, PluginConfigEntry, SystemPromptConfig, ConfigValidationWarning } from '#src/core/config.js';
 
 const CONFIG_TOP_KEYS = new Set(['core', 'plugins', 'agent', 'display', 'configVersion', 'mcp', 'skills']);

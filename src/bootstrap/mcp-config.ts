@@ -1,7 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { logManager } from '#src/core/logger.js';
+import { logManager } from '#src/utils/logger.js';
 
 /**
  * .mcp.json 格式：MCP 服务器的标准配置文件。

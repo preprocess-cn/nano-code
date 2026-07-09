@@ -1,4 +1,4 @@
-import { logManager } from '#src/core/logger.js';
+import { logManager } from '#src/utils/logger.js';
 
 export interface RetryOptions {
   maxRetries: number;
@@ -30,5 +30,5 @@ export async function withRetry<T>(
       throw err;
     }
   }
-  throw lastErr as T; // satisfy TS control flow analysis
+  throw lastErr as T;
 }

@@ -10,6 +10,7 @@
 | ✅ | 会话持久化 | `-c`/`--continue` 接续上次对话，`finally` 块自动保存 |
 | ✅ | **核心层解耦** | Plan mode 注入从 `agent.ts` 核心循环迁至 `task-plan` 插件 `onBeforeRequest` 钩子；Display 初始化从 `display.ts` 提取到插件层 `init.ts`，核心层不再依赖具体展示实现 |
 | ✅ | **文件结构重组** | `agent-loader.ts`（`coordinator/` → `core/`）、`config-writer.ts`（`mcp/` → `core/mcp-config.ts`）；`ContextAnalysis` 类型从 plugin 的 `analyzer.ts` 提升到 `core/contract.ts`，消除类型泄漏 |
+| ✅ | **核心层瘦身** | 6 个基础设施文件从 `src/core/` 迁出：`version.ts`/`tool-name.ts`/`retry.ts`/`token-counter.ts`/`logger.ts` → `src/utils/`，`session.ts` → `src/bootstrap/`；核心层文件从 15 降至 9 个 |
 
 ## P1 — 日常体验
 

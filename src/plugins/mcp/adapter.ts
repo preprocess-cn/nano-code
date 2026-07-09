@@ -6,9 +6,9 @@ import * as os from 'os';
 import { NanoPlugin } from '#src/core/plugin.js';
 import { ToolDefinition, ToolResponse, ToolContext } from '#src/core/contract.js';
 import { NanoConfig } from '#src/core/config.js';
-import { getPackageVersion } from '#src/core/version.js';
-import { withRetry } from '#src/core/retry.js';
-import { logManager } from '#src/core/logger.js';
+import { getPackageVersion } from '#src/utils/version.js';
+import { withRetry } from '#src/utils/retry.js';
+import { logManager } from '#src/utils/logger.js';
 
 // ── JSON-RPC types ──
 

@@ -1,5 +1,5 @@
 import { ToolDefinition, ToolResponse, ToolContext, ToolCall, LLMResponse, CommandInterceptResult, type PermissionConfirmRequest, type PermissionConfirmResponse, type CommandOutputHandler, type AgentReadyContext, type SessionRestoreContext, type AgentExitContext } from '#src/core/contract.js';
-import { logManager } from '#src/core/logger.js';
+import { logManager } from '#src/utils/logger.js';
 import { ChatMessage } from '#src/core/llm.js';
 import { IStore, InMemoryStore } from '#src/core/store.js';
 

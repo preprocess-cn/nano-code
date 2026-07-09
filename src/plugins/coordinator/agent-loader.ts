@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import * as yaml from 'js-yaml';
-import { logManager } from '#src/core/logger.js';
+import { logManager } from '#src/utils/logger.js';
 
 export interface AgentDefinition {
   name: string;

@@ -6,7 +6,7 @@ import { initTokenizer } from '#src/plugins/token-budget/counter.js';
 import type { LLMClient } from '#src/core/llm.js';
 import type { DisplayManager } from '#src/display.js';
 import { SK, agentMessagesKey, compactResultKey, compactCompletedKey, compactRetryKey } from '#src/core/store-keys.js';
-import { logManager } from '#src/core/logger.js';
+import { logManager } from '#src/utils/logger.js';
 
 // ── Plugin ──
 

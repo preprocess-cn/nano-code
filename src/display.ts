@@ -1,7 +1,7 @@
 import { PluginRegistry } from '#src/core/plugin.js';
 import type { ToolStatus, AgentDisplay, AgentEvent, MessageLevel, StatusEvent, StreamEvent, ToolCallEvent, ToolResultEvent, StateSnapshot } from '#src/core/contract.js';
 import type { ContextAnalysis } from '#src/core/contract.js';
-import { logManager } from '#src/core/logger.js';
+import { logManager } from '#src/utils/logger.js';
 
 // ════════════════════════════════════════════
 // 结构化事件类型

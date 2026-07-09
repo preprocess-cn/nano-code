@@ -1,5 +1,5 @@
 import type { ToolDefinition } from '#src/core/contract.js';
-import { getToolDisplayName } from '#src/core/tool-name.js';
+import { getToolDisplayName } from '#src/utils/tool-name.js';
 export { getToolDisplayName };
 
 /**

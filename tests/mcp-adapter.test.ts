@@ -100,7 +100,7 @@ describe('MCPStdioTransport', () => {
 
   it('logs stderr from child process', async () => {
     const captured: string[] = [];
-    const { logManager } = await import('../src/core/logger.js');
+    const { logManager } = await import('../src/utils/logger.js');
     const capturePlugin = { name: 'test-capture', onLog: (entry: any) => captured.push(entry.message) };
     logManager.register(capturePlugin);
 
