@@ -1,23 +1,44 @@
 import { NanoPlugin, PluginRegistry } from '#src/core/plugin.js';
-import { ToolDefinition, ToolResponse, ToolContext, PermissionConfirmRequest } from '#src/core/contract.js';
+import { ToolDefinition, ToolResponse, ToolContext } from '#src/core/contract.js';
 import {
   Task, TaskStatus,
 } from '#src/plugins/task-plan/types.js';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import * as os from 'os';
 import { SK } from '#src/core/store-keys.js';
 
 // ── File paths ──
 
 const TASKS_DIR = '.nano-code/tasks';
-const PLAN_FILE = '.nano-code/plan.md';
 
 function tasksDir(): string {
   return path.join(process.cwd(), TASKS_DIR);
 }
 
-function planFilePath(): string {
-  return path.join(process.cwd(), PLAN_FILE);
+function ensurePlansDir(): Promise<void> {
+  return fs.mkdir(getPlansDir(), { recursive: true }) as unknown as Promise<void>;
+}
+
+/** ~/.nano-code/plan/<name>.md */
+function planFilePath(name: string): string {
+  return path.join(getPlansDir(), `${name}.md`);
+}
+
+// ── Module-level overrides (test support) ──
+
+let _testPlansDir: string | undefined;
+
+/**
+ * Override the plans directory for testing.
+ * Reset by calling with undefined.
+ */
+export function __setTestPlansDir(dir: string | undefined): void {
+  _testPlansDir = dir;
+}
+
+export function getPlansDir(): string {
+  return _testPlansDir || path.join(os.homedir(), '.nano-code', 'plan');
 }
 
 // ── Module-level store reference (set in onInit) ──
@@ -29,8 +50,14 @@ let _store: {
 
 // ── Exported helpers (for slash commands / other plugins) ──
 
-export function getPlanFilePath(): string {
-  return path.join(process.cwd(), PLAN_FILE);
+/** 列出 ~/.nano-code/plan/ 下所有 .md 文件 */
+export async function listPlanFiles(): Promise<string[]> {
+  try {
+    const entries = await fs.readdir(getPlansDir());
+    return entries.filter(e => e.endsWith('.md')).sort();
+  } catch {
+    return [];
+  }
 }
 
 // ── Task persistence ──
@@ -107,13 +134,13 @@ async function handleEnterPlanMode(): Promise<ToolResponse> {
   _store.set(SK.Mode, 'plan');
   return {
     status: 'success',
-    data: 'Entered plan mode. In plan mode, you MUST NOT edit any files (except the plan file at .nano-code/plan.md) or run any non-readonly tools. Use exit_plan_mode when you are ready to present your plan for approval.',
+    data: 'Entered plan mode. Use plan_write to write plans. After writing, summarize the plan and wait for the user. Do NOT call exit_plan_mode until the user says "execute" or "开始执行".',
   };
 }
 
 // ── Tool: exit_plan_mode ──
 
-async function handleExitPlanMode(ctx: ToolContext): Promise<ToolResponse> {
+async function handleExitPlanMode(): Promise<ToolResponse> {
   if (!_store) {
     return { status: 'error', message: 'Internal error: store not available' };
   }
@@ -122,29 +149,52 @@ async function handleExitPlanMode(ctx: ToolContext): Promise<ToolResponse> {
     return { status: 'error', message: 'Not in plan mode. Use enter_plan_mode first.' };
   }
 
-  // Read plan from file
+  // Read plan from the tracked current plan path
+  const currentPlan = _store.get<string>(SK.CurrentPlanPath);
   let planContent = '';
-  try {
-    planContent = await fs.readFile(planFilePath(), 'utf-8');
-  } catch {
-    return { status: 'error', message: 'No plan found at .nano-code/plan.md. Write your plan to this file first.' };
+  if (currentPlan) {
+    try {
+      planContent = await fs.readFile(currentPlan, 'utf-8');
+    } catch { /* not found */ }
   }
 
-  // Request user approval via confirmCallback
-  if (ctx.confirmCallback) {
-    const req: PermissionConfirmRequest = {
-      toolName: 'exit_plan_mode',
-      message: 'Exit plan mode and start implementation?',
-      details: planContent ? `Plan:\n\n${planContent}` : undefined,
-    };
-    const approved = await ctx.confirmCallback(req);
-    if (!approved) {
-      return { status: 'rejected_by_user', message: 'User rejected the plan. Continue planning.' };
+  // If no current plan, try to find the latest plan file by mtime
+  if (!planContent) {
+    const dir = getPlansDir();
+    let files: string[];
+    try {
+      files = await fs.readdir(dir);
+    } catch {
+      files = [];
+    }
+    const mdFiles = files.filter(e => e.endsWith('.md'));
+    if (mdFiles.length > 0) {
+      // Sort by mtime descending to find most recently written
+      const withMtime = await Promise.all(
+        mdFiles.map(async (f) => {
+          try {
+            const stat = await fs.stat(path.join(dir, f));
+            return { name: f, mtime: stat.mtimeMs };
+          } catch {
+            return { name: f, mtime: 0 };
+          }
+        })
+      );
+      withMtime.sort((a, b) => b.mtime - a.mtime);
+      const latest = withMtime[0].name;
+      try {
+        planContent = await fs.readFile(path.join(dir, latest), 'utf-8');
+      } catch { /* not found */ }
     }
   }
 
-  // Store approved plan content
+  if (!planContent) {
+    return { status: 'error', message: `No plan found. Use plan_write to write a plan first. Plans are stored in ${getPlansDir()}` };
+  }
+
+  // Store plan content for execution
   _store.set(SK.PlanContent, planContent);
+  _store.set(SK.PlanApproved, true);
 
   // Restore previous mode
   const preMode = _store.get<string>(SK.PrePlanMode) || 'normal';
@@ -153,9 +203,7 @@ async function handleExitPlanMode(ctx: ToolContext): Promise<ToolResponse> {
 
   return {
     status: 'success',
-    data: planContent
-      ? `Plan approved. You can now start coding.\n\n## Approved Plan:\n${planContent}`
-      : 'Plan mode exited. You can now start coding.',
+    data: planContent,
   };
 }
 
@@ -324,6 +372,47 @@ async function handleTaskStop(args: any): Promise<ToolResponse> {
   return { status: 'success', data: `Task #${taskId} deleted.` };
 }
 
+// ── Tool: plan_write ──
+
+async function handlePlanWrite(args: any): Promise<ToolResponse> {
+  const { filename, content } = args || {};
+  if (!filename || typeof filename !== 'string') {
+    return { status: 'error', message: 'Missing required parameter: "filename"' };
+  }
+  if (!/^[a-zA-Z0-9_-]+$/.test(filename)) {
+    return { status: 'error', message: 'filename 只能包含字母、数字、连字符和下划线' };
+  }
+  if (!content || typeof content !== 'string') {
+    return { status: 'error', message: 'Missing required parameter: "content"' };
+  }
+
+  await ensurePlansDir();
+  const filePath = planFilePath(filename);
+  await fs.writeFile(filePath, content, 'utf-8');
+
+  // Track this as the current plan
+  if (_store) _store.set(SK.CurrentPlanPath, filePath);
+
+  return {
+    status: 'success',
+    data: `Plan written to ${filePath}`,
+  };
+}
+
+// ── Tool: plan_list ──
+
+async function handlePlanList(): Promise<ToolResponse> {
+  const files = await listPlanFiles();
+  if (files.length === 0) {
+    return { status: 'success', data: `${getPlansDir()}\n  (no plans yet)` };
+  }
+  const lines = files.map(f => `  ${f}`);
+  return {
+    status: 'success',
+    data: [`Plans in ${getPlansDir()}:`, ...lines].join('\n'),
+  };
+}
+
 // ── Tool definitions ──
 
 const TOOLS: ToolDefinition[] = [
@@ -331,7 +420,7 @@ const TOOLS: ToolDefinition[] = [
     type: 'function',
     function: {
       name: 'enter_plan_mode',
-      description: 'Enter plan mode for complex tasks requiring exploration and design before implementation. In plan mode, you are only allowed to read files and edit the plan file (.nano-code/plan.md). Use exit_plan_mode to present your plan for approval.',
+      description: 'Enter plan mode for exploration and design. Use plan_write to write plans. Do NOT call exit_plan_mode until the user explicitly says "execute".',
       parameters: { type: 'object', properties: {}, required: [] },
       sideEffect: false,
     },
@@ -340,7 +429,32 @@ const TOOLS: ToolDefinition[] = [
     type: 'function',
     function: {
       name: 'exit_plan_mode',
-      description: 'Present your plan for approval and exit plan mode. Call this after writing your plan to .nano-code/plan.md. The user will be prompted to approve or reject the plan. If approved, normal mode resumes.',
+      description: 'Exit plan mode and return the plan content. Only call this when the user explicitly says "execute", "开始执行", or similar. The plan content is returned so you can start implementing immediately.',
+      parameters: { type: 'object', properties: {}, required: [] },
+      sideEffect: false,
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'plan_write',
+      description: 'Write a plan file to ~/.nano-code/plan/. Use this in plan mode instead of file_write. Use kebab-case for the filename (e.g. "refactor-utils"). The .md extension is added automatically.',
+      parameters: {
+        type: 'object',
+        properties: {
+          filename: { type: 'string', description: 'Plan name in kebab-case, e.g. "refactor-utils"' },
+          content: { type: 'string', description: 'Plan content in markdown' },
+        },
+        required: ['filename', 'content'],
+      },
+      sideEffect: false,
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'plan_list',
+      description: 'List all saved plan files in ~/.nano-code/plan/.',
       parameters: { type: 'object', properties: {}, required: [] },
       sideEffect: false,
     },
@@ -427,7 +541,11 @@ export const taskPlanPlugin: NanoPlugin = {
       case 'enter_plan_mode':
         return handleEnterPlanMode();
       case 'exit_plan_mode':
-        return handleExitPlanMode(ctx);
+        return handleExitPlanMode();
+      case 'plan_write':
+        return handlePlanWrite(args);
+      case 'plan_list':
+        return handlePlanList();
       case 'task_create':
         return handleTaskCreate(args);
       case 'task_list':

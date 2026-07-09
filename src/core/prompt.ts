@@ -10,38 +10,37 @@ import { ToolResponse } from '#src/core/contract.js';
  * 生成 Plan Mode 指令内容（作为 <system-reminder> 注入，不修改 system prompt）。
  */
 export function getPlanModeInstructions(): string {
-  return `Plan mode is active. You are in PLAN MODE. You MUST NOT make any edits (except the plan file mentioned below), run any non-readonly tools, or otherwise make any changes to the system. This supersedes any other instructions you have received.
+  return `Plan mode is active. You are in PLAN MODE. You MUST NOT make any edits (except writing plan files), run any non-readonly tools, or otherwise make any changes to the system. This supersedes any other instructions you have received.
 
-## Plan File
-Your plan must be written to \`.nano-code/plan.md\` using the file_write tool. Build your plan incrementally — this is the ONLY file you are allowed to edit.
+## Plan Files
+Use the \`plan_write\` tool to write plans to ~/.nano-code/plan/. Choose a descriptive kebab-case filename (e.g. "refactor-utils"). The .md extension is added automatically. You can write multiple versions — use version suffixes like "refactor-utils-v2".
+
+Since plan files are outside the project directory, no permission is needed. This is the ONLY way to write files in plan mode.
 
 ## Workflow
 
 **Phase 1: Initial Understanding**
-Goal: Gain a comprehensive understanding of the user's request by reading through code and asking them questions.
-- Thoroughly explore the codebase to understand existing patterns, relevant files, and architectural approaches.
-- Search for existing functions, utilities, and patterns that can be reused.
-- Use AskUserQuestion if you need to clarify requirements or choose between approaches.
+Goal: Gain a comprehensive understanding of the user's request.
+- Thoroughly explore the codebase.
+- Search for existing patterns and utilities.
+- Use AskUserQuestion to clarify requirements.
 
 **Phase 2: Design**
-Goal: Design an implementation approach based on your exploration.
-- Design a concrete implementation strategy.
-- Consider multiple approaches and their trade-offs.
-- Write your plan to \`.nano-code/plan.md\`.
+Goal: Design an implementation approach.
+- Design a concrete strategy.
+- Write your plan using \`plan_write\`.
 
-**Phase 3: Review**
-Goal: Review your plan to ensure alignment with the user's intentions.
-- Read the critical files identified during exploration.
-- Ensure the plan aligns with the user's original request.
+**Phase 3: Review & Iterate (stay in plan mode)**
+Goal: Review and refine the plan. **Stay in plan mode. Do NOT call exit_plan_mode yet.**
+- Summarize the plan for the user.
+- Wait for the user's response.
+- If the user asks for changes — update the plan with \`plan_write\` again.
+- Iterate as many times as needed.
 
-**Phase 4: Final Plan**
-Goal: Write your final plan to the plan file.
-- Begin with a Context section explaining why this change is being made.
-- Include only your recommended approach.
-- Reference existing functions and utilities to be reused.
-
-**Phase 5: Call ExitPlanMode**
-At the very end, call \`exit_plan_mode\` to present your plan for approval. This is the only way to exit plan mode and start implementation.`;
+**Phase 4: Execute (exit plan mode)**
+Only call \`exit_plan_mode\` when the user explicitly says "execute", "开始执行",
+or similar. This exits plan mode — the plan content is returned so you can
+start implementing immediately.`;
 }
 
 /**

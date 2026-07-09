@@ -300,14 +300,13 @@ function processKeypress(state: DialogState, key: Key, input: string): DialogSta
       return { ...s, screen: 'confirmSummary' as DialogScreen };
     }
 
-    if (key.upArrow) {
+    if (key.downArrow) {
       const optionCount = s.questions[s.currentIdx].options.length + 1; // +1 for "Other"
-      return { ...s, focusIdx: Math.max(0, s.focusIdx - 1) };
+      return { ...s, focusIdx: Math.min(optionCount - 1, s.focusIdx + 1) };
     }
 
-    if (key.downArrow) {
-      const optionCount = s.questions[s.currentIdx].options.length + 1;
-      return { ...s, focusIdx: Math.min(optionCount - 1, s.focusIdx + 1) };
+    if (key.upArrow) {
+      return { ...s, focusIdx: Math.max(0, s.focusIdx - 1) };
     }
 
     if (key.leftArrow && s.currentIdx > 0) {

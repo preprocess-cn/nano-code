@@ -13,7 +13,7 @@ import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import type { BuiltinCommand } from '#src/plugins/commands/types.js';
-import { readAllTasks, getPlanFilePath } from '#src/plugins/tools/task-plan.js';
+import { readAllTasks, getPlansDir, listPlanFiles } from '#src/plugins/tools/task-plan.js';
 import { SK } from '#src/core/store-keys.js';
 import type { ModelEntry } from '#src/core/llm.js';
 import { runDoctor, formatDoctorResults } from '#src/core/doctor.js';
@@ -220,7 +220,7 @@ const BUILTIN_COMMANDS: BuiltinCommand[] = [
   },
   {
     name: 'plan',
-    description: '查看/管理 Plan Mode — /plan [open|exit]',
+    description: '查看/管理 Plan — /plan [list|show|exec|exit]',
     handler: async (ctx?: BuiltinContext) => {
       if (!ctx?.registry) {
         return { handled: true, skipAgent: true, message: '无法获取上下文信息' };
@@ -229,38 +229,72 @@ const BUILTIN_COMMANDS: BuiltinCommand[] = [
       const store = ctx.registry.store;
       const mode = store.get<string>(SK.Mode) || 'normal';
 
-      if (args === 'open') {
-        const planPath = getPlanFilePath();
-        return { handled: true, skipAgent: true, message: `计划文件路径: ${planPath}` };
+      if (args === 'exec') {
+        // 注入"开始执行"，LLM 在 plan mode 下会自动调 exit_plan_mode
+        return { handled: true, replaceInput: '开始执行' };
       }
 
-      if (args === 'exit') {
+      if (args === 'exit' && mode === 'plan') {
         const preMode = store.get<string>(SK.PrePlanMode) || 'normal';
         store.set(SK.Mode, preMode);
         store.set(SK.PrePlanMode, undefined);
-        return { handled: true, skipAgent: true, message: `已退出 Plan Mode，恢复为 ${preMode} 模式。` };
+        return { handled: true, skipAgent: true, message: '已退出 Plan Mode。' };
       }
 
-      // Show plan content
-      const planPath = getPlanFilePath();
-      let planContent = '';
-      try {
-        planContent = fs.readFileSync(planPath, 'utf-8');
-      } catch { /* no plan yet */ }
+      if (args === 'list') {
+        const files = await listPlanFiles();
+        const plansDir = getPlansDir();
+        if (files.length === 0) {
+          return { handled: true, skipAgent: true, message: `Plan 目录: ${plansDir}\n(暂无计划文件)` };
+        }
+        const lines = files.map(f => `  ${f}`);
+        return { handled: true, skipAgent: true, message: [`Plans in ${plansDir}:`, ...lines].join('\n') };
+      }
+
+      // /plan show <name> — show specific plan
+      if (args.startsWith('show ')) {
+        const name = args.slice(5).trim();
+        const plansDir = getPlansDir();
+        const filePath = path.join(plansDir, `${name}.md`);
+        try {
+          const content = fs.readFileSync(filePath, 'utf-8');
+          return { handled: true, skipAgent: true, message: `\n${content}\n` };
+        } catch {
+          return { handled: true, skipAgent: true, message: `Plan "${name}" not found in ${plansDir}` };
+        }
+      }
+
+      // Default: show status
+      const plansDir = getPlansDir();
+      const planFiles = await listPlanFiles();
+      const currentPlan = store.get<string>(SK.CurrentPlanPath);
+      const planApproved = store.get<boolean>(SK.PlanApproved);
+      const tasks = await readAllTasks();
 
       const lines: string[] = [];
       lines.push('');
-      const modeLabel = mode === 'plan' ? '\x1b[33m● plan mode\x1b[0m' : 'normal';
-      lines.push(`  当前模式: ${modeLabel}`);
-      lines.push(`  计划文件: ${planPath}`);
-      if (planContent) {
-        lines.push('');
-        lines.push(`  当前计划内容:`);
-        lines.push(`  ${planContent.split('\n').join('\n  ')}`);
+      const modeLabel = mode === 'plan' ? '\x1b[33m● plan mode\x1b[0m' : '\x1b[2m● normal mode\x1b[0m';
+      lines.push(`  Mode: ${modeLabel}`);
+      lines.push(`  Plans directory: ${plansDir}`);
+      if (planFiles.length > 0) {
+        lines.push(`  Plans: ${planFiles.length} file(s)`);
+        if (currentPlan) lines.push(`  Current: ${path.basename(currentPlan)}`);
+        lines.push(`  Status: ${planApproved ? '\x1b[32mApproved\x1b[0m' : '\x1b[33mNot approved\x1b[0m'}`);
+      }
+      if (tasks.length > 0) {
+        const done = tasks.filter(t => t.status === 'completed').length;
+        lines.push(`  Tasks: ${done}/${tasks.length} completed`);
       }
       lines.push('');
-      lines.push('  /plan open    打开计划文件');
-      lines.push('  /plan exit    退出 plan mode');
+      lines.push('  Commands:');
+      lines.push('    /plan list      列出所有计划');
+      lines.push('    /plan show <n>  查看指定计划');
+      if (planApproved) {
+        lines.push('    /plan exec      开始执行计划');
+      }
+      if (mode === 'plan') {
+        lines.push('    /plan exit      退出 plan mode');
+      }
       lines.push('');
       return { handled: true, skipAgent: true, message: lines.join('\n') };
     },

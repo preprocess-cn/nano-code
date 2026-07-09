@@ -53,6 +53,11 @@ export const SK = {
   PrePlanMode: 'task-plan:preMode',
   /** string: 计划文件内容 */
   PlanContent: 'task-plan:planContent',
+  /** boolean: 计划是否已批准（exit_plan_mode 成功时设为 true） */
+  PlanApproved: 'task-plan:planApproved',
+
+  /** string: 当前计划文件路径（~/.nano-code/plan/<name>.md） */
+  CurrentPlanPath: 'task-plan:currentPlanPath',
   /** Task[]: 当前任务列表 */
   Tasks: 'task-plan:tasks',
   /** number: 任务数量 */

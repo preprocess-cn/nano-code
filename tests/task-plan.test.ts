@@ -2,8 +2,8 @@ import { test, describe, afterEach, beforeEach } from 'node:test';
 import assert from 'node:assert';
 import * as fs from 'fs';
 import * as path from 'path';
-import os from 'os';
-import { taskPlanPlugin } from '../src/plugins/tools/task-plan.js';
+import * as os from 'os';
+import { taskPlanPlugin, __setTestPlansDir } from '../src/plugins/tools/task-plan.js';
 import { ToolContext } from '../src/core/contract.js';
 import { SK } from '../src/core/store-keys.js';
 
@@ -24,6 +24,12 @@ function removeTempDir(dir: string) {
   fs.rmSync(dir, { recursive: true, force: true });
 }
 
+/** Write a test plan file to a specific plan dir via plan_write tool */
+async function writeTestPlan(name: string, content: string) {
+  const res = await taskPlanPlugin.execute('plan_write', { filename: name, content }, CTX);
+  return res;
+}
+
 /** In-memory store for testing */
 function createTestStore() {
   const data = new Map<string, any>();
@@ -37,10 +43,6 @@ function createTestStore() {
 /** Get the task files directory from the plugin's convention */
 function getTasksDir(): string {
   return path.join(process.cwd(), '.nano-code', 'tasks');
-}
-
-function getPlanFilePath(): string {
-  return path.join(process.cwd(), '.nano-code', 'plan.md');
 }
 
 // ── Tests ──
@@ -80,10 +82,10 @@ describe('task-plan 插件 — enter_plan_mode', () => {
     assert(res.data?.includes('Already in plan mode'));
   });
 
-  test('enter_plan_mode 返回包含计划文件路径的提示', async () => {
+  test('enter_plan_mode 返回进入 plan mode 的提示', async () => {
     const res = await taskPlanPlugin.execute('enter_plan_mode', {}, CTX);
     assert.equal(res.status, 'success');
-    assert(res.data?.includes('.nano-code/plan.md'));
+    assert(res.data?.includes('plan mode'));
   });
 });
 
@@ -96,6 +98,7 @@ describe('task-plan 插件 — exit_plan_mode', () => {
     tmpDir = createTempDir();
     origCwd = process.cwd;
     (process.cwd as any) = () => tmpDir;
+    __setTestPlansDir(tmpDir);
     store = createTestStore();
     store.set(SK.Mode, 'plan');
     await taskPlanPlugin.onInit!({
@@ -106,7 +109,8 @@ describe('task-plan 插件 — exit_plan_mode', () => {
 
   afterEach(() => {
     (process.cwd as any) = origCwd;
-    removeTempDir(tmpDir);
+    __setTestPlansDir(undefined);
+    if (tmpDir) removeTempDir(tmpDir);
   });
 
   test('exit_plan_mode 无计划文件时报错', async () => {
@@ -115,77 +119,74 @@ describe('task-plan 插件 — exit_plan_mode', () => {
     assert(res.message?.includes('No plan found'));
   });
 
-  test('exit_plan_mode 有计划文件时调用 confirmCallback', async () => {
-    // Write plan file
-    const planDir = path.join(tmpDir, '.nano-code');
-    fs.mkdirSync(planDir, { recursive: true });
-    fs.writeFileSync(getPlanFilePath(), '1. Refactor utils\n2. Add tests', 'utf-8');
+  test('exit_plan_mode 保存计划并退出 plan 模式', async () => {
+    await writeTestPlan('test-plan', '1. Refactor utils\n2. Add tests');
 
-    let confirmCalled = false;
-    const ctxWithConfirm: ToolContext = {
-      ...CTX,
-      confirmCallback: async (req) => {
-        confirmCalled = true;
-        assert(req.message.includes('Exit plan mode'));
-        assert(req.details?.includes('Refactor utils'));
-        return true; // approve
-      },
-    };
-
-    const res = await taskPlanPlugin.execute('exit_plan_mode', {}, ctxWithConfirm);
+    const res = await taskPlanPlugin.execute('exit_plan_mode', {}, CTX);
     assert.equal(res.status, 'success');
-    assert(confirmCalled, 'confirmCallback should have been called');
+    assert(res.data?.includes('Refactor utils'));
     // Mode should be back to normal
     assert.equal(store.get(SK.Mode), 'normal');
-  });
-
-  test('exit_plan_mode 用户拒绝后保持 plan 模式', async () => {
-    const planDir = path.join(tmpDir, '.nano-code');
-    fs.mkdirSync(planDir, { recursive: true });
-    fs.writeFileSync(getPlanFilePath(), 'Some plan', 'utf-8');
-
-    let confirmCalled = false;
-    const ctxWithConfirm: ToolContext = {
-      ...CTX,
-      confirmCallback: async () => {
-        confirmCalled = true;
-        return false; // reject
-      },
-    };
-
-    const res = await taskPlanPlugin.execute('exit_plan_mode', {}, ctxWithConfirm);
-    assert.equal(res.status, 'rejected_by_user');
-    assert(confirmCalled);
-    // Mode should remain plan
-    assert.equal(store.get(SK.Mode), 'plan');
+    // Plan should be approved
+    assert.equal(store.get(SK.PlanApproved), true);
   });
 
   test('exit_plan_mode 恢复 PrePlanMode', async () => {
-    const planDir = path.join(tmpDir, '.nano-code');
-    fs.mkdirSync(planDir, { recursive: true });
-    fs.writeFileSync(getPlanFilePath(), 'Test plan', 'utf-8');
-
+    await writeTestPlan('test-plan', 'Test plan');
     store.set(SK.PrePlanMode, 'custom-mode');
-    const res = await taskPlanPlugin.execute('exit_plan_mode', {}, {
-      ...CTX,
-      confirmCallback: async () => true,
-    });
+
+    const res = await taskPlanPlugin.execute('exit_plan_mode', {}, CTX);
     assert.equal(res.status, 'success');
     assert.equal(store.get(SK.Mode), 'custom-mode');
     assert.equal(store.get(SK.PrePlanMode), undefined);
   });
 
   test('exit_plan_mode 无 PrePlanMode 时恢复 normal', async () => {
-    const planDir = path.join(tmpDir, '.nano-code');
-    fs.mkdirSync(planDir, { recursive: true });
-    fs.writeFileSync(getPlanFilePath(), 'Plan content', 'utf-8');
+    await writeTestPlan('test-plan', 'Plan content');
 
-    const res = await taskPlanPlugin.execute('exit_plan_mode', {}, {
-      ...CTX,
-      confirmCallback: async () => true,
-    });
+    const res = await taskPlanPlugin.execute('exit_plan_mode', {}, CTX);
     assert.equal(res.status, 'success');
     assert.equal(store.get(SK.Mode), 'normal');
+  });
+
+  test('exit_plan_mode 设置 PlanContent 和 PlanApproved', async () => {
+    await writeTestPlan('my-plan', 'Step 1\nStep 2');
+
+    await taskPlanPlugin.execute('exit_plan_mode', {}, CTX);
+    assert.equal(store.get(SK.PlanApproved), true);
+    assert(store.get<string>(SK.PlanContent)?.includes('Step 1'));
+  });
+
+  test('plan_write 写入并跟踪当前计划路径', async () => {
+    const res = await writeTestPlan('my-plan', 'Content');
+    assert.equal(res.status, 'success');
+    assert(res.data?.includes('my-plan.md'));
+
+    const trackedPath = store.get<string>(SK.CurrentPlanPath);
+    assert(trackedPath, 'should track current plan path');
+    assert(trackedPath?.includes('my-plan.md'));
+  });
+
+  test('plan_write 拒绝路径遍历', async () => {
+    const res = await taskPlanPlugin.execute('plan_write', { filename: '../../etc/passwd', content: 'evil' }, CTX);
+    assert.equal(res.status, 'error');
+    assert(res.message?.includes('filename'));
+  });
+
+  test('plan_write 拒绝非法字符', async () => {
+    const res = await taskPlanPlugin.execute('plan_write', { filename: 'my plan!', content: 'test' }, CTX);
+    assert.equal(res.status, 'error');
+    assert(res.message?.includes('filename'));
+  });
+
+  test('plan_list 列出所有计划文件', async () => {
+    await writeTestPlan('plan-a', 'Plan A');
+    await writeTestPlan('plan-b', 'Plan B');
+
+    const res = await taskPlanPlugin.execute('plan_list', {}, CTX);
+    assert.equal(res.status, 'success');
+    assert(res.data?.includes('plan-a.md'));
+    assert(res.data?.includes('plan-b.md'));
   });
 });
 

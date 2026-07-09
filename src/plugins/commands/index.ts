@@ -33,8 +33,8 @@ export function createCommandsPlugin(display?: DisplayManager): NanoPlugin {
     },
 
     async onBeforeAgentInput(input: string): Promise<CommandInterceptResult | null> {
-      // 纯文本 exit/quit 也拦截（不要求 / 前缀）
       const lower = input.trim().toLowerCase();
+      // 纯文本 exit/quit 也拦截（不要求 / 前缀）
       if (lower === 'exit' || lower === 'quit') {
         return { handled: true, exit: true };
       }
