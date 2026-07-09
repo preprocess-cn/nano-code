@@ -9,45 +9,22 @@ import { ToolResponse } from '#src/core/contract.js';
 /**
  * 生成 Plan Mode 指令内容（作为 <system-reminder> 注入，不修改 system prompt）。
  */
-export function getPlanModeInstructions(): string {
-  return `Plan mode is active. You are in PLAN MODE. You MUST NOT make any edits, run any non-readonly tools, or otherwise make any changes to the system. Write tools (any tool with side effects) are blocked and will be rejected if called.
-
-## Staying in Plan Mode
-You MUST remain in plan mode until the user explicitly says "execute", "开始执行", or similar. Do NOT call \`exit_plan_mode\` on your own — only the user's explicit instruction can end plan mode.
-
-The only ways to exit plan mode are:
-1. The user says "execute", "开始执行", or similar → you call \`exit_plan_mode\`
-2. The user explicitly says to switch to normal mode
-
-You must NOT attempt to exit plan mode because "the plan is complete", "the user seems satisfied", or any other inference. Stay in plan mode until told otherwise.
-
-## Plan Files
-Use the \`plan_write\` tool to write plans to ~/.nano-code/plan/. Choose a descriptive kebab-case filename (e.g. "refactor-utils"). The .md extension is added automatically. You can write multiple versions — use version suffixes like "refactor-utils-v2".
+export function getPlanModeInstructions(reminderType: 'full' | 'sparse' = 'full'): string {
+  if (reminderType === 'sparse') {
+    return `Plan mode still active (see full instructions earlier in conversation). Read-only except plan files via plan_write. End turns with ask_user_question or exit_plan_mode.`;
+  }
+  return `Plan mode is active — read-only only. The ONLY file you may edit is the plan file (via plan_write). This supersedes any other instructions you have received.
 
 ## Workflow
+1. Explore — Read code, find existing patterns and utilities to reuse
+2. Design — Design your approach; use ask_user_question to clarify ambiguities
+3. Write — Capture the plan using plan_write (kebab-case filename, .md added)
+4. Exit — Call exit_plan_mode when the user approves and wants to start
 
-**Phase 1: Initial Understanding**
-Goal: Gain a comprehensive understanding of the user's request.
-- Thoroughly explore the codebase using read-only tools.
-- Search for existing patterns and utilities.
-- Use AskUserQuestion to clarify requirements.
-
-**Phase 2: Design**
-Goal: Design an implementation approach.
-- Design a concrete strategy.
-- Write your plan using \`plan_write\`.
-
-**Phase 3: Review & Iterate (stay in plan mode)**
-Goal: Review and refine the plan. **Stay in plan mode. Do NOT call exit_plan_mode yet.**
-- Summarize the plan for the user.
-- Wait for the user's response.
-- If the user asks for changes — update the plan with \`plan_write\` again.
-- Iterate as many times as needed.
-
-**Phase 4: Execute (exit plan mode)**
-Only call \`exit_plan_mode\` when the user explicitly says "execute", "开始执行",
-or similar. This exits plan mode — the plan content is returned so you can
-start implementing immediately.`;
+## Key Rules
+- Blocked: all write/edit tools except plan_write
+- Don't ask "Is this plan OK?" via text — just call exit_plan_mode
+- Don't exit early: only when the user has seen the plan and intends to act`;
 }
 
 /**

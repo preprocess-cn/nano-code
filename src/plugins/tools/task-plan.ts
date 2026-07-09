@@ -1,6 +1,7 @@
 import { NanoPlugin, PluginRegistry } from '#src/core/plugin.js';
 import { ToolDefinition, ToolResponse, ToolContext, ToolCall } from '#src/core/contract.js';
 import { ChatMessage } from '#src/core/llm.js';
+import { getPlanModeInstructions } from '#src/core/prompt.js';
 import {
   Task, TaskStatus,
 } from '#src/plugins/task-plan/types.js';
@@ -140,7 +141,7 @@ async function handleEnterPlanMode(): Promise<ToolResponse> {
   _store.set('task-plan:attachmentIndex', 0);
   return {
     status: 'success',
-    data: 'Entered plan mode. Use plan_write to write plans. After writing, summarize the plan and wait for the user. Do NOT call exit_plan_mode until the user says "execute" or "开始执行".',
+    data: 'Entered plan mode. Use plan_write to write plans. After writing, summarize the plan and wait for the user. Call exit_plan_mode when the user expresses approval and intent to start implementing.',
   };
 }
 
@@ -429,7 +430,7 @@ const TOOLS: ToolDefinition[] = [
     type: 'function',
     function: {
       name: 'enter_plan_mode',
-      description: 'Enter plan mode for exploration and design. Use plan_write to write plans. Do NOT call exit_plan_mode until the user explicitly says "execute".',
+      description: 'Enter plan mode for exploration and design. Use plan_write to write plans. Call exit_plan_mode when the user expresses approval and intent to start implementing.',
       parameters: { type: 'object', properties: {}, required: [] },
       sideEffect: false,
     },
@@ -438,7 +439,7 @@ const TOOLS: ToolDefinition[] = [
     type: 'function',
     function: {
       name: 'exit_plan_mode',
-      description: 'Exit plan mode and return the plan content. Only call this when the user explicitly says "execute", "开始执行", or similar. The plan content is returned so you can start implementing immediately.',
+      description: 'Exit plan mode and return the plan content. Call this when the user clearly expresses approval and intent to start implementing (e.g. "开始实行", "开始执行", "execute"). Exits plan mode so you can start implementing.',
       parameters: { type: 'object', properties: {}, required: [] },
       sideEffect: false,
     },
@@ -568,69 +569,69 @@ export const taskPlanPlugin: NanoPlugin = {
     }
   },
 
-  onBeforeRequest(messages: ChatMessage[]): ChatMessage[] {
-    // 退出 plan mode 后的一次性提醒（即使 mode 已切回 normal 也要注入）
-    if (_store?.get('task-plan:needsExitReminder')) {
-      _store!.set('task-plan:needsExitReminder', false);
-      messages.splice(messages.length - 1, 0, {
-        role: 'user',
-        content: `<system-reminder>\nYou have exited plan mode. You can now make edits, run tools, and take actions.\n</system-reminder>`,
-      });
-      return messages;
-    }
+	  onBeforeRequest(messages: ChatMessage[]): ChatMessage[] {
+	    // 退出 plan mode 后的一次性提醒（即使 mode 已切回 normal 也要注入）
+	    if (_store?.get('task-plan:needsExitReminder')) {
+	      _store!.set('task-plan:needsExitReminder', false);
+	      messages.splice(messages.length - 1, 0, {
+	        role: 'user',
+	        content: `<system-reminder>\nYou have exited plan mode. You can now make edits, run tools, and take actions.\n</system-reminder>`,
+	      });
+	      return messages;
+	    }
 
-    // Plan mode 提醒节流：agent.ts 每轮都注入完整指令，
-    // 此钩子根据节流策略保留/替换/删除该注入
-    if (!_registry || _store?.get(SK.Mode) !== 'plan') return messages;
+	    // Plan mode 提醒节流：agent.ts 每轮都注入完整指令，
+	    // 此钩子根据节流策略保留/替换/删除该注入
+	    if (!_registry || _store?.get(SK.Mode) !== 'plan') return messages;
 
-    // 反向搜索最后一条 <system-reminder> 用户消息（不依赖固定位置，
-    // 因为 token-budget 等插件的 onBeforeRequest 可能先于本钩子修改数组长度）
-    let injectionIdx = -1;
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const m = messages[i];
-      if (m.role === 'user' && typeof m.content === 'string' &&
-          m.content.includes('<system-reminder>')) {
-        injectionIdx = i;
-        break;
-      }
-    }
-    if (injectionIdx === -1) return messages;
+	    // 反向搜索最后一条 <system-reminder> 用户消息（不依赖固定位置，
+	    // 因为 token-budget 等插件的 onBeforeRequest 可能先于本钩子修改数组长度）
+	    let injectionIdx = -1;
+	    for (let i = messages.length - 1; i >= 0; i--) {
+	      const m = messages[i];
+	      if (m.role === 'user' && typeof m.content === 'string' &&
+	          m.content.includes('<system-reminder>')) {
+	        injectionIdx = i;
+	        break;
+	      }
+	    }
+	    if (injectionIdx === -1) return messages;
 
-    const TURNS_BETWEEN = 5;
-    const FULL_EVERY_N = 5;
+	    const TURNS_BETWEEN = 5;
+	    const FULL_EVERY_N = 5;
 
-    let turnCounter = (_store!.get<number>('task-plan:turnCounter') ?? 0) + 1;
-    _store!.set('task-plan:turnCounter', turnCounter);
+	    let turnCounter = (_store!.get<number>('task-plan:turnCounter') ?? 0) + 1;
+	    _store!.set('task-plan:turnCounter', turnCounter);
 
-    // 首次进入 plan mode：完整指令
-    if (turnCounter === 1) {
-      _store!.set('task-plan:attachmentIndex', 0);
-      return messages;
-    }
+	    // 首次进入 plan mode：完整指令
+	    if (turnCounter === 1) {
+	      _store!.set('task-plan:attachmentIndex', 0);
+	      return messages;
+	    }
 
-    // 每 TURNS_BETWEEN 轮才注入一次，其余跳过
-    if ((turnCounter - 1) % TURNS_BETWEEN !== 0) {
-      messages.splice(injectionIdx, 1);
-      return messages;
-    }
+	    // 每 TURNS_BETWEEN 轮才注入一次，其余跳过
+	    if ((turnCounter - 1) % TURNS_BETWEEN !== 0) {
+	      messages.splice(injectionIdx, 1);
+	      return messages;
+	    }
 
-    // 到此：需要注入。判断完整版还是精简版
-    const attachIdx = _store!.get<number>('task-plan:attachmentIndex') ?? 0;
+	    // 到此：需要注入。判断完整版(full)还是精简版(sparse)
+	    const attachIdx = _store!.get<number>('task-plan:attachmentIndex') ?? 0;
+	    _store!.set('task-plan:attachmentIndex', attachIdx + 1);
 
-    if (attachIdx % FULL_EVERY_N === 0) {
-      // 每 FULL_EVERY_N 次附件 = 完整版（agent.ts 已注入，保留原样）
-      _store!.set('task-plan:attachmentIndex', attachIdx + 1);
-      return messages;
-    }
+	    if (attachIdx % FULL_EVERY_N === 0) {
+	      // 每 FULL_EVERY_N 次附件 = full 版（agent.ts 已注入，保留原样）
+	      return messages;
+	    }
 
-    // 精简版：替换内容
-    messages[injectionIdx] = {
-      role: 'user',
-      content: `<system-reminder>\nPlan mode still active (see full instructions earlier in conversation). Read-only except writing plan files via plan_write. End turns with ask_user_question or exit_plan_mode.\n</system-reminder>`,
-    };
-    _store!.set('task-plan:attachmentIndex', attachIdx + 1);
-    return messages;
-  },
+	    // sparse 版：替换为简短提醒
+	    messages[injectionIdx] = {
+	      role: 'user',
+	      content: `<system-reminder>\n${getPlanModeInstructions('sparse')}\n</system-reminder>`,
+	    };
+	    return messages;
+	  },
+
 
   onBeforeToolCall(toolCall: ToolCall): ToolCall | null {
     // Plan mode: 拦截所有有 sideEffect 的工具调用

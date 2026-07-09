@@ -669,6 +669,39 @@ describe('task-plan 插件 — plan mode 钩子', () => {
     assert(result[1].content?.includes('Plan mode still active'));
     assert.equal(store.get('task-plan:attachmentIndex'), 2);
   });
+  test('onBeforeRequest 第16轮注入精简版（中间索引）', async () => {
+    store.set(SK.Mode, 'plan');
+    store.set('task-plan:turnCounter', 15);
+    store.set('task-plan:attachmentIndex', 2);
+
+    const msgs = [
+      { role: 'system', content: 'system' },
+      { role: 'user', content: '<system-reminder>\nPlan mode...\n</system-reminder>' },
+      { role: 'user', content: 'turn 16' },
+    ];
+    const result = taskPlanPlugin.onBeforeRequest!(msgs);
+    assert.equal(result.length, 3);
+    // attachIdx=2 → 2%5!==0 → 精简版
+    assert(result[1].content?.includes('Plan mode still active'), '中间索引应注入 sparse 版');
+    assert.equal(store.get('task-plan:attachmentIndex'), 3);
+  });
+
+  test('onBeforeRequest 第31轮恢复完整版（周期复位）', async () => {
+    store.set(SK.Mode, 'plan');
+    store.set('task-plan:turnCounter', 30);
+    store.set('task-plan:attachmentIndex', 5);
+
+    const msgs = [
+      { role: 'system', content: 'system' },
+      { role: 'user', content: '<system-reminder>\nPlan mode...\n</system-reminder>' },
+      { role: 'user', content: 'turn 31' },
+    ];
+    const result = taskPlanPlugin.onBeforeRequest!(msgs);
+    assert.equal(result.length, 3);
+    // attachIdx=5 → 5%5===0 → 完整版（agent.ts 注入的原样保留）
+    assert(!result[1].content?.includes('Plan mode still active'), 'full 版不应包含 sparse 内容');
+    assert.equal(store.get('task-plan:attachmentIndex'), 6);
+  });
 
   test('onBeforeToolCall plan mode 拦截 write_file_content', async () => {
     store.set(SK.Mode, 'plan');
