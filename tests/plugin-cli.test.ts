@@ -7,7 +7,7 @@ import { tmpdir } from 'os';
 import { handlePluginCommand } from '../src/plugin-cli.js';
 import { PluginRegistry } from '../src/core/plugin.js';
 import { setMcpJsonPaths } from '../src/plugins/mcp/adapter.js';
-import { addMcpServer } from '../src/plugins/mcp/config-writer.js';
+import { addMcpServer } from '../src/core/mcp-config.js';
 
 // ── CLI 命令退出测试 ──
 // 确保所有 plugin 子命令都能正常完成，不遗留孤儿进程。

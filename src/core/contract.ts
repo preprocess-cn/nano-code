@@ -116,6 +116,30 @@ export interface PermissionConfirmRequest {
 
 export type PermissionConfirmResponse = boolean | 'always_allow';
 
+// ── Context analysis types (shared between token-budget plugin and display layer) ──
+
+export interface ContextItem {
+  name: string;
+  tokens: number;
+}
+
+export interface ContextDimension {
+  name: string;
+  tokens: number;
+  percentage: number;
+  items: ContextItem[];
+}
+
+export interface ContextAnalysis {
+  modelName: string;
+  contextWindow: number;
+  totalTokens: number;
+  usageSource: 'api' | 'estimated';
+  percentage: number;
+  dimensions: ContextDimension[];
+  freeTokens: number;
+}
+
 /** Display-layer output handler for command stdout/stderr streaming. */
 export interface CommandOutputHandler {
   stdout(chunk: string): void;

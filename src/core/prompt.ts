@@ -7,27 +7,6 @@ import { SystemPromptConfig } from '#src/core/config.js';
 import { ToolResponse } from '#src/core/contract.js';
 
 /**
- * 生成 Plan Mode 指令内容（作为 <system-reminder> 注入，不修改 system prompt）。
- */
-export function getPlanModeInstructions(reminderType: 'full' | 'sparse' = 'full'): string {
-  if (reminderType === 'sparse') {
-    return `Plan mode still active (see full instructions earlier in conversation). Read-only except plan files via plan_write. End turns with ask_user_question or exit_plan_mode.`;
-  }
-  return `Plan mode is active — read-only only. The ONLY file you may edit is the plan file (via plan_write). This supersedes any other instructions you have received.
-
-## Workflow
-1. Explore — Read code, find existing patterns and utilities to reuse
-2. Design — Design your approach; use ask_user_question to clarify ambiguities
-3. Write — Capture the plan using plan_write (kebab-case filename, .md added)
-4. Exit — Call exit_plan_mode when the user approves and wants to start
-
-## Key Rules
-- Blocked: all write/edit tools except plan_write
-- Don't ask "Is this plan OK?" via text — just call exit_plan_mode
-- Don't exit early: only when the user has seen the plan and intends to act`;
-}
-
-/**
  * 组装系统提示词。
  *
  * ① 角色模板（带变量替换 {role} {tool_list}）

@@ -6,7 +6,8 @@ import { DisplayManager } from '#src/display.js';
 import { logManager } from '#src/core/logger.js';
 import { loadAllSkills } from '#src/plugins/skills/loader.js';
 import { getBundledSkills } from '#src/plugins/skills/bundled/index.js';
-import { analyzeContextUsage, type ContextAnalysis } from '#src/plugins/token-budget/analyzer.js';
+import { analyzeContextUsage } from '#src/plugins/token-budget/analyzer.js';
+import type { ContextAnalysis } from '#src/core/contract.js';
 import { CompactService } from '#src/plugins/compact/service.js';
 import { saveSession } from '#src/core/session.js';
 import { execSync } from 'child_process';
@@ -17,8 +18,8 @@ import { readAllTasks, getPlansDir, listPlanFiles } from '#src/plugins/tools/tas
 import { SK } from '#src/core/store-keys.js';
 import type { ModelEntry } from '#src/core/llm.js';
 import { runDoctor, formatDoctorResults } from '#src/core/doctor.js';
-import { loadAgentDefinitions } from '#src/plugins/coordinator/agent-loader.js';
-import { readMcpJson, getProjectMcpJsonPath, getGlobalMcpJsonPath, getClaudeMcpJsonPath } from '#src/plugins/mcp/config-writer.js';
+import { loadAgentDefinitions } from '#src/core/agent-loader.js';
+import { readMcpJson, getProjectMcpJsonPath, getGlobalMcpJsonPath, getClaudeMcpJsonPath } from '#src/core/mcp-config.js';
 
 export interface BuiltinContext {
   agent: NanoCodeAgent;

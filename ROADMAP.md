@@ -8,6 +8,8 @@
 | ✅ | 配置测试覆盖 | config.ts 合并逻辑测试 |
 | ✅ | Agent 测试覆盖 | getHistory / loadHistory 测试 |
 | ✅ | 会话持久化 | `-c`/`--continue` 接续上次对话，`finally` 块自动保存 |
+| ✅ | **核心层解耦** | Plan mode 注入从 `agent.ts` 核心循环迁至 `task-plan` 插件 `onBeforeRequest` 钩子；Display 初始化从 `display.ts` 提取到插件层 `init.ts`，核心层不再依赖具体展示实现 |
+| ✅ | **文件结构重组** | `agent-loader.ts`（`coordinator/` → `core/`）、`config-writer.ts`（`mcp/` → `core/mcp-config.ts`）；`ContextAnalysis` 类型从 plugin 的 `analyzer.ts` 提升到 `core/contract.ts`，消除类型泄漏 |
 
 ## P1 — 日常体验
 
@@ -222,7 +224,7 @@ MCP 和 agent 工具都是"主 agent 委托能力给外部"，区别在：
 
 Agent 协调功能集中在 `src/plugins/coordinator/`：
 - `coordinator.ts` — AgentCoordinator 插件，统一注册和管理所有 agent 工具
-- `agent-loader.ts` — 扫描 `~/.nano-code/agents/*.yaml`，校验并加载 agent 定义
+- `agent-loader.ts`（`src/core/`）— 扫描 `~/.nano-code/agents/*.yaml`，校验并加载 agent 定义
 - `agent-tool.ts` — 包装 agent 定义为 NanoPlugin 工具，每个调用创建独立子 agent
 - `task-manager.ts` — 后台任务调度（依赖 AgentLifecycle 真实中止子 agent）
 - `lifecycle.ts` — AgentLifecycle 单例，管理 AbortController 层次结构

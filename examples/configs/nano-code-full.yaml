@@ -19,7 +19,7 @@ system_plugins:
   - memory
   - token-budget
   - skills
-  - search
+  - file-search
   - web                       # web 插件加入白名单，默认启用
 
 # Display 插件 — 可选：repl（默认）| claude-code-ink（TUI）

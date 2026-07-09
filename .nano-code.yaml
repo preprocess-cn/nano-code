@@ -1,1 +1,7 @@
-# 默认 REPL 展示层（tui 已被移除）
+display:
+  plugin: claude-code-ink
+  enabled: true
+
+plugins:
+  web:
+    enabled: true

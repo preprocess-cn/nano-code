@@ -3,7 +3,7 @@ import { ToolResponse, ToolContext, ToolDefinition } from '#src/core/contract.js
 import { LLMClient, ChatMessage } from '#src/core/llm.js';
 import { AgentManager } from '#src/core/agent-manager.js';
 import { DisplayManager } from '#src/display.js';
-import { loadAgentDefinitions, AgentDefinition } from '#src/plugins/coordinator/agent-loader.js';
+import { loadAgentDefinitions, AgentDefinition } from '#src/core/agent-loader.js';
 import { createAgentToolPlugin } from '#src/plugins/coordinator/agent-tool.js';
 import { BackgroundTaskManager } from '#src/plugins/coordinator/task-manager.js';
 import { MessageBus } from '#src/plugins/coordinator/message-bus.js';

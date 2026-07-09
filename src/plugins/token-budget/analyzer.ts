@@ -2,37 +2,14 @@ import { NanoCodeAgent } from '#src/core/agent.js';
 import { PluginRegistry } from '#src/core/plugin.js';
 import { NanoConfig } from '#src/core/config.js';
 import { buildSystemPrompt } from '#src/core/prompt.js';
-import { loadAgentDefinitions } from '#src/plugins/coordinator/agent-loader.js';
+import { loadAgentDefinitions } from '#src/core/agent-loader.js';
 import { loadAllSkills } from '#src/plugins/skills/loader.js';
 import { MEMORY_RULES_PROMPT } from '#src/plugins/tools/memory.js';
 import { SK } from '#src/core/store-keys.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import { countTokens, countMessagesTokens } from '#src/plugins/token-budget/counter.js';
-
-// ── Types ──
-
-export interface ContextItem {
-  name: string;
-  tokens: number;
-}
-
-export interface ContextDimension {
-  name: string;
-  tokens: number;
-  percentage: number;
-  items: ContextItem[];
-}
-
-export interface ContextAnalysis {
-  modelName: string;
-  contextWindow: number;
-  totalTokens: number;
-  usageSource: 'api' | 'estimated';
-  percentage: number;
-  dimensions: ContextDimension[];
-  freeTokens: number;
-}
+import type { ContextItem, ContextDimension, ContextAnalysis } from '#src/core/contract.js';
 
 // ── Context window lookup ──
 

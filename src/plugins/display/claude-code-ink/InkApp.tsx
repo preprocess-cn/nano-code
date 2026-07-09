@@ -6,8 +6,7 @@ import { useDeclaredCursor } from '#src/plugins/display/claude-code-ink/engine/h
 import { ColorDiff } from '#src/plugins/display/claude-code-ink/color-diff.js';
 import { Markdown, StreamingMarkdown } from '#src/plugins/display/claude-code-ink/components/Markdown.js';
 import { BackgroundTaskBar } from '#src/plugins/display/claude-code-ink/components/BackgroundTaskBar.js';
-import type { DiffHunk } from '#src/core/contract.js';
-import type { ContextAnalysis } from '#src/plugins/token-budget/analyzer.js';
+import type { DiffHunk, ContextAnalysis } from '#src/core/contract.js';
 import { QuestionsDialog } from './QuestionsDialog.js';
 
 export type PermissionResponse = 'allow_once' | 'always_allow' | 'deny';

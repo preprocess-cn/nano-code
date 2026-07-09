@@ -1,5 +1,5 @@
 import type { DisplayPlugin, StartConfig, StatusEvent, StreamEvent, ToolCallEvent, ToolResultEvent, ErrorEvent, AgentEvent, BackgroundTaskEvent, StateSnapshot, MessageLevel } from '#src/display.js';
-import type { ContextAnalysis } from '#src/plugins/token-budget/analyzer.js';
+import type { ContextAnalysis } from '#src/core/contract.js';
 import { inkRender, type Instance } from '#src/plugins/display/claude-code-ink/ink.js';
 import { InkApp, type UIMessage, type TextSegment, type PermissionPrompt, type PermissionResponse, type BackgroundTaskInfo } from '#src/plugins/display/claude-code-ink/InkApp.js';
 import { ThinkStream } from '#src/plugins/display/think-stream.js';
@@ -274,6 +274,10 @@ function createPlugin(): DisplayPlugin {
 
       // 订阅 mode 变化，确保 Ink 显示及时更新
       unsubMode = registry.store.subscribe(SK.Mode, () => render());
+
+      // 初始化斜杠命令建议（收集技能/命令/agent 列表供自动补全）
+      const { initCommandSuggestions } = await import('#src/plugins/display/claude-code-ink/skills-bridge.js');
+      initCommandSuggestions([]);
     },
 
     onStart(config: StartConfig): void {

@@ -6,6 +6,7 @@ import * as os from 'os';
 import { taskPlanPlugin, __setTestPlansDir } from '../src/plugins/tools/task-plan.js';
 import { ToolContext } from '../src/core/contract.js';
 import { SK } from '../src/core/store-keys.js';
+import type { ChatMessage } from '../src/core/llm.js';
 
 // ── Helpers ──
 
@@ -598,7 +599,7 @@ describe('task-plan 插件 — plan mode 钩子', () => {
   test('onBeforeRequest 退出后注入退出提醒', async () => {
     store.set('task-plan:needsExitReminder', true);
 
-    const msgs = [
+    const msgs: ChatMessage[] = [
       { role: 'system', content: 'system' },
       { role: 'user', content: 'continue' },
     ];
@@ -608,30 +609,30 @@ describe('task-plan 插件 — plan mode 钩子', () => {
     assert.equal(store.get('task-plan:needsExitReminder'), false);
   });
 
-  test('onBeforeRequest 首次保留完整指令', async () => {
+  test('onBeforeRequest 首次注入完整指令', async () => {
     store.set(SK.Mode, 'plan');
 
-    const msgs = [
+    const msgs: ChatMessage[] = [
       { role: 'system', content: 'system' },
-      { role: 'user', content: '<system-reminder>\nPlan mode is active...\n</system-reminder>' },
-      { role: 'user', content: 'explore' },
+      { role: 'user', content: 'first turn' },
     ];
     const result = taskPlanPlugin.onBeforeRequest!(msgs);
-    assert.equal(result.length, 3);
+    assert.equal(result.length, 3, '应注入 plan mode 提醒');
+    assert(result[1].content?.includes('Plan mode is active'), '首次应注入 full 版');
     assert.equal(store.get('task-plan:turnCounter'), 1);
+    assert.equal(store.get('task-plan:attachmentIndex'), 0);
   });
 
   test('onBeforeRequest 第2轮跳过注入', async () => {
     store.set(SK.Mode, 'plan');
     store.set('task-plan:turnCounter', 1);
 
-    const msgs = [
+    const msgs: ChatMessage[] = [
       { role: 'system', content: 'system' },
-      { role: 'user', content: '<system-reminder>\nPlan mode...\n</system-reminder>' },
       { role: 'user', content: 'turn 2' },
     ];
     const result = taskPlanPlugin.onBeforeRequest!(msgs);
-    assert.equal(result.length, 2, '第2轮应移除 reminder');
+    assert.equal(result.length, 2, '第2轮不应注入');
     assert.equal(store.get('task-plan:turnCounter'), 2);
   });
 
@@ -640,16 +641,15 @@ describe('task-plan 插件 — plan mode 钩子', () => {
     store.set('task-plan:turnCounter', 5);
     store.set('task-plan:attachmentIndex', 0);
 
-    const msgs = [
+    const msgs: ChatMessage[] = [
       { role: 'system', content: 'system' },
-      { role: 'user', content: '<system-reminder>\nPlan mode...\n</system-reminder>' },
       { role: 'user', content: 'turn 6' },
     ];
     const result = taskPlanPlugin.onBeforeRequest!(msgs);
-    assert.equal(result.length, 3);
-    // attachIdx=0 → 0%5===0 → 完整版（agent.ts 注入的原样保留）
-    // 完整版 = agent.ts 注入内容保留（不含 "still active"）
-    assert(!result[1].content?.includes('Plan mode still active'));
+    assert.equal(result.length, 3, '应注入 plan mode 提醒');
+    // attachIdx=0 → 0%5===0 → 完整版
+    assert(result[1].content?.includes('Plan mode is active'), '应包含 full 版指令');
+    assert(!result[1].content?.includes('Plan mode still active'), '不应包含 sparse 版指令');
     assert.equal(store.get('task-plan:attachmentIndex'), 1);
   });
 
@@ -658,15 +658,14 @@ describe('task-plan 插件 — plan mode 钩子', () => {
     store.set('task-plan:turnCounter', 10);
     store.set('task-plan:attachmentIndex', 1);
 
-    const msgs = [
+    const msgs: ChatMessage[] = [
       { role: 'system', content: 'system' },
-      { role: 'user', content: '<system-reminder>\nPlan mode...\n</system-reminder>' },
       { role: 'user', content: 'turn 11' },
     ];
     const result = taskPlanPlugin.onBeforeRequest!(msgs);
-    assert.equal(result.length, 3);
+    assert.equal(result.length, 3, '应注入 plan mode 提醒');
     // attachIdx=1 → 1%5!==0 → 精简版
-    assert(result[1].content?.includes('Plan mode still active'));
+    assert(result[1].content?.includes('Plan mode still active'), '应包含 sparse 版指令');
     assert.equal(store.get('task-plan:attachmentIndex'), 2);
   });
   test('onBeforeRequest 第16轮注入精简版（中间索引）', async () => {
@@ -674,13 +673,12 @@ describe('task-plan 插件 — plan mode 钩子', () => {
     store.set('task-plan:turnCounter', 15);
     store.set('task-plan:attachmentIndex', 2);
 
-    const msgs = [
+    const msgs: ChatMessage[] = [
       { role: 'system', content: 'system' },
-      { role: 'user', content: '<system-reminder>\nPlan mode...\n</system-reminder>' },
       { role: 'user', content: 'turn 16' },
     ];
     const result = taskPlanPlugin.onBeforeRequest!(msgs);
-    assert.equal(result.length, 3);
+    assert.equal(result.length, 3, '应注入 plan mode 提醒');
     // attachIdx=2 → 2%5!==0 → 精简版
     assert(result[1].content?.includes('Plan mode still active'), '中间索引应注入 sparse 版');
     assert.equal(store.get('task-plan:attachmentIndex'), 3);
@@ -691,14 +689,14 @@ describe('task-plan 插件 — plan mode 钩子', () => {
     store.set('task-plan:turnCounter', 30);
     store.set('task-plan:attachmentIndex', 5);
 
-    const msgs = [
+    const msgs: ChatMessage[] = [
       { role: 'system', content: 'system' },
-      { role: 'user', content: '<system-reminder>\nPlan mode...\n</system-reminder>' },
       { role: 'user', content: 'turn 31' },
     ];
     const result = taskPlanPlugin.onBeforeRequest!(msgs);
-    assert.equal(result.length, 3);
-    // attachIdx=5 → 5%5===0 → 完整版（agent.ts 注入的原样保留）
+    assert.equal(result.length, 3, '应注入 plan mode 提醒');
+    // attachIdx=5 → 5%5===0 → 完整版
+    assert(result[1].content?.includes('Plan mode is active'), '第5次附件应恢复 full 版');
     assert(!result[1].content?.includes('Plan mode still active'), 'full 版不应包含 sparse 内容');
     assert.equal(store.get('task-plan:attachmentIndex'), 6);
   });

@@ -1,10 +1,7 @@
 import { PluginRegistry } from '#src/core/plugin.js';
-import type { NanoConfig } from '#src/core/config.js';
 import type { ToolStatus, AgentDisplay, AgentEvent, MessageLevel, StatusEvent, StreamEvent, ToolCallEvent, ToolResultEvent, StateSnapshot } from '#src/core/contract.js';
-import type { ContextAnalysis } from '#src/plugins/token-budget/analyzer.js';
+import type { ContextAnalysis } from '#src/core/contract.js';
 import { logManager } from '#src/core/logger.js';
-import { replDisplay } from '#src/plugins/display/repl.js';
-import { cliDisplay } from '#src/plugins/display/cli.js';
 
 // ════════════════════════════════════════════
 // 结构化事件类型
@@ -266,31 +263,4 @@ export class DisplayManager {
   asAgentDisplay(): AgentDisplay {
     return this;
   }
-}
-
-/**
- * 按配置解析 display 插件。
- * repl/cli 为内置实现，其他名称委托给 resolveDisplayPlugin (loader.ts)。
- */
-export async function resolveDisplayPlugin(config: NanoConfig): Promise<DisplayPlugin> {
-  if (config.display?.enabled === false) {
-    return config.display?.plugin
-      ? (await loadCustomDisplay(config.display.plugin)) ?? cliDisplay
-      : cliDisplay;
-  }
-  if (config.display?.plugin && config.display.plugin !== 'repl') {
-    const plugin = await loadCustomDisplay(config.display.plugin);
-    if (!plugin) {
-      console.error(`Display plugin "${config.display.plugin}" not found`);
-      process.exit(1);
-    }
-    return plugin;
-  }
-  return replDisplay;
-}
-
-/** 外部 display 实现（loader.ts）或内置别名 */
-async function loadCustomDisplay(spec: string): Promise<DisplayPlugin | null> {
-  const { resolveDisplayPlugin: resolveExternal } = await import('#src/plugins/display/loader.js');
-  return resolveExternal(spec);
 }

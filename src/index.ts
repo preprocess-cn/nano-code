@@ -4,7 +4,8 @@ import { loadConfig, applyProfile, getSystemWhitelist } from '#src/core/config.j
 import { LLMClient } from '#src/core/llm.js';
 import { loadSession, saveSession } from '#src/core/session.js';
 import { handlePluginCommand, printPluginList } from '#src/plugin-cli.js';
-import { DisplayManager, resolveDisplayPlugin } from '#src/display.js';
+import { DisplayManager } from '#src/display.js';
+import { initDisplay } from '#src/plugins/display/init.js';
 import { AgentManager } from '#src/core/agent-manager.js';
 import { SK, agentCancelledKey, agentAbortKey } from '#src/core/store-keys.js';
 import type { ModelEntry } from '#src/core/llm.js';
@@ -110,15 +111,6 @@ async function initializePlugins(
     if (['skills', 'coordinator', 'commands', 'skills-slash', 'bang'].includes(name)) s.displayMgr = displayMgr;
     if (name === 'skills') { s.disabled = config.skills?.disabled ?? []; s.disableSkillTool = config.skills?.disableSkillTool ?? false; }
     await registerBuiltinPlugin(registry, name, s);
-  }
-
-  // 5. Optional Ink skills bridge
-  const disabledSkills = config.skills?.disabled ?? [];
-  try {
-    const { initCommandSuggestions } = await import('#src/plugins/display/claude-code-ink/skills-bridge.js');
-    initCommandSuggestions(disabledSkills);
-  } catch {
-    // Ink 可选依赖未安装时静默跳过
   }
 
   await displayMgr.init(registry);
@@ -229,7 +221,7 @@ async function startCLI(options: { debug?: boolean; think?: boolean; skipPermiss
 
   // ── Load display plugin ──
   const displayMgr = new DisplayManager();
-  displayMgr.addPlugin(await resolveDisplayPlugin(config));
+  displayMgr.addPlugin(await initDisplay(config));
 
   // ── Plugin registry (created before LLMClient so its Store is available) ──
   const registry = new PluginRegistry();

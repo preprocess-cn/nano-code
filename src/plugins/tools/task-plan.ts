@@ -1,7 +1,6 @@
 import { NanoPlugin, PluginRegistry } from '#src/core/plugin.js';
 import { ToolDefinition, ToolResponse, ToolContext, ToolCall } from '#src/core/contract.js';
 import { ChatMessage } from '#src/core/llm.js';
-import { getPlanModeInstructions } from '#src/core/prompt.js';
 import {
   Task, TaskStatus,
 } from '#src/plugins/task-plan/types.js';
@@ -51,6 +50,27 @@ let _store: {
 } | null = null;
 
 let _registry: PluginRegistry | null = null;
+
+// ── Plan mode 提示词（agent.ts 每轮注入，此处做节流）──
+
+export function getPlanModeInstructions(reminderType: 'full' | 'sparse' = 'full'): string {
+  if (reminderType === 'sparse') {
+    return `Plan mode still active (see full instructions earlier in conversation). Read-only except plan files via plan_write. End turns with ask_user_question or exit_plan_mode.`;
+  }
+  return `Plan mode is active — read-only only. The ONLY file you may edit is the plan file (via plan_write). This supersedes any other instructions you have received.
+
+## Workflow
+1. Explore — Read code, find existing patterns and utilities to reuse
+2. Design — Design your approach; use ask_user_question to clarify ambiguities
+3. Write — Capture the plan using plan_write (kebab-case filename, .md added)
+4. Exit — Call exit_plan_mode when the user approves and wants to start
+
+## Key Rules
+- Blocked: all write/edit tools except plan_write
+- Don't ask "Is this plan OK?" via text — just call exit_plan_mode
+- Don't exit early: only when the user has seen the plan and intends to act
+- Existing plan files are from previous sessions — ignore them unless the user explicitly references them`;
+}
 
 // ── Exported helpers (for slash commands / other plugins) ──
 
@@ -568,8 +588,7 @@ export const taskPlanPlugin: NanoPlugin = {
         throw new Error(`Unknown task-plan tool: ${name}`);
     }
   },
-
-	  onBeforeRequest(messages: ChatMessage[]): ChatMessage[] {
+	onBeforeRequest(messages: ChatMessage[]): ChatMessage[] {
 	    // 退出 plan mode 后的一次性提醒（即使 mode 已切回 normal 也要注入）
 	    if (_store?.get('task-plan:needsExitReminder')) {
 	      _store!.set('task-plan:needsExitReminder', false);
@@ -580,22 +599,7 @@ export const taskPlanPlugin: NanoPlugin = {
 	      return messages;
 	    }
 
-	    // Plan mode 提醒节流：agent.ts 每轮都注入完整指令，
-	    // 此钩子根据节流策略保留/替换/删除该注入
 	    if (!_registry || _store?.get(SK.Mode) !== 'plan') return messages;
-
-	    // 反向搜索最后一条 <system-reminder> 用户消息（不依赖固定位置，
-	    // 因为 token-budget 等插件的 onBeforeRequest 可能先于本钩子修改数组长度）
-	    let injectionIdx = -1;
-	    for (let i = messages.length - 1; i >= 0; i--) {
-	      const m = messages[i];
-	      if (m.role === 'user' && typeof m.content === 'string' &&
-	          m.content.includes('<system-reminder>')) {
-	        injectionIdx = i;
-	        break;
-	      }
-	    }
-	    if (injectionIdx === -1) return messages;
 
 	    const TURNS_BETWEEN = 5;
 	    const FULL_EVERY_N = 5;
@@ -603,32 +607,25 @@ export const taskPlanPlugin: NanoPlugin = {
 	    let turnCounter = (_store!.get<number>('task-plan:turnCounter') ?? 0) + 1;
 	    _store!.set('task-plan:turnCounter', turnCounter);
 
-	    // 首次进入 plan mode：完整指令
-	    if (turnCounter === 1) {
+	    // plan mode 提示词注入节流：首次必注，之后每 TURNS_BETWEEN 轮一次
+	    const isFirstTurn = turnCounter === 1;
+	    const isInjectionTurn = isFirstTurn || (turnCounter - 1) % TURNS_BETWEEN === 0;
+	    if (!isInjectionTurn) return messages;
+
+	    let reminderType: 'full' | 'sparse';
+	    if (isFirstTurn) {
 	      _store!.set('task-plan:attachmentIndex', 0);
-	      return messages;
+	      reminderType = 'full';
+	    } else {
+	      const attachIdx = _store!.get<number>('task-plan:attachmentIndex') ?? 0;
+	      _store!.set('task-plan:attachmentIndex', attachIdx + 1);
+	      reminderType = attachIdx % FULL_EVERY_N === 0 ? 'full' : 'sparse';
 	    }
 
-	    // 每 TURNS_BETWEEN 轮才注入一次，其余跳过
-	    if ((turnCounter - 1) % TURNS_BETWEEN !== 0) {
-	      messages.splice(injectionIdx, 1);
-	      return messages;
-	    }
-
-	    // 到此：需要注入。判断完整版(full)还是精简版(sparse)
-	    const attachIdx = _store!.get<number>('task-plan:attachmentIndex') ?? 0;
-	    _store!.set('task-plan:attachmentIndex', attachIdx + 1);
-
-	    if (attachIdx % FULL_EVERY_N === 0) {
-	      // 每 FULL_EVERY_N 次附件 = full 版（agent.ts 已注入，保留原样）
-	      return messages;
-	    }
-
-	    // sparse 版：替换为简短提醒
-	    messages[injectionIdx] = {
+	    messages.splice(messages.length - 1, 0, {
 	      role: 'user',
-	      content: `<system-reminder>\n${getPlanModeInstructions('sparse')}\n</system-reminder>`,
-	    };
+	      content: `<system-reminder>\n${getPlanModeInstructions(reminderType)}\n</system-reminder>`,
+	    });
 	    return messages;
 	  },
 

@@ -2,7 +2,7 @@ import { describe, it, afterEach } from 'node:test';
 import * as assert from 'node:assert/strict';
 import { createAgentToolPlugin } from '../src/plugins/coordinator/agent-tool.js';
 import { PluginRegistry } from '../src/core/plugin.js';
-import { AgentDefinition } from '../src/plugins/coordinator/agent-loader.js';
+import { AgentDefinition } from '../src/core/agent-loader.js';
 import { LLMClient } from '../src/core/llm.js';
 import { BackgroundTaskManager } from '../src/plugins/coordinator/task-manager.js';
 import { MessageBus } from '../src/plugins/coordinator/message-bus.js';

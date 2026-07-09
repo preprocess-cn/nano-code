@@ -1,7 +1,7 @@
 import { LLMClient, ChatMessage } from '#src/core/llm.js';
 import { PluginRegistry } from '#src/core/plugin.js';
 import { SystemPromptConfig } from '#src/core/config.js';
-import { buildSystemPrompt, formatToolResponse, getPlanModeInstructions } from '#src/core/prompt.js';
+import { buildSystemPrompt, formatToolResponse } from '#src/core/prompt.js';
 import { ToolResponse, ToolContext, ToolCall, InjectedMessage, isMainAgent, AgentDisplay } from '#src/core/contract.js';
 import { getToolDisplayName } from '#src/core/tool-display.js';
 import { SK, agentStatusKey, agentAbortKey, agentMessagesKey, agentCancelledKey, compactResultKey } from '#src/core/store-keys.js';
@@ -110,15 +110,6 @@ export class NanoCodeAgent {
 
       const systemMessage = buildSystemPrompt(this.registry, this.promptConfig, this.agentRole);
       let messagesWithSystem: ChatMessage[] = [systemMessage, ...this.messageHistory];
-
-      // Plan mode: 每次在用户消息前注入 <system-reminder>，时刻提醒 LLM
-      const mode = this.registry.store.get<string>(SK.Mode);
-      if (mode === 'plan') {
-        messagesWithSystem.splice(messagesWithSystem.length - 1, 0, {
-          role: 'user',
-          content: `<system-reminder>\n${getPlanModeInstructions()}\n</system-reminder>`,
-        });
-      }
 
       messagesWithSystem = this.registry.execBeforeRequest(messagesWithSystem);
 
