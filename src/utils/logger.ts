@@ -3,7 +3,7 @@
  *
  * LogPlugin 接口类似 DisplayPlugin：每个后端实现 onLog hook，
  * LogManager 统一调度到所有已注册插件。
- * 默认注册 stderr 后端，开箱即用。
+ * 默认无后端，由 index.ts 在启动时注册 display-bridge 路由到 DisplayManager。
  */
 
 export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
@@ -91,6 +91,5 @@ export class StderrLogPlugin implements LogPlugin {
   }
 }
 
-/** 全局 LogManager 单例，模块加载时自动注册默认 stderr 后端 */
+/** 全局 LogManager 单例。默认无后端，由 index.ts 在启动时注册 display-bridge */
 export const logManager = new LogManager();
-logManager.register(new StderrLogPlugin());
