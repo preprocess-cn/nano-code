@@ -21,7 +21,7 @@ export interface SystemPromptConfig {
 }
 
 export interface PluginConfigEntry {
-  type?: 'builtin' | 'mcp' | 'npm';
+  type?: 'builtin' | 'mcp' | 'npm' | 'display';
   enabled?: boolean;
   sideEffect?: boolean;   // false = 无后效性（只读），无需用户确认；默认 true
   settings?: Record<string, any>;

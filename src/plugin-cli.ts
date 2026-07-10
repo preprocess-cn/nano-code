@@ -3,6 +3,7 @@ import * as path from 'path';
 import * as os from 'os';
 import * as yaml from 'js-yaml';
 import { execSync } from 'child_process';
+import { createRequire } from 'module';
 import { loadConfig, getSystemWhitelist } from '#src/bootstrap/config.js';
 import { loadAgentDefinitions } from '#src/plugins/coordinator/agent-loader.js';
 import {
@@ -62,25 +63,89 @@ function isLocalPath(s: string): boolean {
   return s.startsWith('/') || s.startsWith('./') || s.startsWith('../') || s.startsWith('~');
 }
 
+function isNanoPlugin(obj: any): boolean {
+  return !!obj && typeof obj.name === 'string' && typeof obj.execute === 'function';
+}
+
+const DISPLAY_PLUGIN_INDICATORS = [
+  'ownsOutput', 'rawInput', 'onStreamChunk', 'onToolCall', 'onToolResult',
+  'prompt', 'setStatusBar', 'onNotify', 'showPluginManager', 'showModelPicker',
+  'onAgentTurnStart', 'onAgentTurnEnd', 'onBackgroundTask', 'onDebug',
+] as const;
+
+function isDisplayPlugin(obj: any): boolean {
+  if (!obj || typeof obj.name !== 'string') return false;
+  return DISPLAY_PLUGIN_INDICATORS.some(key => {
+    const val = obj[key];
+    return typeof val === 'function' || typeof val === 'boolean';
+  });
+}
+
+function deriveDisplayName(source: string): string {
+  const s = source.replace(/\.git$/, '').replace(/\/$/, '');
+  return s.split('/').pop() || s;
+}
+
+const PRESENTATIONS_DIR = path.join(GLOBAL_DIR, 'presentations');
+
+async function installDisplayPlugin(name: string, sourceDir: string | null, spec?: string): Promise<void> {
+  fs.mkdirSync(PRESENTATIONS_DIR, { recursive: true });
+  const targetFile = path.join(PRESENTATIONS_DIR, `${name}.mjs`);
+
+  let reexportSource: string;
+
+  if (spec) {
+    // npm 包：解析真实绝对路径，写 re-export（保留原始文件的相对 import 可正常解析）
+    try {
+      const _require = createRequire(import.meta.url);
+      reexportSource = _require.resolve(spec);
+    } catch {
+      reexportSource = spec;
+    }
+  } else if (sourceDir) {
+    // git/path 安装：主入口绝对路径
+    const pkgPath = path.join(sourceDir, 'package.json');
+    if (!fs.existsSync(pkgPath)) return;
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+    reexportSource = path.resolve(sourceDir, pkg.main || 'index.js');
+  } else {
+    return;
+  }
+
+  fs.writeFileSync(targetFile, `export { default } from '${reexportSource}';\n`, 'utf-8');
+
+  addToGlobalConfig(name, { type: 'display', enabled: false });
+  console.log(`展示插件已安装到 ${targetFile}`);
+  console.log(`提示：在 .nano-code.yaml 中设置 display.plugin: ${name} 来激活。`);
+}
+
 async function installFromNpm(spec: string): Promise<void> {
-  let type: 'npm' | 'mcp' = 'mcp';
   let name = spec.split('/').pop() || spec;
+  let installed = false;
+  let plugin: any;
 
   try {
     const mod = await import(spec);
-    const plugin: any = (mod as any).default || mod;
-    if (plugin && typeof plugin.name === 'string' && typeof plugin.execute === 'function') {
-      type = 'npm';
+    plugin = (mod as any).default || mod;
+
+    if (isNanoPlugin(plugin)) {
       name = plugin.name;
+      addToProjectConfig(name, { type: 'npm', spec });
+      console.log(`已安装 NanoPlugin "${name}"`);
+      installed = true;
     }
-  } catch { /* 不是 NanoPlugin，降级为 MCP */ }
 
-  const configEntry = type === 'npm'
-    ? { type: 'npm', spec }
-    : { type: 'mcp', command: 'npx', args: ['-y', spec] };
+    if (isDisplayPlugin(plugin)) {
+      const displayName = deriveDisplayName(spec);
+      await installDisplayPlugin(displayName, null, spec);
+      installed = true;
+    }
+  } catch { /* 不可解析 */ }
 
-  addToProjectConfig(name, configEntry);
-  console.log(`已安装插件 "${name}"（${type === 'npm' ? 'NanoPlugin' : 'MCP'}）`);
+  if (!installed) {
+    addToProjectConfig(name, { type: 'mcp', command: 'npx', args: ['-y', spec] });
+    console.log(`已安装 MCP 插件 "${name}"`);
+  }
 }
 
 async function installFromGit(url: string): Promise<void> {
@@ -114,12 +179,13 @@ async function installFromPath(localPath: string): Promise<void> {
   }
 }
 
-/** 从本地目录检测并安装插件（先检查 bin → MCP 写入 .mcp.json，再检查 main → NanoPlugin 写入 .nano-code.yaml）。 */
+/** 从本地目录检测并安装插件（MCP / NanoPlugin / DisplayPlugin 三条检测独立运行）。 */
 async function detectAndInstallFromDir(dir: string, name: string, source: string): Promise<boolean> {
   const pkgPath = path.join(dir, 'package.json');
   if (!fs.existsSync(pkgPath)) return false;
 
   const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+  let detected = false;
 
   // MCP 模式：package.json 有 bin 字段 → 写入项目 .mcp.json
   if (pkg.bin) {
@@ -130,25 +196,31 @@ async function detectAndInstallFromDir(dir: string, name: string, source: string
       : path.join(dir, pkg.bin[binName]);
     const filePath = getProjectMcpJsonPath();
     addMcpServer(filePath, binName, { command: 'node', args: [binPath] });
-    addToProjectConfig(binName, { type: 'mcp' });  // 加 config.plugins 声明
+    addToProjectConfig(binName, { type: 'mcp' });
     console.log(`已安装 MCP 插件 "${binName}" <- ${source}`);
     console.log(`配置已写入 ${filePath}，重启 nano-code 后生效。`);
-    return true;
+    detected = true;
   }
 
-  // NanoPlugin 模式：尝试 import 主入口
+  // NanoPlugin / DisplayPlugin 检测：尝试 import 主入口
   const main = pkg.main || 'index.js';
   try {
     const mod = await import(path.join(dir, main));
     const plugin: any = (mod as any).default || mod;
-    if (plugin && typeof plugin.name === 'string' && typeof plugin.execute === 'function') {
+
+    if (isNanoPlugin(plugin)) {
       addToProjectConfig(plugin.name, { type: 'npm', spec: dir });
-      console.log(`已安装插件 "${plugin.name}" <- ${source}`);
-      return true;
+      console.log(`已安装 NanoPlugin "${plugin.name}" <- ${source}`);
+      detected = true;
+    }
+
+    if (isDisplayPlugin(plugin)) {
+      await installDisplayPlugin(name, dir);
+      detected = true;
     }
   } catch {}
 
-  return false;
+  return detected;
 }
 
 function addToProjectConfig(name: string, entry: Record<string, any>): void {
@@ -175,7 +247,7 @@ function addToGlobalConfig(name: string, entry: Record<string, any>): void {
   } catch { /* 文件不存在或解析失败 */ }
 
   if (!cfg.plugins) cfg.plugins = {};
-  cfg.plugins[name] = { ...entry, enabled: true };
+  cfg.plugins[name] = { ...entry, enabled: entry.enabled ?? true };
 
   fs.writeFileSync(GLOBAL_CONFIG, yaml.dump(cfg, { indent: 2 }), 'utf-8');
   console.log(`已写入全局配置 ${GLOBAL_CONFIG}`);
@@ -276,6 +348,27 @@ function uninstallPlugin(args: string[], globalOpts: Record<string, any> = {}): 
       console.log(`  已从全局 ${getGlobalMcpJsonPath()} 中移除`);
       found = true;
     }
+  }
+
+  // ── Display plugin 清理 ──
+  if (cleanUser) {
+    const presFile = path.join(PRESENTATIONS_DIR, `${name}.mjs`);
+    if (fs.existsSync(presFile)) {
+      fs.rmSync(presFile);
+      console.log(`  已从展示目录中移除`);
+      found = true;
+    }
+  }
+
+  // display.plugin 匹配时提示不自动清除
+  if (found) {
+    try {
+      const raw = fs.readFileSync(GLOBAL_CONFIG, 'utf-8');
+      const cfg = yaml.load(raw) as Record<string, any>;
+      if (cfg?.display?.plugin === name) {
+        console.log(`  注意：display.plugin 仍指向 "${name}"，如需切换请手动修改全局配置。`);
+      }
+    } catch { /* ignore */ }
   }
 
   if (!found) {
@@ -493,6 +586,15 @@ async function listPlugins(): Promise<void> {
     }
   }
 
+  // 扫描展示插件目录
+  const displayNames = new Set<string>();
+  if (fs.existsSync(PRESENTATIONS_DIR)) {
+    for (const f of fs.readdirSync(PRESENTATIONS_DIR)) {
+      const match = f.match(/^(.+)\.mjs$/);
+      if (match) { displayNames.add(match[1]); names.add(match[1]); }
+    }
+  }
+
   // 判定哪些 .mcp.json server 缺少 config.plugins 声明（实际不会被加载）
   const undelcaredMcpNames = new Set<string>();
   for (const name of mcpJsonNames) {
@@ -505,9 +607,11 @@ async function listPlugins(): Promise<void> {
     const enabled = inCfg ? config.plugins[name].enabled !== false : false;
     const status = undelcaredMcpNames.has(name) ? '未声明'
       : (enabled ? 'active' : 'inactive');
+    const cfgType = config.plugins[name]?.type;
     const tag = whitelist.has(name) ? 'system'
-      : (config.plugins[name]?.type || (mcpJsonNames.has(name) ? 'mcp'
-        : (claudeJsonNames.has(name) ? 'claude' : 'user')));
+      : (cfgType === 'display' ? 'display'
+        : (cfgType || (mcpJsonNames.has(name) ? 'mcp'
+          : (claudeJsonNames.has(name) ? 'claude' : 'user'))));
     rows.push({ name, status, tag });
   }
 
@@ -521,7 +625,7 @@ async function listPlugins(): Promise<void> {
   }
 
   rows.sort((a, b) => {
-    const prio: Record<string, number> = { system: 0, agent: 1, user: 2, builtin: 2, npm: 2, mcp: 2 };
+    const prio: Record<string, number> = { system: 0, agent: 1, user: 2, builtin: 2, npm: 2, mcp: 2, display: 2 };
     const pa = prio[a.tag] ?? 3;
     const pb = prio[b.tag] ?? 3;
     if (pa !== pb) return pa - pb;
@@ -626,3 +730,10 @@ function updateAgentEnabled(filePath: string, enabled: boolean, agentName: strin
     console.error(`操作 agent "${agentName}" 失败:`, err);
   }
 }
+
+// ── 测试桩（_ 前缀导出，仅供测试用）──
+export const _isNanoPlugin = isNanoPlugin;
+export const _isDisplayPlugin = isDisplayPlugin;
+export const _deriveDisplayName = deriveDisplayName;
+export const _installDisplayPlugin = installDisplayPlugin;
+export const _PRESENTATIONS_DIR = PRESENTATIONS_DIR;

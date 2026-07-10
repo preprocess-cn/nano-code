@@ -4,7 +4,7 @@ import * as fs from 'fs';
 import { mkdtempSync, rmSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
-import { handlePluginCommand } from '../src/plugin-cli.js';
+import { handlePluginCommand, _isNanoPlugin, _isDisplayPlugin, _deriveDisplayName, _installDisplayPlugin, _PRESENTATIONS_DIR } from '../src/plugin-cli.js';
 import { PluginRegistry } from '../src/core/plugin.js';
 import { setMcpJsonPaths } from '../src/plugins/mcp/adapter.js';
 import { addMcpServer } from '../src/bootstrap/mcp-config.js';
@@ -83,5 +83,88 @@ describe('list-plugins cleanup', () => {
     await registry.register(mcpPlugin);
     await registry.destroy();
     assert.equal(stopped, true, 'MCP plugin transport.stop() should be called');
+  });
+});
+
+// ── DisplayPlugin 检测 / 安装 ──
+
+describe('isNanoPlugin', () => {
+  it('returns true for valid NanoPlugin', () => {
+    assert.equal(_isNanoPlugin({ name: 'test', execute: () => {} }), true);
+  });
+
+  it('returns false for null/undefined', () => {
+    assert.equal(_isNanoPlugin(null), false);
+    assert.equal(_isNanoPlugin(undefined), false);
+  });
+
+  it('returns false for plain object without execute', () => {
+    assert.equal(_isNanoPlugin({ name: 'test' }), false);
+  });
+
+  it('returns false for DisplayPlugin without execute', () => {
+    assert.equal(_isNanoPlugin({ name: 'test', onStreamChunk: () => {} }), false);
+  });
+});
+
+describe('isDisplayPlugin', () => {
+  it('returns true for plugin with onStreamChunk', () => {
+    assert.equal(_isDisplayPlugin({ name: 'test', onStreamChunk: () => {} }), true);
+  });
+
+  it('returns true for plugin with onToolCall', () => {
+    assert.equal(_isDisplayPlugin({ name: 'test', onToolCall: () => {} }), true);
+  });
+
+  it('returns true for plugin with ownsOutput boolean', () => {
+    assert.equal(_isDisplayPlugin({ name: 'test', ownsOutput: true }), true);
+  });
+
+  it('returns true for plugin with prompt method', () => {
+    assert.equal(_isDisplayPlugin({ name: 'test', prompt: async () => 'input' }), true);
+  });
+
+  it('returns false for null/undefined', () => {
+    assert.equal(_isDisplayPlugin(null), false);
+    assert.equal(_isDisplayPlugin(undefined), false);
+  });
+
+  it('returns false for plain NanoPlugin (no display indicators)', () => {
+    const nano = { name: 'plugin', execute: () => {}, getTools: () => [] };
+    assert.equal(_isDisplayPlugin(nano), false);
+  });
+
+  it('returns false for object without name', () => {
+    assert.equal(_isDisplayPlugin({ onStreamChunk: () => {} }), false);
+  });
+
+  it('returns true for plugin with showPluginManager', () => {
+    assert.equal(_isDisplayPlugin({ name: 'mgr', showPluginManager: () => {} }), true);
+  });
+
+  it('returns true for plugin with onAgentTurnStart', () => {
+    assert.equal(_isDisplayPlugin({ name: 'a', onAgentTurnStart: () => {} }), true);
+  });
+});
+
+describe('deriveDisplayName', () => {
+  it('derives name from npm scoped spec', () => {
+    assert.equal(_deriveDisplayName('@scope/nano-code-web'), 'nano-code-web');
+  });
+
+  it('derives name from simple npm spec', () => {
+    assert.equal(_deriveDisplayName('my-plugin'), 'my-plugin');
+  });
+
+  it('derives name from git URL', () => {
+    assert.equal(_deriveDisplayName('https://github.com/user/nano-code-web.git'), 'nano-code-web');
+  });
+
+  it('derives name from local path', () => {
+    assert.equal(_deriveDisplayName('/home/user/projects/nano-code-web'), 'nano-code-web');
+  });
+
+  it('handles trailing slash', () => {
+    assert.equal(_deriveDisplayName('/path/to/display-plugin/'), 'display-plugin');
   });
 });

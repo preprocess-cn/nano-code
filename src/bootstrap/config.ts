@@ -205,7 +205,7 @@ const KNOWN_PLUGIN_ENTRY_KEYS = new Set([
   'transport', 'command', 'args', 'url', 'env', 'initTimeout',
   'spec',
 ]);
-const VALID_PLUGIN_TYPES = new Set(['builtin', 'mcp', 'npm']);
+const VALID_PLUGIN_TYPES = new Set(['builtin', 'mcp', 'npm', 'display']);
 const VALID_TRANSPORT_TYPES = new Set(['stdio', 'http']);
 
 function validateType(val: unknown, type: 'string' | 'number' | 'boolean'): boolean {
@@ -290,7 +290,7 @@ export function validateConfigObject(raw: Record<string, unknown>): ConfigValida
       if (entry.type !== undefined && !VALID_PLUGIN_TYPES.has(entry.type as string)) {
         warnings.push({
           path: `plugins.${name}.type`,
-          message: `未知的插件类型 "${entry.type}"，应为 builtin、mcp 或 npm`,
+          message: `未知的插件类型 "${entry.type}"，应为 builtin、mcp、npm 或 display`,
         });
       }
 
