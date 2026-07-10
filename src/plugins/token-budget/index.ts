@@ -4,7 +4,7 @@ import { ChatMessage } from '#src/core/llm.js';
 import { countMessagesTokens } from '#src/plugins/token-budget/counter.js';
 import { initTokenizer } from '#src/plugins/token-budget/counter.js';
 import type { LLMClient } from '#src/core/llm.js';
-import type { DisplayManager } from '#src/display.js';
+import type { DisplayOutput } from '#src/display.js';
 import { SK, agentMessagesKey, compactResultKey, compactCompletedKey, compactRetryKey } from '#src/core/store-keys.js';
 import { logManager } from '#src/utils/logger.js';
 
@@ -22,7 +22,7 @@ export interface TokenBudgetConfig {
   /** LLM 客户端引用（自动压缩需要） */
   llmClient?: LLMClient;
   /** 展示管理器引用（自动压缩需要） */
-  displayMgr?: DisplayManager;
+  displayMgr?: DisplayOutput;
 }
 
 export function createTokenBudgetPlugin(config?: TokenBudgetConfig): NanoPlugin {
@@ -46,7 +46,7 @@ export function createTokenBudgetPlugin(config?: TokenBudgetConfig): NanoPlugin 
   const _agentName = (): string => _registryRef?.getAgentName() ?? 'main';
 
   // ── Auto-compact helper (fire-and-forget, runs outside the request lifecycle) ──
-  const runCompact = async (llm: LLMClient, display: DisplayManager, reg: PluginRegistry | null) => {
+  const runCompact = async (llm: LLMClient, display: DisplayOutput, reg: PluginRegistry | null) => {
     if (!reg) return;
     const name = reg.getAgentName();
     const messages = reg.store.get<ChatMessage[]>(agentMessagesKey(name));

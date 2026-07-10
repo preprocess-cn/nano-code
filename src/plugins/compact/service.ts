@@ -1,7 +1,7 @@
 import { ChatMessage, LLMClient } from '#src/core/llm.js';
 import { NanoCodeAgent } from '#src/core/agent.js';
 import { PluginRegistry } from '#src/core/plugin.js';
-import { DisplayManager } from '#src/display.js';
+import type { DisplayOutput } from '#src/display.js';
 import { countMessagesTokens } from '#src/plugins/token-budget/counter.js';
 import { CompactOptions, CompactionResult } from '#src/plugins/compact/types.js';
 import { SK } from '#src/core/store-keys.js';
@@ -30,7 +30,7 @@ export class CompactService {
   constructor(
     private llmClient: LLMClient,
     private registry: PluginRegistry,
-    private display?: DisplayManager,
+    private display?: DisplayOutput,
   ) {}
 
   /**

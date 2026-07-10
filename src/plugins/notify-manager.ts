@@ -1,5 +1,5 @@
 import { NanoPlugin, PluginRegistry } from '#src/core/plugin.js';
-import type { DisplayManager } from '#src/display.js';
+import type { DisplayNotifier } from '#src/display.js';
 import { SK } from '#src/core/store-keys.js';
 import type { ToolResponse, ToolContext } from '#src/core/contract.js';
 
@@ -12,7 +12,7 @@ interface Notification {
 }
 
 export interface NotifyManagerConfig {
-  displayMgr?: DisplayManager;
+  displayMgr?: DisplayNotifier;
   displayInterval?: number; // ms, default 2000
 }
 

@@ -1,8 +1,8 @@
 import { NanoPlugin, PluginRegistry } from '#src/core/plugin.js';
-import { ToolResponse, ToolContext, ToolDefinition } from '#src/core/contract.js';
+import { ToolResponse, ToolContext, ToolDefinition, type AgentDisplay } from '#src/core/contract.js';
 import { LLMClient, ChatMessage } from '#src/core/llm.js';
 import { AgentManager } from '#src/core/agent-manager.js';
-import { DisplayManager } from '#src/display.js';
+import type { DisplayBackgroundTask } from '#src/display.js';
 import { loadAgentDefinitions, AgentDefinition } from '#src/plugins/coordinator/agent-loader.js';
 import { createAgentToolPlugin } from '#src/plugins/coordinator/agent-tool.js';
 import { BackgroundTaskManager } from '#src/plugins/coordinator/task-manager.js';
@@ -11,7 +11,7 @@ import { validateSendMessageArgs } from '#src/plugins/coordinator/messaging-plug
 
 export function createAgentCoordinatorPlugin(
   llmClient: LLMClient,
-  displayMgr?: DisplayManager,
+  displayMgr?: AgentDisplay & DisplayBackgroundTask,
   agentManager?: AgentManager,
   agentDir?: string,
 ): NanoPlugin {

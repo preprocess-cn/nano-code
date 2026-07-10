@@ -1,13 +1,13 @@
 import { NanoPlugin, PluginRegistry } from '#src/core/plugin.js';
 import { CommandInterceptResult } from '#src/core/contract.js';
 import { NanoCodeAgent } from '#src/core/agent.js';
-import { DisplayManager } from '#src/display.js';
+import type { DisplayOutput } from '#src/display.js';
 import { loadAgentDefinitions } from '#src/plugins/coordinator/agent-loader.js';
 import type { SystemPromptConfig } from '#src/core/config.js';
 import { SK, type AgentModeInfo } from '#src/core/store-keys.js';
 
 let _agent: NanoCodeAgent | null = null;
-let _display: DisplayManager | null = null;
+let _display: DisplayOutput | null = null;
 let _registry: PluginRegistry | null = null;
 let _agentDir: string | undefined;
 

@@ -1,12 +1,12 @@
 import { spawn } from 'child_process';
 import { NanoPlugin } from '#src/core/plugin.js';
 import { CommandInterceptResult } from '#src/core/contract.js';
-import { DisplayManager } from '#src/display.js';
+import type { DisplayOutput } from '#src/display.js';
 import { DANGEROUS_COMMAND_BLACKLIST } from '#src/plugins/tools/command.js';
 
 const LOG_LIMIT = 4000;
 
-export function createBangPlugin(display?: DisplayManager): NanoPlugin {
+export function createBangPlugin(display?: DisplayOutput): NanoPlugin {
   return {
     name: 'bang',
     description: '叹号 bash 执行 — !<命令> 直接执行 shell 命令',

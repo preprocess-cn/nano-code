@@ -3,7 +3,7 @@ import { NanoCodeAgent } from '#src/core/agent.js';
 import { PluginRegistry } from '#src/core/plugin.js';
 import { loadConfig, getSystemWhitelist } from '#src/bootstrap/config.js';
 import type { NanoConfig } from '#src/core/config.js';
-import { DisplayManager } from '#src/display.js';
+import type { DisplayOutput, DisplayInteractive } from '#src/display.js';
 import { logManager } from '#src/utils/logger.js';
 import { loadAllSkills } from '#src/plugins/skills/loader.js';
 import { getBundledSkills } from '#src/plugins/skills/bundled/index.js';
@@ -26,7 +26,7 @@ export interface BuiltinContext {
   agent: NanoCodeAgent;
   registry: PluginRegistry;
   config: NanoConfig;
-  display?: DisplayManager;
+  display?: DisplayOutput & DisplayInteractive;
   /** 命令后的参数字符串 */
   args?: string;
 }
@@ -432,7 +432,7 @@ const BUILTIN_COMMANDS: BuiltinCommand[] = [
       const analysis = analyzeContextUsage(ctx.agent, ctx.registry, ctx.config, apiTotalTokens);
 
       // 推送结构化数据给展示层（Ink 渲染色块，REPL 无操作）
-      ctx.display?.onContextAnalysis(analysis);
+      ctx.display?.onContextAnalysis?.(analysis);
 
       const output = formatContextOutput(analysis);
       return { handled: true, skipAgent: true, message: output };

@@ -125,10 +125,42 @@ export interface DisplayPlugin {
 }
 
 // ════════════════════════════════════════════
+// 展示层窄接口 — 插件只依赖所需的最小接口，而非完整的 DisplayManager
+// ════════════════════════════════════════════
+
+/** 展示输出接口 — 插件可安全调用的最小输出能力 */
+export interface DisplayOutput {
+  onStatus(event: StatusEvent): void;
+  onError(event: ErrorEvent): void;
+  onContextAnalysis?(analysis: ContextAnalysis): void;
+}
+
+/** 状态栏接口 */
+export interface DisplayStatusBar {
+  setStatusBar(key: string, value: string | null): void;
+}
+
+/** 通知接口 */
+export interface DisplayNotifier {
+  setNotify(source: string | null, message: string | null): void;
+}
+
+/** 后台任务接口 */
+export interface DisplayBackgroundTask {
+  onBackgroundTask(event: BackgroundTaskEvent): void;
+}
+
+/** 交互式展示接口（模型选择/插件管理） */
+export interface DisplayInteractive {
+  showPluginManager(registry: PluginRegistry): Promise<boolean>;
+  showModelPicker(registry: PluginRegistry): Promise<boolean>;
+}
+
+// ════════════════════════════════════════════
 // DisplayManager — 多展示层管理器
 // ════════════════════════════════════════════
 
-export class DisplayManager {
+export class DisplayManager implements DisplayOutput, DisplayStatusBar, DisplayNotifier, DisplayBackgroundTask, DisplayInteractive {
   readonly name = 'display-manager';
   private plugins: DisplayPlugin[] = [];
 

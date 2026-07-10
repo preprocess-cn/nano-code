@@ -1,7 +1,7 @@
 import { NanoPlugin, PluginRegistry } from '#src/core/plugin.js';
 import { ToolDefinition, ToolResponse, ToolContext, ToolCall } from '#src/core/contract.js';
 import { ChatMessage } from '#src/core/llm.js';
-import type { DisplayManager } from '#src/display.js';
+import type { DisplayStatusBar } from '#src/display.js';
 import {
   Task, TaskStatus,
 } from '#src/plugins/task-plan/types.js';
@@ -51,7 +51,7 @@ let _store: {
 } | null = null;
 
 let _registry: PluginRegistry | null = null;
-let _displayMgr: DisplayManager | null = null;
+let _displayMgr: DisplayStatusBar | null = null;
 
 // ── Plan mode 提示词（agent.ts 每轮注入，此处做节流）──
 
@@ -648,7 +648,7 @@ export const taskPlanPlugin: NanoPlugin = {
   async onInit(registry) {
     _registry = registry;
     _store = registry.store;
-    const config = registry.getPluginConfig('task-plan') as { displayMgr?: DisplayManager } | undefined;
+    const config = registry.getPluginConfig('task-plan') as { displayMgr?: DisplayStatusBar } | undefined;
     if (config?.displayMgr) _displayMgr = config.displayMgr;
     // Sync task cache from disk on startup
     const tasks = await readAllTasks();

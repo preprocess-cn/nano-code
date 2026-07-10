@@ -1,17 +1,17 @@
 import { NanoPlugin, PluginRegistry } from '#src/core/plugin.js';
 import { CommandInterceptResult } from '#src/core/contract.js';
-import { DisplayManager } from '#src/display.js';
+import type { DisplayOutput, DisplayInteractive } from '#src/display.js';
 import { NanoCodeAgent } from '#src/core/agent.js';
 import type { NanoConfig } from '#src/core/config.js';
 import { parseSlashCommand } from '#src/plugins/commands/parser.js';
 import { findBuiltinCommand, type BuiltinContext } from '#src/plugins/commands/builtin.js';
 
 let _agent: NanoCodeAgent | undefined;
-let _display: DisplayManager | undefined;
+let _display: (DisplayOutput & DisplayInteractive) | undefined;
 let _registry: PluginRegistry | undefined;
 let _config: NanoConfig | undefined;
 
-export function createCommandsPlugin(display?: DisplayManager): NanoPlugin {
+export function createCommandsPlugin(display?: DisplayOutput & DisplayInteractive): NanoPlugin {
   _display = display;
 
   return {

@@ -1,10 +1,10 @@
 import { NanoPlugin, PluginRegistry, registerBuiltinPlugin } from '#src/core/plugin.js';
-import { ToolResponse, ToolContext, ToolDefinition } from '#src/core/contract.js';
+import { ToolResponse, ToolContext, ToolDefinition, type AgentDisplay } from '#src/core/contract.js';
 import { NanoCodeAgent } from '#src/core/agent.js';
 import { AgentManager } from '#src/core/agent-manager.js';
 import { LLMClient } from '#src/core/llm.js';
 import { AgentDefinition } from '#src/plugins/coordinator/agent-loader.js';
-import { DisplayManager } from '#src/display.js';
+import type { DisplayBackgroundTask } from '#src/display.js';
 import { BackgroundTaskManager } from '#src/plugins/coordinator/task-manager.js';
 import { AgentLifecycle } from '#src/plugins/coordinator/lifecycle.js';
 import { MessageBus } from '#src/plugins/coordinator/message-bus.js';
@@ -32,7 +32,7 @@ async function createSubRegistry(def: AgentDefinition, store?: import('#src/core
 export function createAgentToolPlugin(
   def: AgentDefinition,
   llmClient: LLMClient,
-  display?: DisplayManager,
+  display?: AgentDisplay & DisplayBackgroundTask,
   agentManager?: AgentManager,
 ): NanoPlugin {
   return {

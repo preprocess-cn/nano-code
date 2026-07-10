@@ -3,7 +3,7 @@ import { ToolDefinition, ToolResponse, ToolContext } from '#src/core/contract.js
 import { LLMClient } from '#src/core/llm.js';
 import { NanoCodeAgent } from '#src/core/agent.js';
 import { AgentManager } from '#src/core/agent-manager.js';
-import { DisplayManager } from '#src/display.js';
+import type { AgentDisplay } from '#src/core/contract.js';
 import { loadAllSkills, findSkill, listSkillFiles, readSkillFile, getSkillsDir, substituteArgs, SkillDefinition } from '#src/plugins/skills/loader.js';
 import {
   findBundledSkill,
@@ -43,7 +43,7 @@ function buildSkillList(disabled?: string[]): Array<{ name: string; description:
  */
 export function createSkillsPlugin(
   llmClient?: LLMClient,
-  display?: DisplayManager,
+  display?: AgentDisplay,
   agentManager?: AgentManager,
   options?: SkillsPluginOptions,
 ): NanoPlugin {
@@ -234,7 +234,7 @@ function handleSkillView(args: any, disabled?: string[]): ToolResponse {
 async function handleSkillExecute(
   args: any,
   llmClient?: LLMClient,
-  display?: DisplayManager,
+  display?: AgentDisplay,
   disabled?: string[],
   agentManager?: AgentManager,
 ): Promise<ToolResponse> {
@@ -285,7 +285,7 @@ async function executeForkedSkill(
   skill: SkillDefinition,
   argsStr: string,
   llmClient?: LLMClient,
-  display?: DisplayManager,
+  display?: AgentDisplay,
   agentManager?: AgentManager,
 ): Promise<ToolResponse> {
   if (!llmClient) {
@@ -332,7 +332,7 @@ async function executeForkedSkill(
 async function handleRunAgent(
   args: any,
   llmClient?: LLMClient,
-  display?: DisplayManager,
+  display?: AgentDisplay,
   agentManager?: AgentManager,
 ): Promise<ToolResponse> {
   const query = args?.query?.trim();

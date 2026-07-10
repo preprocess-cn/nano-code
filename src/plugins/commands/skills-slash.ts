@@ -1,15 +1,15 @@
 import { NanoPlugin, PluginRegistry } from '#src/core/plugin.js';
-import { CommandInterceptResult } from '#src/core/contract.js';
+import { CommandInterceptResult, type AgentDisplay } from '#src/core/contract.js';
 import { LLMClient } from '#src/core/llm.js';
 import { NanoCodeAgent } from '#src/core/agent.js';
 import { AgentManager } from '#src/core/agent-manager.js';
-import { DisplayManager } from '#src/display.js';
+import type { DisplayOutput } from '#src/display.js';
 import { findSkill, substituteArgs } from '#src/plugins/skills/loader.js';
 import { findBundledSkill } from '#src/plugins/skills/bundled/index.js';
 
 let _registry: PluginRegistry | undefined;
 
-export function createSkillsSlashPlugin(llmClient?: LLMClient, display?: DisplayManager, agentManager?: AgentManager): NanoPlugin {
+export function createSkillsSlashPlugin(llmClient?: LLMClient, display?: DisplayOutput & AgentDisplay, agentManager?: AgentManager): NanoPlugin {
   return {
     name: 'skills-slash',
     description: '斜杠技能调用 — /<技能名> [参数]',
@@ -64,7 +64,7 @@ async function handleFsSkill(
   skillName: string,
   argsStr: string,
   llmClient?: LLMClient,
-  display?: DisplayManager,
+  display?: DisplayOutput & AgentDisplay,
   agentManager?: AgentManager,
 ): Promise<CommandInterceptResult | null> {
   if (skill.context === 'fork') {
