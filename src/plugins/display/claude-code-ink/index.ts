@@ -1,4 +1,4 @@
-import type { DisplayPlugin, StartConfig, StatusEvent, StreamEvent, ToolCallEvent, ToolResultEvent, ErrorEvent, AgentEvent, BackgroundTaskEvent, StateSnapshot, MessageLevel } from '#src/display.js';
+import type { DisplayPlugin, StartConfig, StatusEvent, StreamEvent, ToolCallEvent, ToolResultEvent, ErrorEvent, AgentEvent, BackgroundTaskEvent, StateSnapshot, MessageLevel, NotifyEvent } from '#src/display.js';
 import type { ContextAnalysis } from '#src/core/contract.js';
 import { inkRender, type Instance } from '#src/plugins/display/claude-code-ink/ink.js';
 import { InkApp, type UIMessage, type TextSegment, type PermissionPrompt, type PermissionResponse, type BackgroundTaskInfo } from '#src/plugins/display/claude-code-ink/InkApp.js';
@@ -86,6 +86,9 @@ function createPlugin(): DisplayPlugin {
   let pluginManagerResolve: (() => void) | null = null;
   // Background task display state
   let backgroundTasks: BackgroundTaskInfo[] = [];
+  // Status bar state — segments map for left side, notification for right side
+  let statusSegments: Record<string, string> = {};
+  let notification: { source: string; message: string } | null = null;
   let unsubMode: (() => void) | null = null;
 
   function cancelExecution(): void {
@@ -230,6 +233,8 @@ function createPlugin(): DisplayPlugin {
             }
           },
           onModeToggle: handleModeToggle,
+          statusSegments,
+          notification,
         }),
       );
     } catch (err) {
@@ -272,8 +277,17 @@ function createPlugin(): DisplayPlugin {
         });
       });
 
-      // 订阅 mode 变化，确保 Ink 显示及时更新
-      unsubMode = registry.store.subscribe(SK.Mode, () => render());
+      // 订阅 mode 变化，同步到 statusSegments 并重新渲染
+      unsubMode = registry.store.subscribe(SK.Mode, () => {
+        const mode = registry?.store?.get<string>(SK.Mode);
+        if (mode === 'plan') {
+          statusSegments = { ...statusSegments, mode: 'plan' };
+        } else if (statusSegments.mode !== undefined) {
+          const { mode: _, ...rest } = statusSegments;
+          statusSegments = rest;
+        }
+        render();
+      });
 
       // 初始化斜杠命令建议（收集技能/命令/agent 列表供自动补全）
       const { initCommandSuggestions } = await import('#src/plugins/display/claude-code-ink/skills-bridge.js');
@@ -353,6 +367,8 @@ function createPlugin(): DisplayPlugin {
               }
             },
             onModeToggle: handleModeToggle,
+            statusSegments,
+            notification,
           }),
           { stdout: process.stdout, stdin: process.stdin, stderr: process.stderr, exitOnCtrlC: false, patchConsole: false },
         );
@@ -607,6 +623,16 @@ function createPlugin(): DisplayPlugin {
 
       render();
       return true;
+    },
+
+    setStatusBar(segments: Record<string, string>): void {
+      statusSegments = segments;
+      render();
+    },
+
+    onNotify(n: NotifyEvent | null): void {
+      notification = n;
+      render();
     },
   };
 }

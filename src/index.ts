@@ -93,6 +93,10 @@ async function initializePlugins(
       continue; // 已在 step 2 注册
     } else if ((DEFAULT_FEATURE_PLUGINS as unknown as string[]).includes(name)) {
       continue; // feature 插件在 step 4 统一注册
+    } else if (name === 'notify-manager') {
+      // Inject displayMgr runtime dependency
+      const mergedSettings = { ...(pluginCfg.settings ?? {}), displayMgr };
+      await registerBuiltinPlugin(registry, name, mergedSettings);
     } else {
       await registerBuiltinPlugin(registry, name, pluginCfg.settings);
     }
@@ -108,7 +112,7 @@ async function initializePlugins(
     }
     const s: Record<string, any> = {};
     if (['skills', 'coordinator', 'skills-slash'].includes(name)) { s.llmClient = llmClient; s.agentManager = agentManager; }
-    if (['skills', 'coordinator', 'commands', 'skills-slash', 'bang'].includes(name)) s.displayMgr = displayMgr;
+    if (['skills', 'coordinator', 'commands', 'skills-slash', 'bang', 'task-plan'].includes(name)) s.displayMgr = displayMgr;
     if (name === 'skills') { s.disabled = config.skills?.disabled ?? []; s.disableSkillTool = config.skills?.disableSkillTool ?? false; }
     await registerBuiltinPlugin(registry, name, s);
   }

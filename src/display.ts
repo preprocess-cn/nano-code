@@ -37,6 +37,16 @@ export interface BackgroundTaskEvent extends AgentEvent {
   message: string;
 }
 
+/**
+ * 通知事件 — 由 DisplayManager.setNotify 广播给 display 插件。
+ * source 为消息来源标识（如插件名），message 为通知文本。
+ * source 和 message 均为 null 时表示清除当前通知。
+ */
+export interface NotifyEvent {
+  source: string;
+  message: string;
+}
+
 // ── 共享事件类型（定义在 contract.ts） ──
 export type { AgentEvent, MessageLevel, StatusEvent, StreamEvent, ToolCallEvent, ToolResultEvent, StateSnapshot };
 
@@ -105,6 +115,13 @@ export interface DisplayPlugin {
    * DisplayManager 合并后传入此方法。display 实现可选择展示方式。
    */
   setStatusBar?(segments: Record<string, string>): void;
+
+  /**
+   * 可选的通知事件处理。
+   * 由 DisplayManager.setNotify 广播，display 可在状态栏右侧展示。
+   * @param notification - 通知对象，null 表示清除当前通知
+   */
+  onNotify?(notification: NotifyEvent | null): void;
 }
 
 // ════════════════════════════════════════════
@@ -256,6 +273,18 @@ export class DisplayManager {
     for (const p of this.plugins) {
       try { p.setStatusBar?.(merged); }
       catch (err) { logManager.error('display', `setStatusBar failed for "${p.name}":`, err); }
+    }
+  }
+
+  /**
+   * 广播通知给所有 display 插件。
+   * source 和 message 均为 null 时表示清除当前通知。
+   */
+  setNotify(source: string | null, message: string | null): void {
+    const notification = source && message ? { source, message } : null;
+    for (const p of this.plugins) {
+      try { p.onNotify?.(notification); }
+      catch (err) { logManager.error('display', `onNotify failed for "${p.name}":`, err); }
     }
   }
 

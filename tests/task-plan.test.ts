@@ -41,6 +41,18 @@ function createTestStore() {
   };
 }
 
+/** DisplayManager spy for verifying setStatusBar calls */
+function createDisplayMgrSpy() {
+  const calls: Array<{ key: string; value: string | null }> = [];
+  return {
+    setStatusBar(key: string, value: string | null) {
+      calls.push({ key, value });
+    },
+    calls,
+    reset() { calls.length = 0; },
+  };
+}
+
 /** Get the task files directory from the plugin's convention */
 function getTasksDir(): string {
   return path.join(process.cwd(), '.nano-code', 'tasks');
@@ -87,6 +99,23 @@ describe('task-plan 插件 — enter_plan_mode', () => {
     const res = await taskPlanPlugin.execute('enter_plan_mode', {}, CTX);
     assert.equal(res.status, 'success');
     assert(res.data?.includes('plan mode'));
+  });
+
+  test('enter_plan_mode 调用 setStatusBar 设置 mode=plan', async () => {
+    const spy = createDisplayMgrSpy();
+    // Re-init with displayMgr spy available
+    await taskPlanPlugin.onInit!({
+      store,
+      getPluginConfig: () => ({ displayMgr: spy }),
+    } as any);
+    spy.reset(); // ignore any calls from onInit
+    store.set(SK.Mode, 'normal');
+
+    await taskPlanPlugin.execute('enter_plan_mode', {}, CTX);
+
+    assert.equal(spy.calls.length, 1);
+    assert.equal(spy.calls[0].key, 'mode');
+    assert.equal(spy.calls[0].value, 'plan');
   });
 });
 
@@ -148,6 +177,24 @@ describe('task-plan 插件 — exit_plan_mode', () => {
     const res = await taskPlanPlugin.execute('exit_plan_mode', {}, CTX);
     assert.equal(res.status, 'success');
     assert.equal(store.get(SK.Mode), 'normal');
+  });
+
+  test('exit_plan_mode 调用 setStatusBar 清除 mode', async () => {
+    await writeTestPlan('test-plan', 'Plan');
+    const spy = createDisplayMgrSpy();
+    // Re-init with displayMgr spy
+    await taskPlanPlugin.onInit!({
+      store,
+      getPluginConfig: () => ({ displayMgr: spy }),
+    } as any);
+    spy.reset();
+    store.set(SK.Mode, 'plan');
+
+    await taskPlanPlugin.execute('exit_plan_mode', {}, CTX);
+
+    // Should have called setStatusBar('mode', null)
+    assert(spy.calls.some(c => c.key === 'mode' && c.value === null),
+      `Expected setStatusBar('mode', null) call, got: ${JSON.stringify(spy.calls)}`);
   });
 
   test('exit_plan_mode 设置 PlanContent 和 PlanApproved', async () => {

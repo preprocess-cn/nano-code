@@ -1,6 +1,7 @@
 import { NanoPlugin, PluginRegistry } from '#src/core/plugin.js';
 import { ToolDefinition, ToolResponse, ToolContext, ToolCall } from '#src/core/contract.js';
 import { ChatMessage } from '#src/core/llm.js';
+import type { DisplayManager } from '#src/display.js';
 import {
   Task, TaskStatus,
 } from '#src/plugins/task-plan/types.js';
@@ -50,6 +51,7 @@ let _store: {
 } | null = null;
 
 let _registry: PluginRegistry | null = null;
+let _displayMgr: DisplayManager | null = null;
 
 // ── Plan mode 提示词（agent.ts 每轮注入，此处做节流）──
 
@@ -159,6 +161,7 @@ async function handleEnterPlanMode(): Promise<ToolResponse> {
   // 重置 plan mode 提醒计数器（每5轮注入一次）
   _store.set('task-plan:turnCounter', 0);
   _store.set('task-plan:attachmentIndex', 0);
+  _displayMgr?.setStatusBar('mode', 'plan');
   return {
     status: 'success',
     data: 'Entered plan mode. Use plan_write to write plans. After writing, summarize the plan and wait for the user. Call exit_plan_mode when the user expresses approval and intent to start implementing.',
@@ -227,6 +230,7 @@ async function handleExitPlanMode(): Promise<ToolResponse> {
   const preMode = _store.get<string>(SK.PrePlanMode) || 'normal';
   _store.set(SK.Mode, preMode);
   _store.set(SK.PrePlanMode, undefined);
+  _displayMgr?.setStatusBar('mode', null);
   // 标记下一轮注入退出提醒（覆盖旧的 plan mode reminder 遗留）
   _store.set('task-plan:needsExitReminder', true);
 
@@ -644,6 +648,8 @@ export const taskPlanPlugin: NanoPlugin = {
   async onInit(registry) {
     _registry = registry;
     _store = registry.store;
+    const config = registry.getPluginConfig('task-plan') as { displayMgr?: DisplayManager } | undefined;
+    if (config?.displayMgr) _displayMgr = config.displayMgr;
     // Sync task cache from disk on startup
     const tasks = await readAllTasks();
     _store.set(SK.Tasks, tasks);

@@ -253,6 +253,14 @@ export const replDisplay: DisplayPlugin = {
     const stream = level === 'error' ? process.stderr : process.stdout;
     stream.write(`${prefix}[后台] ${event.message}\n`);
   },
+
+  setStatusBar(segments: Record<string, string>): void {
+    if (segments.mode === 'plan') {
+      console.log('\n  ● Plan Mode Active\n');
+    } else if (segments.mode === undefined || segments.mode === null) {
+      // Mode cleared — no action needed for REPL
+    }
+  },
 };
 
 function statusLevelPrefix(level: MessageLevel): string {

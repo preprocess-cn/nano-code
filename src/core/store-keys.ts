@@ -80,6 +80,10 @@ export const SK = {
   // ── View switching (Ink display) ──
   /** string | undefined: 当前正在查看的 agent（如 sub_agent_name），undefined = 主视图 */
   ViewAgent: 'view:agent',
+
+  // ── Notify manager ──
+  /** (source: string, message: string) => boolean: 发送通知，返回 true 表示入队成功 */
+  NotifySend: 'notify:send',
 } as const;
 
 export interface AgentModeInfo {

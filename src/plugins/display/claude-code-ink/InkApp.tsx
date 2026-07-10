@@ -8,6 +8,7 @@ import { Markdown, StreamingMarkdown } from '#src/plugins/display/claude-code-in
 import { BackgroundTaskBar } from '#src/plugins/display/claude-code-ink/components/BackgroundTaskBar.js';
 import type { DiffHunk, ContextAnalysis } from '#src/core/contract.js';
 import { QuestionsDialog } from './QuestionsDialog.js';
+import { StatusBar } from './components/StatusBar.js';
 
 export type PermissionResponse = 'allow_once' | 'always_allow' | 'deny';
 
@@ -72,26 +73,16 @@ export interface InkAppProps {
   onViewAgentClear?: () => void;
   /** Shift+Tab 切换 normal/plan 模式 */
   onModeToggle?: () => void;
+
+  /** 状态栏左侧段落（KEY: VALUE） */
+  statusSegments?: Record<string, string>;
+  /** 状态栏右侧通知消息 */
+  notification?: { source: string; message: string } | null;
 }
 
 function AgentLabel({ agentName }: { agentName: string }): React.ReactElement | null {
   if (agentName === 'main') return null;
   return React.createElement(Text, { dimColor: true }, `[${agentName}] `);
-}
-
-function ModeIndicator({ mode, taskCount }: { mode?: string; taskCount?: number }): React.ReactElement {
-  const parts: React.ReactElement[] = [];
-  if (mode === 'plan') {
-    parts.push(React.createElement(Text, { key: 'mode', color: '#f59e0b', bold: true }, '● PLAN'));
-  } else {
-    parts.push(React.createElement(Text, { key: 'mode', color: '#9ca3af' }, '○ normal'));
-  }
-  parts.push(React.createElement(Text, { key: 'shortcut', color: '#6b7280' }, '  [Shift+Tab]'));
-  if (taskCount && taskCount > 0) {
-    parts.push(React.createElement(Text, { key: 'sep', color: '#6b7280' }, ' · '));
-    parts.push(React.createElement(Text, { key: 'tasks', color: '#6b7280' }, `${taskCount} task${taskCount > 1 ? 's' : ''}`));
-  }
-  return React.createElement(Box, { paddingLeft: 1, paddingBottom: 1, flexShrink: 0 }, ...parts);
 }
 
 const DIM_COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#06b6d4', '#f97316', '#ef4444'];
@@ -925,7 +916,6 @@ function AppContent(props: InkAppProps): React.ReactElement {
         React.createElement(
           Box,
           { flexDirection: 'column', flexShrink: 0, paddingLeft: 1, paddingRight: 1, paddingBottom: 1 },
-          React.createElement(ModeIndicator, { mode: props.mode, taskCount: props.taskCount }),
           React.createElement(
             Box,
             {
@@ -961,6 +951,10 @@ function AppContent(props: InkAppProps): React.ReactElement {
                 }),
               )
             : null,
+          React.createElement(StatusBar, {
+            segments: props.statusSegments,
+            notification: props.notification,
+          }),
         ),
       ),
     );
@@ -1007,8 +1001,7 @@ function AppContent(props: InkAppProps): React.ReactElement {
     React.createElement(
       Box,
       { flexDirection: 'column', flexShrink: 0, paddingLeft: 1, paddingRight: 1, paddingBottom: 1, marginTop: 1 },
-      // Mode indicator bar (plan mode badge + task count)
-      React.createElement(ModeIndicator, { mode: props.mode, taskCount: props.taskCount }),
+      // Mode indicator bar — now part of StatusBar
       React.createElement(BackgroundTaskBar, { tasks: props.backgroundTasks ?? [] }),
       React.createElement(
         Box,
@@ -1054,6 +1047,10 @@ function AppContent(props: InkAppProps): React.ReactElement {
             'Agent 视图页面，输入 @ 命令切换 · Esc 返回主页面',
           )
         : null,
+      React.createElement(StatusBar, {
+        segments: props.statusSegments,
+        notification: props.notification,
+      }),
     ),
   );
 }
