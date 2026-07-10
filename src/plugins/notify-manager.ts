@@ -126,7 +126,6 @@ export function createNotifyManagerPlugin(config?: NotifyManagerConfig): NanoPlu
   return {
     name: 'notify-manager',
     description: 'Manage and display transient notification messages on the status bar',
-    version: '0.1.0',
 
     getTools(): any[] {
       return [];
