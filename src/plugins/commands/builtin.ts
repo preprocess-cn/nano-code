@@ -14,6 +14,7 @@ import { saveSession } from '#src/bootstrap/session.js';
 import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as yaml from 'js-yaml';
 import type { BuiltinCommand } from '#src/plugins/commands/types.js';
 import { readAllTasks, getPlansDir, listPlanFiles } from '#src/plugins/tools/task-plan.js';
 import { SK } from '#src/core/store-keys.js';
@@ -683,15 +684,19 @@ function togglePlugin(name: string, enable: boolean, config: NanoConfig | undefi
   const PROJECT_CONFIG = path.join(process.cwd(), '.nano-code.yaml');
   let projectCfg: Record<string, any> = {};
   try {
-    projectCfg = JSON.parse(fs.readFileSync(PROJECT_CONFIG, 'utf-8'));
-  } catch { /* 文件不存在 */ }
+    const raw = fs.readFileSync(PROJECT_CONFIG, 'utf-8');
+    const parsed = yaml.load(raw);
+    if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+      projectCfg = parsed as Record<string, any>;
+    }
+  } catch { /* 文件不存在或解析失败 */ }
 
   if (!projectCfg.plugins) projectCfg.plugins = {};
   if (!projectCfg.plugins[name]) projectCfg.plugins[name] = {};
   projectCfg.plugins[name].enabled = enable;
 
   try {
-    fs.writeFileSync(PROJECT_CONFIG, JSON.stringify(projectCfg, null, 2), 'utf-8');
+    fs.writeFileSync(PROJECT_CONFIG, yaml.dump(projectCfg, { indent: 2 }), 'utf-8');
   } catch (err) {
     return { handled: true, skipAgent: true, message: `写入配置失败: ${err}` };
   }
