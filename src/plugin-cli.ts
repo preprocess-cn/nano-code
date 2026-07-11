@@ -226,13 +226,17 @@ async function detectAndInstallFromDir(dir: string, name: string, source: string
 function addToProjectConfig(name: string, entry: Record<string, any>): void {
   let cfg: Record<string, any> = {};
   try {
-    cfg = JSON.parse(fs.readFileSync(PROJECT_CONFIG, 'utf-8'));
-  } catch { /* 文件不存在，使用空对象 */ }
+    const raw = fs.readFileSync(PROJECT_CONFIG, 'utf-8');
+    const parsed = yaml.load(raw);
+    if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+      cfg = parsed as Record<string, any>;
+    }
+  } catch { /* 文件不存在或解析失败，使用空对象 */ }
 
   if (!cfg.plugins) cfg.plugins = {};
   cfg.plugins[name] = { ...entry, enabled: true };
 
-  fs.writeFileSync(PROJECT_CONFIG, JSON.stringify(cfg, null, 2), 'utf-8');
+  fs.writeFileSync(PROJECT_CONFIG, yaml.dump(cfg, { indent: 2 }), 'utf-8');
   console.log(`已写入项目配置 ${PROJECT_CONFIG}`);
 }
 
@@ -673,14 +677,18 @@ async function setEnabled(name: string, enabled: boolean): Promise<void> {
 
   let projectCfg: Record<string, any> = {};
   try {
-    projectCfg = JSON.parse(fs.readFileSync(PROJECT_CONFIG, 'utf-8'));
-  } catch { /* 文件不存在，使用空对象 */ }
+    const raw = fs.readFileSync(PROJECT_CONFIG, 'utf-8');
+    const parsed = yaml.load(raw);
+    if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
+      projectCfg = parsed as Record<string, any>;
+    }
+  } catch { /* 文件不存在或解析失败，使用空对象 */ }
 
   if (!projectCfg.plugins) projectCfg.plugins = {};
   if (!projectCfg.plugins[name]) projectCfg.plugins[name] = {};
   projectCfg.plugins[name].enabled = enabled;
 
-  fs.writeFileSync(PROJECT_CONFIG, JSON.stringify(projectCfg, null, 2), 'utf-8');
+  fs.writeFileSync(PROJECT_CONFIG, yaml.dump(projectCfg, { indent: 2 }), 'utf-8');
   console.log(`插件 "${name}" 已${enabled ? '启用' : '禁用'}。`);
 }
 
