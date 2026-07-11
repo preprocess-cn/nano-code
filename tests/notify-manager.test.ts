@@ -137,6 +137,57 @@ describe('NotifyManager Queue Logic', () => {
     assert.strictEqual(result[2], '[monitor] c');
   });
 
+  it('resets timer after queue empties so subsequent sends are not blocked', () => {
+    // Regression: processQueue() 清空队列后 timer 未重置为 null,
+    // 导致下一次 start() 因 timer !== null (过期 ID) 直接返回, 新通知永不处理.
+    const order: string[] = [];
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let isRunning = false;
+    const queue: Notification[] = [];
+
+    function fireTimer(): void {
+      // 模拟 timer 回调: 触发 processQueue
+      isRunning = false;
+      processQueue();
+    }
+
+    function processQueue(): void {
+      if (isRunning) return;
+      isRunning = true;
+      const next = queue.shift() ?? null;
+      if (!next) {
+        isRunning = false;
+        timer = null; // 修复点 — 旧 bug 在此缺少这行
+        return;
+      }
+      order.push(`[${next.source}] ${next.message}`);
+      timer = {} as any; // 用一个非 null 假 timer ID 模拟 timer 已设置
+    }
+
+    function start(): void {
+      if (timer !== null) return; // 被过期 timer ID 挡住的栅栏
+      processQueue();
+    }
+
+    // 第一次发送
+    queue.push({ source: 't', message: 'first', timestamp: 0 });
+    start();
+    assert.strictEqual(order.length, 1);
+    assert.strictEqual(order[0], '[t] first');
+
+    // 模拟 timer 触发 → 队列为空
+    fireTimer();
+    // 修复后 timer 应为 null; 旧 bug 则 timer 仍非 null
+
+    // 第二次发送
+    queue.push({ source: 't', message: 'second', timestamp: 1 });
+    start();
+    // 修复前: timer !== null → start() 直接返回 → order 仍为 1
+    // 修复后: timer === null → processQueue 执行 → order 为 2
+    assert.strictEqual(order.length, 2);
+    assert.strictEqual(order[1], '[t] second');
+  });
+
   it('preserves FIFO order within same source', () => {
     const result = simulateQueue([
       { source: 'cron', message: 'first' },

@@ -80,6 +80,7 @@ export function createNotifyManagerPlugin(config?: NotifyManagerConfig): NanoPlu
       // Queue empty — clear display
       cfg.displayMgr?.setNotify(null, null);
       isRunning = false;
+      timer = null; // 重置 timer 以便 start() 能再次调度
       return;
     }
 
