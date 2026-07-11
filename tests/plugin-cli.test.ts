@@ -168,3 +168,55 @@ describe('deriveDisplayName', () => {
     assert.equal(_deriveDisplayName('/path/to/display-plugin/'), 'display-plugin');
   });
 });
+
+// ── YAML 格式验证 ──
+// 验证 plugin enable/disable 写入项目配置时使用 YAML 而非 JSON（fix: JSON.parse/stringify 误用）
+// 使用保存/恢复策略，不 mock
+
+describe('project config YAML format', () => {
+  const PROJECT_CONFIG_PATH = join(process.cwd(), '.nano-code.yaml');
+  let origContent: string | null;
+
+  beforeEach(() => {
+    origContent = fs.existsSync(PROJECT_CONFIG_PATH)
+      ? fs.readFileSync(PROJECT_CONFIG_PATH, 'utf-8')
+      : null;
+  });
+
+  afterEach(() => {
+    if (origContent !== null) {
+      fs.writeFileSync(PROJECT_CONFIG_PATH, origContent, 'utf-8');
+    } else {
+      try { fs.rmSync(PROJECT_CONFIG_PATH); } catch { /* ignore */ }
+    }
+  });
+
+  it('plugin enable writes YAML format (not JSON)', async () => {
+    await handlePluginCommand(['enable', 'yaml-test-plugin'], {});
+
+    const written = fs.readFileSync(PROJECT_CONFIG_PATH, 'utf-8');
+    // 验证是 YAML 而非 JSON
+    assert.ok(written.includes('plugins:'), 'output should contain plugins: key');
+    assert.ok(written.includes('yaml-test-plugin:'), 'output should contain plugin name');
+    assert.ok(written.includes('true'), 'output should contain enabled: true');
+    assert.throws(
+      () => JSON.parse(written),
+      /SyntaxError|Unexpected|Expected/,
+      'output should NOT be valid JSON',
+    );
+  });
+
+  it('plugin disable writes YAML format (not JSON)', async () => {
+    await handlePluginCommand(['disable', 'yaml-test-plugin'], {});
+
+    const written = fs.readFileSync(PROJECT_CONFIG_PATH, 'utf-8');
+    assert.ok(written.includes('plugins:'), 'output should contain plugins: key');
+    assert.ok(written.includes('yaml-test-plugin:'), 'output should contain plugin name');
+    assert.ok(written.includes('false'), 'output should contain enabled: false');
+    assert.throws(
+      () => JSON.parse(written),
+      /SyntaxError|Unexpected|Expected/,
+      'output should NOT be valid JSON',
+    );
+  });
+});
