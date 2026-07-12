@@ -20,6 +20,19 @@ const GLOBAL_DIR = path.join(os.homedir(), '.nano-code');
 const PROJECT_CONFIG = path.join(process.cwd(), '.nano-code.yaml');
 const GLOBAL_CONFIG = path.join(GLOBAL_DIR, 'config.yaml');
 
+// ── Test path overrides ──
+let _testGlobalDir: string | undefined;
+let _testProjectConfig: string | undefined;
+let _testGlobalConfig: string | undefined;
+export function __setTestConfigPaths(opts: { globalDir?: string; projectConfig?: string; globalConfig?: string } | undefined): void {
+  _testGlobalDir = opts?.globalDir;
+  _testProjectConfig = opts?.projectConfig;
+  _testGlobalConfig = opts?.globalConfig;
+}
+function gDir(): string { return _testGlobalDir ?? GLOBAL_DIR; }
+function pConfig(): string { return _testProjectConfig ?? PROJECT_CONFIG; }
+function gConfig(): string { return _testGlobalConfig ?? GLOBAL_CONFIG; }
+
 export async function handlePluginCommand(args: string[], _globalOptions: any): Promise<void> {
   const cmd = args[0];
   switch (cmd) {
@@ -107,7 +120,7 @@ function deriveDisplayName(source: string): string {
   return s.split('/').pop() || s;
 }
 
-const PRESENTATIONS_DIR = path.join(GLOBAL_DIR, 'presentations');
+const PRESENTATIONS_DIR = path.join(gDir(), 'presentations');
 
 async function installDisplayPlugin(name: string, sourceDir: string | null, spec?: string): Promise<void> {
   fs.mkdirSync(PRESENTATIONS_DIR, { recursive: true });
@@ -171,7 +184,7 @@ async function installFromNpm(spec: string, scope: 'project' | 'user' = 'project
 
 async function installFromGit(url: string, scope: 'project' | 'user' = 'project'): Promise<void> {
   const repoName = path.basename(url.replace(/\.git$/, ''));
-  const targetDir = path.join(GLOBAL_DIR, 'sources', repoName);
+  const targetDir = path.join(gDir(), 'sources', repoName);
 
   fs.mkdirSync(targetDir, { recursive: true });
   execSync(`git clone "${url}" "${targetDir}"`, { stdio: 'inherit' });
@@ -247,7 +260,7 @@ async function detectAndInstallFromDir(dir: string, name: string, source: string
 function addToProjectConfig(name: string, entry: Record<string, any>): void {
   let cfg: Record<string, any> = {};
   try {
-    const raw = fs.readFileSync(PROJECT_CONFIG, 'utf-8');
+    const raw = fs.readFileSync(pConfig(), 'utf-8');
     const parsed = yaml.load(raw);
     if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
       cfg = parsed as Record<string, any>;
@@ -257,14 +270,14 @@ function addToProjectConfig(name: string, entry: Record<string, any>): void {
   if (!cfg.plugins) cfg.plugins = {};
   cfg.plugins[name] = { ...entry, enabled: true };
 
-  fs.writeFileSync(PROJECT_CONFIG, yaml.dump(cfg, { indent: 2 }), 'utf-8');
-  console.log(`已写入项目配置 ${PROJECT_CONFIG}`);
+  fs.writeFileSync(pConfig(), yaml.dump(cfg, { indent: 2 }), 'utf-8');
+  console.log(`已写入项目配置 ${pConfig()}`);
 }
 
 function addToGlobalConfig(name: string, entry: Record<string, any>): void {
   let cfg: Record<string, any> = {};
   try {
-    const raw = fs.readFileSync(GLOBAL_CONFIG, 'utf-8');
+    const raw = fs.readFileSync(gConfig(), 'utf-8');
     const parsed = yaml.load(raw);
     if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
       cfg = parsed as Record<string, any>;
@@ -274,8 +287,8 @@ function addToGlobalConfig(name: string, entry: Record<string, any>): void {
   if (!cfg.plugins) cfg.plugins = {};
   cfg.plugins[name] = { ...entry, enabled: entry.enabled ?? true };
 
-  fs.writeFileSync(GLOBAL_CONFIG, yaml.dump(cfg, { indent: 2 }), 'utf-8');
-  console.log(`已写入全局配置 ${GLOBAL_CONFIG}`);
+  fs.writeFileSync(gConfig(), yaml.dump(cfg, { indent: 2 }), 'utf-8');
+  console.log(`已写入全局配置 ${gConfig()}`);
 }
 
 function addToScopeConfig(name: string, entry: Record<string, any>, scope: 'project' | 'user'): void {
@@ -288,7 +301,7 @@ function addToScopeConfig(name: string, entry: Record<string, any>, scope: 'proj
 
 /** 检查某插件名是否已在项目或全局配置的 plugins 中声明。 */
 function isDeclaredInConfig(name: string): boolean {
-  for (const filePath of [PROJECT_CONFIG, GLOBAL_CONFIG]) {
+  for (const filePath of [pConfig(), gConfig()]) {
     try {
       const raw = fs.readFileSync(filePath, 'utf-8');
       const parsed = yaml.load(raw);
@@ -343,13 +356,13 @@ function uninstallPlugin(args: string[], globalOpts: Record<string, any> = {}): 
 
   if (cleanProject) {
     try {
-      const raw = fs.readFileSync(PROJECT_CONFIG, 'utf-8');
+      const raw = fs.readFileSync(pConfig(), 'utf-8');
       const cfg = yaml.load(raw) as Record<string, any>;
       if (cfg?.plugins?.[name]) {
         delete cfg.plugins[name];
         if (Object.keys(cfg.plugins).length === 0) delete cfg.plugins;
-        fs.writeFileSync(PROJECT_CONFIG, yaml.dump(cfg, { indent: 2 }), 'utf-8');
-        console.log(`  已从项目配置 ${PROJECT_CONFIG} 中移除`);
+        fs.writeFileSync(pConfig(), yaml.dump(cfg, { indent: 2 }), 'utf-8');
+        console.log(`  已从项目配置 ${pConfig()} 中移除`);
         found = true;
       }
     } catch { /* 文件不存在或无需清理 */ }
@@ -357,13 +370,13 @@ function uninstallPlugin(args: string[], globalOpts: Record<string, any> = {}): 
 
   if (cleanUser) {
     try {
-      const raw = fs.readFileSync(GLOBAL_CONFIG, 'utf-8');
+      const raw = fs.readFileSync(gConfig(), 'utf-8');
       const cfg = yaml.load(raw) as Record<string, any>;
       if (cfg?.plugins?.[name]) {
         delete cfg.plugins[name];
         if (Object.keys(cfg.plugins).length === 0) delete cfg.plugins;
-        fs.writeFileSync(GLOBAL_CONFIG, yaml.dump(cfg, { indent: 2 }), 'utf-8');
-        console.log(`  已从全局配置 ${GLOBAL_CONFIG} 中移除`);
+        fs.writeFileSync(gConfig(), yaml.dump(cfg, { indent: 2 }), 'utf-8');
+        console.log(`  已从全局配置 ${gConfig()} 中移除`);
         found = true;
       }
     } catch { /* 文件不存在或无需清理 */ }
@@ -396,7 +409,7 @@ function uninstallPlugin(args: string[], globalOpts: Record<string, any> = {}): 
   // display.plugin 匹配时提示不自动清除
   if (found) {
     try {
-      const raw = fs.readFileSync(GLOBAL_CONFIG, 'utf-8');
+      const raw = fs.readFileSync(gConfig(), 'utf-8');
       const cfg = yaml.load(raw) as Record<string, any>;
       if (cfg?.display?.plugin === name) {
         console.log(`  注意：display.plugin 仍指向 "${name}"，如需切换请手动修改全局配置。`);
@@ -706,7 +719,7 @@ async function setEnabled(name: string, enabled: boolean): Promise<void> {
 
   let projectCfg: Record<string, any> = {};
   try {
-    const raw = fs.readFileSync(PROJECT_CONFIG, 'utf-8');
+    const raw = fs.readFileSync(pConfig(), 'utf-8');
     const parsed = yaml.load(raw);
     if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
       projectCfg = parsed as Record<string, any>;
@@ -717,7 +730,7 @@ async function setEnabled(name: string, enabled: boolean): Promise<void> {
   if (!projectCfg.plugins[name]) projectCfg.plugins[name] = {};
   projectCfg.plugins[name].enabled = enabled;
 
-  fs.writeFileSync(PROJECT_CONFIG, yaml.dump(projectCfg, { indent: 2 }), 'utf-8');
+  fs.writeFileSync(pConfig(), yaml.dump(projectCfg, { indent: 2 }), 'utf-8');
   console.log(`插件 "${name}" 已${enabled ? '启用' : '禁用'}。`);
 }
 
