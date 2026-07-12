@@ -182,7 +182,7 @@
 | **全局 stderr 拦截**（拦截第三方直写 stderr，路由到 Ink 消息系统，防止多 monitor 场景下 alt-screen 被腐蚀） | ✅ 已实现 |
 | **极简模式**（`readline` 裸输入） | ☐ 未实现 |
 | **CLI one-shot 模式**（stdin/stdout 管道，cli-display 插件就绪） | ☐ 待接入 |
-| **Web UI**（HTTP/WebSocket） | ☐ 未实现 |
+| **Web UI**（HTTP/WebSocket — 由外部插件 [preprocess-cn/nano-code-web](https://github.com/preprocess-cn/nano-code-web) 提供） | ✅ 外部插件 |
 
 Ink 展示层（`claude-code-ink`）基于 React + 自研 Ink 引擎（fork 自 Claude Code），支持 ScrollBox 滚动、全屏 terminal UI、`--think` 思考内容灰色斜体视觉区分、`/` 斜杠命令建议弹出与实时过滤、`!`/`/` 输入框模式边框变色、Plan Mode 状态指示器（底栏 `○ normal`/`● PLAN` 徽标 + 任务数量）、问题对话框自定义输入（「其它」选项 + 多行文本 + 提交前确认）、弹框 ESC/Ctrl+C 关闭等功能。
 
