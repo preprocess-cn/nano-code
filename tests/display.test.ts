@@ -8,6 +8,7 @@ import { PluginRegistry } from '../src/core/plugin.js';
 import { replDisplay } from '../src/plugins/display/repl.js';
 import { resolveDisplayPlugin } from '../src/plugins/display/loader.js';
 import { getToolArgsPreview, formatToolCall, getToolDisplayName } from '../src/plugins/display/tool-display.js';
+import { parseThinkSegments } from '../src/plugins/display/claude-code-ink/index.js';
 import { collectPlugins, buildPluginList } from '../src/plugins/commands/builtin.js';
 
 describe('DisplayPlugin — repl', () => {
@@ -262,7 +263,7 @@ describe('DisplayManager — multi-plugin', () => {
     assert.equal(result, null);
   });
 
-  it('prompt broadcasts onUserInput after capturing', async () => {
+  it('prompt no longer broadcasts onUserInput (moved to runMainLoop)', async () => {
     const mgr = new DisplayManager();
     mgr.addPlugin(pluginA);
     mgr.addPlugin(pluginB);
@@ -270,10 +271,9 @@ describe('DisplayManager — multi-plugin', () => {
     const result = await mgr.prompt();
     assert.equal(result, 'input-from-B');
 
-    // pluginB got the input from itself
+    // onUserInput 不再由 prompt() 广播，现在由 runMainLoop 统一处理
     const inputCalls = calls.filter(c => c.startsWith('B-input:'));
-    assert.equal(inputCalls.length, 1);
-    assert.equal(inputCalls[0], 'B-input:pluginB:input-from-B');
+    assert.equal(inputCalls.length, 0);
   });
 
   it('onAgentTurnStart broadcasts to all plugins', () => {
@@ -398,6 +398,82 @@ describe('DisplayManager — multi-plugin', () => {
     });
   });
 
+});
+
+describe('parseThinkSegments', () => {
+
+  it('普通文本不包含 think 段', () => {
+    const segs = parseThinkSegments('Hello world');
+    assert.equal(segs.length, 1);
+    assert.equal(segs[0].dim, false);
+    assert.equal(segs[0].text, 'Hello world');
+  });
+
+  it('lone </think> 把前面内容标记为 dim', () => {
+    const segs = parseThinkSegments('思考中</think>最终答案');
+    assert.equal(segs.length, 2);
+    assert.equal(segs[0].dim, true);
+    assert.equal(segs[0].text, '思考中');
+    assert.equal(segs[1].dim, false);
+    assert.equal(segs[1].text, '最终答案');
+  });
+
+  it('<think>...</think> 把中间内容标记为 dim', () => {
+    const segs = parseThinkSegments('前<think>推理</think>后');
+    assert.equal(segs.length, 3);
+    assert.equal(segs[0].dim, false);
+    assert.equal(segs[0].text, '前');
+    assert.equal(segs[1].dim, true);
+    assert.equal(segs[1].text, '推理');
+    assert.equal(segs[2].dim, false);
+    assert.equal(segs[2].text, '后');
+  });
+
+  it('仅有 </think> 且无前面内容时产生空结果', () => {
+    const segs = parseThinkSegments('</think>');
+    assert.equal(segs.length, 0);
+  });
+
+  it('未闭合 <think> 仍产生 dim', () => {
+    const segs = parseThinkSegments('前<think>推理中');
+    assert.equal(segs.length, 2);
+    assert.equal(segs[0].dim, false);
+    assert.equal(segs[0].text, '前');
+    assert.equal(segs[1].dim, true);
+    assert.equal(segs[1].text, '推理中');
+  });
+
+  it('空字符串返回空数组', () => {
+    const segs = parseThinkSegments('');
+    assert.equal(segs.length, 0);
+  });
+});
+
+describe('DisplayManager — onDebug', () => {
+
+  it('onDebug 广播给所有实现该接口的插件', () => {
+    const mgr = new DisplayManager();
+    const calls: string[] = [];
+    mgr.addPlugin({
+      name: 'a',
+      onDebug(e: any) { calls.push(`a:${e.data}`); },
+    });
+    mgr.addPlugin({
+      name: 'b',
+      onDebug(e: any) { calls.push(`b:${e.data}`); },
+    });
+
+    mgr.onDebug({ agentName: 'main', data: 'test debug' });
+    assert.equal(calls.length, 2);
+    assert.equal(calls[0], 'a:test debug');
+    assert.equal(calls[1], 'b:test debug');
+  });
+
+  it('onDebug 对无 onDebug 的插件不抛异常', () => {
+    const mgr = new DisplayManager();
+    mgr.addPlugin({ name: 'silent' });
+    mgr.onDebug({ agentName: 'main', data: 'debug' }); // 不应抛出
+  });
 });
 
 describe('formatToolCall / getToolArgsPreview', () => {

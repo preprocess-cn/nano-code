@@ -7,6 +7,7 @@ import { handlePluginCommand, printPluginList } from '#src/plugin-cli.js';
 import { DisplayManager } from '#src/display.js';
 import { initDisplay } from '#src/plugins/display/init.js';
 import { AgentManager } from '#src/core/agent-manager.js';
+import { wait } from '#src/core/message-queue.js';
 import { SK, agentCancelledKey, agentAbortKey } from '#src/core/store-keys.js';
 import type { ModelEntry } from '#src/core/llm.js';
 import { cac } from 'cac';
@@ -81,6 +82,18 @@ async function initializePlugins(
     await registerBuiltinPlugin(registry, name);
   }
 
+  // 2.5 Register notify-manager unconditionally
+  //     不依赖 system_plugins 配置，因为外部插件直接调 DisplayManager.setNotify
+  //     需要 notify-manager 包装后才能走队列 + 2s 自动清除。
+  //     用户可通过 plugins.notify-manager.enabled = false 禁用。
+  {
+    const nmConfig = config.plugins['notify-manager'];
+    if (!nmConfig || nmConfig.enabled !== false) {
+      const nmSettings = { ...(nmConfig?.settings ?? {}), displayMgr };
+      await registerBuiltinPlugin(registry, 'notify-manager', nmSettings);
+    }
+  }
+
   // 3. Register user-configured plugins + collect npm entries
   const npmEntries: Record<string, { spec?: string; enabled?: boolean }> = {};
   for (const [name, pluginCfg] of Object.entries(config.plugins)) {
@@ -89,14 +102,12 @@ async function initializePlugins(
       npmEntries[name] = { spec: pluginCfg.spec, enabled: pluginCfg.enabled };
     } else if (pluginCfg.type === 'mcp') {
       continue; // mcp-loader 处理
+    } else if (name === 'notify-manager') {
+      continue; // 已在 step 2.5 无条件注册
     } else if (systemWhitelist.has(name)) {
       continue; // 已在 step 2 注册
     } else if ((DEFAULT_FEATURE_PLUGINS as unknown as string[]).includes(name)) {
       continue; // feature 插件在 step 4 统一注册
-    } else if (name === 'notify-manager') {
-      // Inject displayMgr runtime dependency
-      const mergedSettings = { ...(pluginCfg.settings ?? {}), displayMgr };
-      await registerBuiltinPlugin(registry, name, mergedSettings);
     } else {
       await registerBuiltinPlugin(registry, name, pluginCfg.settings);
     }
@@ -172,15 +183,37 @@ async function runMainLoop(
 
   while (true) {
     isPrompting = true;
-    const userInput = await displayMgr.prompt();
+    const item = await wait(displayMgr);
     isPrompting = false;
 
-    if (userInput === null) {
+    // null = requestExit() 被调用 → 退出
+    if (item === null) {
       await handleExit(displayMgr, registry);
       return;
     }
 
-    const intercept = await registry.execBeforeAgentInput(userInput);
+    // 事件通知：跳过 intercept，直接送 agent
+    if (item.mode === 'task-notification') {
+      try {
+        await agent.runTask(item.value);
+      } catch (error: any) {
+        if (error?.name === 'AbortError' || error?.message === 'CANCELLED') {
+          registry.store.set(agentCancelledKey('main'), undefined);
+        } else {
+          displayMgr.onError({
+            message: MSG_TOP_LEVEL_ERROR(error),
+            agentName: 'main',
+            stack: error instanceof Error ? error.stack : undefined,
+          });
+        }
+      }
+      saveSession(process.cwd(), agent.getHistory());
+      continue;
+    }
+
+    // 用户输入：回显到 display + intercept
+    displayMgr.onUserInput(item.value, 'message-queue');
+    const intercept = await registry.execBeforeAgentInput(item.value);
     if (intercept) {
       if (intercept.exit) {
         await handleExit(displayMgr, registry);
@@ -191,7 +224,7 @@ async function runMainLoop(
       if (intercept.skipAgent) continue;
     }
 
-    const effectiveInput = intercept?.replaceInput ?? userInput;
+    const effectiveInput = intercept?.replaceInput ?? item.value;
     try {
       await agent.runTask(effectiveInput);
     } catch (error: any) {

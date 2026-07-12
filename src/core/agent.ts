@@ -130,6 +130,9 @@ export class NanoCodeAgent {
       this.registry.store.set(agentAbortKey(this.name), abortController);
       const isCancelled = () => this.registry.store.get(agentCancelledKey(this.name)) === true || abortController.signal.aborted;
 
+      // DEBUG: emit full request
+      try { this.display?.onDebug?.({ agentName: this.name, data: `[REQUEST]\n${JSON.stringify(messagesWithSystem, null, 2)}` }); } catch {}
+
       let response;
       try {
         response = await this.llmClient.sendSystemMessage(
@@ -157,6 +160,9 @@ export class NanoCodeAgent {
       }
 
       this.registry.execAfterRequest(response, responseMeta);
+
+      // DEBUG: emit full response
+      try { this.display?.onDebug?.({ agentName: this.name, data: `[RESPONSE]\n${JSON.stringify(response, null, 2)}` }); } catch {}
 
       if (isSubAgent && streamBuffer) {
         this.display?.onStreamChunk?.({ text: '\n' + streamBuffer + '\n', agentName: this.name });

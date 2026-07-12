@@ -427,7 +427,7 @@ function offsetFromLineCol(lines: string[], lineIdx: number, col: number): numbe
 }
 
 function AppContent(props: InkAppProps): React.ReactElement {
-  const { messages, onInputSubmit, onExit, greeting, pendingPermission, onPermissionResponse, pendingQuestions, onQuestionsResponse, activeAgentName, viewAgent, onViewAgentClear, onViewAgentChange } = props;
+  const { messages, onInputSubmit, onExit, greeting, pendingPermission, onPermissionResponse, pendingQuestions, onQuestionsResponse, activeAgentName, viewAgent, onViewAgentClear, onViewAgentChange, mode } = props;
   const { setRawMode } = useStdin();
   const [input, setInput] = useState('');
   const [cursorPos, setCursorPos] = useState(0);
@@ -515,7 +515,9 @@ function AppContent(props: InkAppProps): React.ReactElement {
         ? '#ff0087' // bash mode (pink, matches Claude Code bashBorder)
         : input.startsWith('/')
           ? '#7c3aed' // slash/command mode (accent purple)
-          : '#6b7280'; // normal mode (gray)
+          : mode === 'plan'
+            ? '#f59e0b' // plan mode (amber, matches PLAN indicator)
+            : '#6b7280'; // normal mode (gray)
 
   // Show terminal cursor — Ink hides it in componentDidMount (parent class
   // component), which runs after useLayoutEffect but BEFORE useEffect.

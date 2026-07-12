@@ -1,5 +1,5 @@
 import { PluginRegistry } from '#src/core/plugin.js';
-import type { ToolStatus, AgentDisplay, AgentEvent, MessageLevel, StatusEvent, StreamEvent, ToolCallEvent, ToolResultEvent, StateSnapshot } from '#src/core/contract.js';
+import type { ToolStatus, AgentDisplay, AgentEvent, DebugEvent, MessageLevel, StatusEvent, StreamEvent, ToolCallEvent, ToolResultEvent, StateSnapshot } from '#src/core/contract.js';
 import type { ContextAnalysis } from '#src/core/contract.js';
 import { logManager } from '#src/utils/logger.js';
 
@@ -27,10 +27,6 @@ export interface ErrorEvent extends AgentEvent {
   stack?: string;
 }
 
-export interface DebugEvent extends AgentEvent {
-  data: string;
-}
-
 export interface BackgroundTaskEvent extends AgentEvent {
   taskId: string;
   taskStatus: 'started' | 'completed' | 'error';
@@ -48,7 +44,7 @@ export interface NotifyEvent {
 }
 
 // ── 共享事件类型（定义在 contract.ts） ──
-export type { AgentEvent, MessageLevel, StatusEvent, StreamEvent, ToolCallEvent, ToolResultEvent, StateSnapshot };
+export type { AgentEvent, DebugEvent, MessageLevel, StatusEvent, StreamEvent, ToolCallEvent, ToolResultEvent, StateSnapshot };
 
 // ════════════════════════════════════════════
 // DisplayPlugin — 展示层插件接口
@@ -109,10 +105,9 @@ export interface DisplayPlugin {
   showModelPicker?(registry: PluginRegistry): Promise<boolean>;
 
   /**
-   * 可选的状态栏内容更新。
-   * 传入各段落的键值映射（如 { tasks: "3 active", tokens: "85K/128K" }）。
-   * 外部插件通过 DisplayManager.setStatusBar(key, value) 设置各自段落，
-   * DisplayManager 合并后传入此方法。display 实现可选择展示方式。
+   * 状态栏内容更新（由 DisplayManager 合并后广播）。
+   * segments 是当前所有 KEY 的完整映射，display 实现从中提取感兴趣的部分展示。
+   * 每个 KEY 独立控制自己的展示区域 — 不存在会影响其他 KEY。
    */
   setStatusBar?(segments: Record<string, string>): void;
 
@@ -135,9 +130,20 @@ export interface DisplayOutput {
   onContextAnalysis?(analysis: ContextAnalysis): void;
 }
 
-/** 状态栏接口 */
+/** 状态栏接口 — 每个 key 独立控制自己的 segment，互不影响 */
 export interface DisplayStatusBar {
-  setStatusBar(key: string, value: string | null): void;
+  /**
+   * 设置状态栏段落。
+   *
+   * @param key   - 段落标识（如 "mode"、"tasks"、"tokens"）。
+   *                每个 key 独立控制自己的显示区域，不会影响其他 key。
+   * @param value - 展示文本：
+   *                - `string | number` → 设置该段落的值为对应文本
+   *                - `null` 或其他非 string/number 类型 → 清除该段落
+   *                例：setStatusBar('tasks', '3 active') 设置 tasks 段
+   *                    setStatusBar('mode', null)         清除 mode 段
+   */
+  setStatusBar(key: string, value: string | number | null): void;
 }
 
 /** 通知接口 */
@@ -205,7 +211,6 @@ export class DisplayManager implements DisplayOutput, DisplayStatusBar, DisplayN
     for (const plugin of this.plugins) {
       const result = await plugin.prompt?.();
       if (result !== null && result !== undefined) {
-        for (const p of this.plugins) p.onUserInput?.(result, plugin.name);
         return result;
       }
     }
@@ -291,14 +296,25 @@ export class DisplayManager implements DisplayOutput, DisplayStatusBar, DisplayN
   private _statusBarSegments: Map<string, string> = new Map();
 
   /**
-   * 设置状态栏段落。key 为段落标识（如 "tasks"），value 为展示文本，空串/null 表示移除。
-   * 每次调用合并到内部状态后，将完整段落映射广播给所有 display 插件。
+   * 设置状态栏段落 — 每个 KEY 独立控制自己的 segment。
+   *
+   * value 为 `string | number` 时设置该 KEY 的值；
+   * value 为 `null` 或其他非 string/number 类型时清除该 KEY。
+   *
+   * 每次调用仅影响指定 KEY，其他 KEY 不受影响。
+   * 合并完整 segments 映射后广播给所有 display 插件。
+   *
+   * @param key   - 段落标识，如 "mode"、"tasks"、"tokens"
+   * @param value - string | number → 设值；null 或其他类型 → 清除
    */
-  setStatusBar(key: string, value: string | null): void {
-    if (value === null || value === '') {
-      this._statusBarSegments.delete(key);
-    } else {
+  setStatusBar(key: string, value: string | number | null): void {
+    if (typeof value === 'string' && value !== '') {
       this._statusBarSegments.set(key, value);
+    } else if (typeof value === 'number') {
+      this._statusBarSegments.set(key, String(value));
+    } else {
+      // null, undefined, object, boolean 等 → 清除该 KEY
+      this._statusBarSegments.delete(key);
     }
     const merged: Record<string, string> = {};
     for (const [k, v] of this._statusBarSegments) merged[k] = v;

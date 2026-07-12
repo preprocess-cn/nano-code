@@ -29,6 +29,10 @@ export interface ToolResultEvent extends AgentEvent {
   message?: string;
 }
 
+export interface DebugEvent extends AgentEvent {
+  data: string;
+}
+
 export interface StateSnapshot {
   agentName: string;
   messageCount: number;
@@ -238,5 +242,6 @@ export interface AgentDisplay {
   onStateSnapshot?(snapshot: StateSnapshot): void;
   onAgentTurnStart?(event: AgentEvent): void;
   onAgentTurnEnd?(event: AgentEvent): void;
+  onDebug?(event: DebugEvent): void;
 }
 

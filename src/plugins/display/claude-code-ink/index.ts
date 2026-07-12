@@ -1,4 +1,4 @@
-import type { DisplayPlugin, StartConfig, StatusEvent, StreamEvent, ToolCallEvent, ToolResultEvent, ErrorEvent, AgentEvent, BackgroundTaskEvent, StateSnapshot, MessageLevel, NotifyEvent } from '#src/display.js';
+import type { DisplayPlugin, StartConfig, StatusEvent, StreamEvent, ToolCallEvent, ToolResultEvent, ErrorEvent, DebugEvent, AgentEvent, BackgroundTaskEvent, StateSnapshot, MessageLevel, NotifyEvent } from '#src/display.js';
 import type { ContextAnalysis } from '#src/core/contract.js';
 import { inkRender, type Instance } from '#src/plugins/display/claude-code-ink/ink.js';
 import { InkApp, type UIMessage, type TextSegment, type PermissionPrompt, type PermissionResponse, type BackgroundTaskInfo } from '#src/plugins/display/claude-code-ink/InkApp.js';
@@ -12,6 +12,7 @@ import { logManager } from '#src/utils/logger.js';
 import { formatToolCall, getToolArgsPreview } from '#src/plugins/display/tool-display.js';
 import type { ToolResponse } from '#src/core/contract.js';
 import React from 'react';
+import { enqueue, requestExit } from '#src/core/message-queue.js';
 
 export interface CommandSuggestion {
   name: string;
@@ -19,7 +20,7 @@ export interface CommandSuggestion {
   type: 'builtin' | 'skill' | 'agent';
 }
 
-function parseThinkSegments(text: string): TextSegment[] {
+export function parseThinkSegments(text: string): TextSegment[] {
   const segments: TextSegment[] = [];
   let remaining = text;
   let inThink = false;
@@ -56,8 +57,6 @@ function parseThinkSegments(text: string): TextSegment[] {
   return segments;
 }
 
-type InputResolve = (value: string | null) => void;
-
 let _suggestionProvider: (() => CommandSuggestion[]) | null = null;
 
 export function setSuggestionProvider(provider: (() => CommandSuggestion[]) | null): void {
@@ -67,15 +66,16 @@ export function setSuggestionProvider(provider: (() => CommandSuggestion[]) | nu
 function createPlugin(): DisplayPlugin {
   let inkInstance: Instance | null = null;
   let messages: UIMessage[] = [];
-  let promptResolve: InputResolve | null = null;
   let greeting = '';
   let agentName = 'main';
   let showThink = false;
+  let debug = false;
   let streamAccumulator = '';
   let visibleAccumulator = '';
   let thinkStream: ThinkStream | null = null;
   let lastStreamTarget: UIMessage | null = null;
   let lastThinkTarget: UIMessage | null = null;
+  let thinkingStatusMsg: UIMessage | null = null; // "正在思考"占位符，被 think 内容替换
   let greetingShown = false; // 是否已在消息列表中展示 greeting
   // Permission confirm state — 支持 allow_once / always_allow / deny
   let pendingPermission: PermissionPrompt | null = null;
@@ -194,24 +194,12 @@ function createPlugin(): DisplayPlugin {
           },
           onInputChange: () => {},
           onInputSubmit: (text: string) => {
-            // @ 开头的输入：先尝试视图切换
-            if (text.startsWith('@')) {
-              if (handleViewSwitch(text)) return;
-            }
-            if (promptResolve) {
-              const r = promptResolve;
-              promptResolve = null;
-              r(text);
-            }
+            if (text.startsWith('@') && handleViewSwitch(text)) return;
+            enqueue({ mode: 'prompt', value: text });
           },
           onExit: () => {
-            if (promptResolve) {
-              const r = promptResolve;
-              promptResolve = null;
-              r(null);
-            } else {
-              cancelExecution();
-            }
+            cancelExecution();
+            requestExit();
           },
           pendingPermission,
           onPermissionResponse: (response: PermissionResponse) => {
@@ -280,14 +268,20 @@ function createPlugin(): DisplayPlugin {
       // 订阅 mode 变化，同步到 statusSegments 并重新渲染
       unsubMode = registry.store.subscribe(SK.Mode, () => {
         const mode = registry?.store?.get<string>(SK.Mode);
-        if (mode === 'plan') {
-          statusSegments = { ...statusSegments, mode: 'plan' };
+        if (mode === 'plan' || mode === 'normal') {
+          statusSegments = { ...statusSegments, mode };
         } else if (statusSegments.mode !== undefined) {
           const { mode: _, ...rest } = statusSegments;
           statusSegments = rest;
         }
         render();
       });
+
+      // 初始化：读取当前 mode（订阅不会触发初始值，因 task-plan 在之前已设值）
+      const initialMode = registry.store.get<string>(SK.Mode);
+      if (initialMode === 'plan' || initialMode === 'normal') {
+        statusSegments.mode = initialMode;
+      }
 
       // 初始化斜杠命令建议（收集技能/命令/agent 列表供自动补全）
       const { initCommandSuggestions } = await import('#src/plugins/display/claude-code-ink/skills-bridge.js');
@@ -298,6 +292,54 @@ function createPlugin(): DisplayPlugin {
       greeting = config.greeting;
       agentName = config.agentName;
       showThink = config.showThink === true;
+      debug = config.debug === true;
+
+      // 提前创建 Ink 渲染（不再等到 prompt() 首次调用）
+      if (messages.length > 0 && !greetingShown) {
+        messages.unshift({ agentName, text: greeting, kind: 'status' });
+        greetingShown = true;
+      }
+      const initSuggestions = _suggestionProvider?.() ?? [];
+      const initMode = (registry?.store?.get<string>(SK.Mode) ?? 'normal') as 'normal' | 'plan';
+      const initPromise = inkRender(
+        React.createElement(InkApp, {
+          greeting,
+          messages: [...messages],
+          inputBuffer: '',
+          suggestions: initSuggestions,
+          activeAgentName: registry?.store?.get<AgentModeInfo>(SK.AgentMode)?.name,
+          mode: initMode,
+          backgroundTasks,
+          viewAgent: undefined,
+          viewAgents: [{ name: 'main', label: '主对话' }],
+          onViewAgentChange: (name: string) => {
+            registry?.store?.set(SK.ViewAgent, name === 'main' ? undefined : name);
+            render();
+          },
+          onViewAgentClear: () => {
+            registry?.store?.set(SK.ViewAgent, undefined);
+            render();
+          },
+          onInputChange: () => {},
+          onInputSubmit: (text: string) => {
+            if (text.startsWith('@') && handleViewSwitch(text)) return;
+            enqueue({ mode: 'prompt', value: text });
+          },
+          onExit: () => {
+            cancelExecution();
+            requestExit();
+          },
+          onModeToggle: handleModeToggle,
+          statusSegments,
+          notification,
+        }),
+        { stdout: process.stdout, stdin: process.stdin, stderr: process.stderr, exitOnCtrlC: false, patchConsole: false },
+      );
+      initPromise.then(inst => {
+        inkInstance = inst;
+      }).catch(err => {
+        console.error('[claude-code-ink] failed to initialize Ink:', err);
+      });
     },
 
     onStop(message: string): void {
@@ -314,74 +356,14 @@ function createPlugin(): DisplayPlugin {
       thinkStream = null;
       lastStreamTarget = null;
       lastThinkTarget = null;
+      thinkingStatusMsg = null;
       console.log('\n' + message);
     },
 
     prompt(): Promise<string | null> {
-      if (!inkInstance) {
-        // 首次渲染：如果有消息（如 debug/think 状态消息），greeting 不会显示在欢迎页，
-        // 因此将其加入消息列表头部，确保用户能看到它
-        if (messages.length > 0 && !greetingShown) {
-          messages.unshift({ agentName, text: greeting, kind: 'status' });
-          greetingShown = true;
-        }
-        const initSuggestions = _suggestionProvider?.() ?? [];
-        const initMode = (registry?.store?.get<string>(SK.Mode) ?? 'normal') as 'normal' | 'plan';
-        const initPromise = inkRender(
-          React.createElement(InkApp, {
-            greeting,
-            messages: [...messages],
-            inputBuffer: '',
-            suggestions: initSuggestions,
-            activeAgentName: registry?.store?.get<AgentModeInfo>(SK.AgentMode)?.name,
-            mode: initMode,
-            backgroundTasks,
-            viewAgent: undefined,
-            viewAgents: [{ name: 'main', label: '主对话' }],
-            onViewAgentChange: (name: string) => {
-              registry?.store?.set(SK.ViewAgent, name === 'main' ? undefined : name);
-              render();
-            },
-            onViewAgentClear: () => {
-              registry?.store?.set(SK.ViewAgent, undefined);
-              render();
-            },
-            onInputChange: () => {},
-            onInputSubmit: (text: string) => {
-              if (text.startsWith('@')) {
-                if (handleViewSwitch(text)) return;
-              }
-              if (promptResolve) {
-                const r = promptResolve;
-                promptResolve = null;
-                r(text);
-              }
-            },
-            onExit: () => {
-              if (promptResolve) {
-                const r = promptResolve;
-                promptResolve = null;
-                r(null);
-              } else {
-                cancelExecution();
-              }
-            },
-            onModeToggle: handleModeToggle,
-            statusSegments,
-            notification,
-          }),
-          { stdout: process.stdout, stdin: process.stdin, stderr: process.stderr, exitOnCtrlC: false, patchConsole: false },
-        );
-        initPromise.then(inst => {
-          inkInstance = inst;
-        }).catch(err => {
-          console.error('[claude-code-ink] failed to initialize Ink:', err);
-        });
-      }
-
-      return new Promise<string | null>(resolve => {
-        promptResolve = resolve;
-      });
+      // 输入由 onInputSubmit → enqueue() 处理，退出由 onExit → requestExit() 处理
+      // prompt() 不再承担实际功能，返回永不 resolve 的 Promise
+      return new Promise<string | null>(() => {});
     },
 
     onUserInput(input: string, _sourcePlugin: string): void {
@@ -390,6 +372,7 @@ function createPlugin(): DisplayPlugin {
       thinkStream = null;
       lastStreamTarget = null;
       lastThinkTarget = null;
+      thinkingStatusMsg = null;
       // Show user's query in message list (separate kind for scroll indicator)
       messages.push({ agentName, text: input, kind: 'userInput' });
       render();
@@ -398,7 +381,9 @@ function createPlugin(): DisplayPlugin {
     onStatus(event: StatusEvent): void {
       if (event.level === 'status') {
         if (event.message === 'thinking') {
-          messages.push({ agentName: event.agentName, text: '? 正在思考并请求大模型...', kind: 'thinking' });
+          const msg: UIMessage = { agentName: event.agentName, text: '? 正在思考并请求大模型...', kind: 'thinking' };
+          messages.push(msg);
+          thinkingStatusMsg = msg;
         }
         // 'end' — no message push, just re-render
         render();
@@ -435,7 +420,12 @@ function createPlugin(): DisplayPlugin {
 
         // Update or create thinking message (dimmed)
         if (thinkText) {
-          if (lastThinkTarget != null
+          // 有 "正在思考" 占位符 → 替换为实际 think 内容（保证顺序在 stream 之前）
+          if (thinkingStatusMsg) {
+            thinkingStatusMsg.text = thinkText;
+            lastThinkTarget = thinkingStatusMsg;
+            thinkingStatusMsg = null;
+          } else if (lastThinkTarget != null
             && lastThinkTarget.kind === 'thinking'
             && lastThinkTarget.agentName === event.agentName) {
             lastThinkTarget.text = thinkText;
@@ -443,22 +433,24 @@ function createPlugin(): DisplayPlugin {
             const msg: UIMessage = { agentName: event.agentName, text: thinkText, kind: 'thinking' };
             messages.push(msg);
             lastThinkTarget = msg;
-            lastStreamTarget = null;
           }
           anyUpdate = true;
         }
 
         // Update or create stream message (normal text)
-        if (normalText) {
-          if (lastStreamTarget != null
-            && lastStreamTarget.kind === 'stream'
-            && lastStreamTarget.agentName === event.agentName) {
+        if (lastStreamTarget != null
+          && lastStreamTarget.kind === 'stream'
+          && lastStreamTarget.agentName === event.agentName) {
+          // Always update existing stream — 当 </think> 把已显示的文本重分类为 think 时，
+          // normalText 可能变短，stream 消息需要同步裁短以避免重复显示
+          if (normalText !== lastStreamTarget.text) {
             lastStreamTarget.text = normalText;
-          } else {
-            const msg: UIMessage = { agentName: event.agentName, text: normalText, kind: 'stream' };
-            messages.push(msg);
-            lastStreamTarget = msg;
+            anyUpdate = true;
           }
+        } else if (normalText) {
+          const msg: UIMessage = { agentName: event.agentName, text: normalText, kind: 'stream' };
+          messages.push(msg);
+          lastStreamTarget = msg;
           anyUpdate = true;
         }
 
@@ -489,6 +481,7 @@ function createPlugin(): DisplayPlugin {
       thinkStream = null;
       lastStreamTarget = null;
       lastThinkTarget = null;
+      thinkingStatusMsg = null;
       messages.push({
         agentName: event.agentName,
         text: formatToolCall(event.toolName, event.args, registry?.getAllSchemas()),
@@ -509,6 +502,12 @@ function createPlugin(): DisplayPlugin {
 
     onError(event: ErrorEvent): void {
       messages.push({ agentName: event.agentName, text: event.message, kind: 'error' });
+      render();
+    },
+
+    onDebug(event: DebugEvent): void {
+      if (!debug) return;
+      messages.push({ agentName: event.agentName, text: `[DEBUG] ${event.data}`, kind: 'status' });
       render();
     },
 
@@ -627,6 +626,14 @@ function createPlugin(): DisplayPlugin {
 
     setStatusBar(segments: Record<string, string>): void {
       statusSegments = segments;
+      // 从 SK.Mode 同步 mode 状态：
+      // mode 由 store 订阅管理，外部 setStatusBar(key, null) 的广播不应抹掉它
+      const currentMode = registry?.store?.get<string>(SK.Mode);
+      if (currentMode === 'plan' || currentMode === 'normal') {
+        statusSegments.mode = currentMode;
+      } else {
+        delete statusSegments.mode;
+      }
       render();
     },
 

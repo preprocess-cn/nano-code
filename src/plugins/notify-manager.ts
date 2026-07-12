@@ -31,6 +31,9 @@ export function createNotifyManagerPlugin(config?: NotifyManagerConfig): NanoPlu
   let isRunning = false;
   let _registryRef: PluginRegistry | null = null;
 
+  // 保存原始 setNotify 引用，在 processQueue 内部使用（绕过外层包装避免循环）
+  const _origSetNotify = cfg.displayMgr?.setNotify.bind(cfg.displayMgr) ?? null;
+
   // ── Queue management ──
 
   function pickNext(): Notification | null {
@@ -77,15 +80,15 @@ export function createNotifyManagerPlugin(config?: NotifyManagerConfig): NanoPlu
 
     const notification = pickNext();
     if (!notification) {
-      // Queue empty — clear display
-      cfg.displayMgr?.setNotify(null, null);
+      // Queue empty — clear display (使用原始引用，不经过外层包装)
+      _origSetNotify?.(null, null);
       isRunning = false;
       timer = null; // 重置 timer 以便 start() 能再次调度
       return;
     }
 
-    // Send to display
-    cfg.displayMgr?.setNotify(notification.source, notification.message);
+    // Send to display (使用原始引用，不经过外层包装)
+    _origSetNotify?.(notification.source, notification.message);
 
     // Schedule next
     timer = setTimeout(() => {
@@ -140,6 +143,22 @@ export function createNotifyManagerPlugin(config?: NotifyManagerConfig): NanoPlu
       _registryRef = registry;
       // Register the sendNotify function in the shared store
       registry.store.set(SK.NotifySend, sendNotify);
+
+      // ── 拦截 DisplayManager.setNotify ──
+      // 外部插件（如 nano-code-monitor）直接调用 display.setNotify(source, message) 时，
+      // 将其路由到 notify-manager 队列，确保 2s 自动清除。
+      // 清除请求（source/message 为 null）直接透传。
+      // 使用 _origSetNotify 内部调用避免循环。
+      if (cfg.displayMgr && _origSetNotify) {
+        const dm = cfg.displayMgr as any;
+        dm.setNotify = (source: string | null, message: string | null) => {
+          if (source && message) {
+            sendNotify(source, message);
+          } else {
+            _origSetNotify(null, null);
+          }
+        };
+      }
     },
 
     async onDestroy(): Promise<void> {
