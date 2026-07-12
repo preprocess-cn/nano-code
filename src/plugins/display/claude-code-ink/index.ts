@@ -90,6 +90,7 @@ function createPlugin(): DisplayPlugin {
   let statusSegments: Record<string, string> = {};
   let notification: { source: string; message: string } | null = null;
   let unsubMode: (() => void) | null = null;
+  let restoreStderr: (() => void) | null = null;
 
   function cancelExecution(): void {
     if (registry) {
@@ -226,7 +227,9 @@ function createPlugin(): DisplayPlugin {
         }),
       );
     } catch (err) {
-      console.error('[claude-code-ink] render error:', err);
+      // 静默捕获——不能用 console.error (直通 stderr 破坏 Ink 全屏)，
+      // 也不能 push message + render (导致循环)。
+      // React 内部已自己 catch + console.error 输出了，这里不再重复。
     }
   }
 
@@ -250,8 +253,28 @@ function createPlugin(): DisplayPlugin {
         stdout(_chunk: string) {},
         stderr(_chunk: string) {},
       });
-      // Ink owns the terminal — suppress direct stderr writes
+      // Ink 控制终端输出，拦截所有第三方 stderr 写入避免破坏 alt-screen
       logManager.unregister('stderr');
+      // 同 Ink 引擎 patchStderr：拦截 process.stderr.write，避免第三方
+      // 直写 stderr（React 错误日志、插件输出等）腐蚀 Ink 的 alt-screen。
+      // 路由到 logManager.display-bridge → onError → 通过 Ink 消息系统展示。
+      // 重入保护防止 render-error → stderr → onError → render 递归。
+      {
+        const _origWrite = process.stderr.write.bind(process.stderr) as any;
+        let _reentered = false;
+        const intercept: any = (chunk: any, encodingOrCb: any, cb?: any) => {
+          if (_reentered) return _origWrite(chunk, typeof encodingOrCb === 'string' ? encodingOrCb : undefined, typeof encodingOrCb === 'function' ? encodingOrCb : cb);
+          _reentered = true;
+          try {
+            const text = typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8');
+            if (text.trim()) logManager.error('stderr', text);
+            (typeof encodingOrCb === 'function' ? encodingOrCb : cb)?.();
+          } finally { _reentered = false; }
+          return true;
+        };
+        process.stderr.write = intercept;
+        restoreStderr = () => { if (process.stderr.write === intercept) process.stderr.write = _origWrite; };
+      }
       registry.registerInteractiveHandler('ask_user_question', async (args: any) => {
         const questions = args.questions as Array<{ question: string; header: string; options: Array<{ label: string; description: string; preview?: string }>; multiSelect?: boolean }>;
         return new Promise<ToolResponse>((resolve) => {
@@ -338,11 +361,14 @@ function createPlugin(): DisplayPlugin {
       initPromise.then(inst => {
         inkInstance = inst;
       }).catch(err => {
-        console.error('[claude-code-ink] failed to initialize Ink:', err);
+        // Ink 未初始化完成，stderr 仍是原始终端，可用
+        process.stderr.write(`[claude-code-ink] failed to initialize Ink: ${err instanceof Error ? err.message : String(err)}\n`);
       });
     },
 
     onStop(message: string): void {
+      restoreStderr?.();
+      restoreStderr = null;
       unsubMode?.();
       unsubMode = null;
       if (inkInstance) {
@@ -357,7 +383,8 @@ function createPlugin(): DisplayPlugin {
       lastStreamTarget = null;
       lastThinkTarget = null;
       thinkingStatusMsg = null;
-      console.log('\n' + message);
+      // Ink 已 unmount，直接用 stdout 写退出消息
+      process.stdout.write('\n' + message + '\n');
     },
 
     prompt(): Promise<string | null> {

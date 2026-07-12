@@ -179,6 +179,7 @@
 | **xterm modifyOtherKeys 始终启用**（Shift+Enter 修饰键检测覆盖所有 xterm 类终端） | ✅ 已实现 |
 | **弹框 ESC/Ctrl+C 关闭**（权限/问题弹框可通过 ESC 或 Ctrl+C 关闭并终止 ReAct） | ✅ 已实现 |
 | **问题对话框自定义输入**（「其它」选项 + 多行输入 + 提交前确认） | ✅ 已实现 |
+| **全局 stderr 拦截**（拦截第三方直写 stderr，路由到 Ink 消息系统，防止多 monitor 场景下 alt-screen 被腐蚀） | ✅ 已实现 |
 | **极简模式**（`readline` 裸输入） | ☐ 未实现 |
 | **CLI one-shot 模式**（stdin/stdout 管道，cli-display 插件就绪） | ☐ 待接入 |
 | **Web UI**（HTTP/WebSocket） | ☐ 未实现 |

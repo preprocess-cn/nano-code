@@ -177,7 +177,7 @@ display:
 | 插件 | 说明 |
 |------|------|
 | `repl` | 默认（交互式），基于 `@clack/prompts` + `console` 的 REPL 交互；流分页器（大输出分段展示）、plan mode `(plan)` 提示符前缀 |
-| `claude-code-ink` | 基于 React + Ink 的全屏终端 UI，支持 ScrollBox 滚动、`--think` 思考内容灰色斜体区分、agent 前缀、keybinding 系统、多行输入（Shift+Enter / `\`+Enter 换行）、交互式问题对话框（自定义文本输入 + 确认）、ESC/Ctrl+C 关闭弹框等 |
+| `claude-code-ink` | 基于 React + Ink 的全屏终端 UI，支持 ScrollBox 滚动、`--think` 思考内容灰色斜体区分、agent 前缀、keybinding 系统、多行输入（Shift+Enter / `\`+Enter 换行）、交互式问题对话框（自定义文本输入 + 确认）、ESC/Ctrl+C 关闭弹框等；内含全局 stderr 拦截，防止第三方输出腐蚀 alt-screen |
 | `cli` | 非交互式 CLI 展示，AI 响应输出到 stdout，状态/错误输出到 stderr；`display.enabled: false` 时的兜底方案 |
 
 自定义展示插件可通过 `nano-code plugin install <source>` 安装，自动注册到 `~/.nano-code/presentations/`，设置 `display.plugin: <name>` 即可激活。详见 [DisplayPlugin 安装](#displayplugin-安装)。
