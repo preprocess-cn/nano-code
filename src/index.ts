@@ -7,7 +7,7 @@ import { handlePluginCommand, printPluginList } from '#src/plugin-cli.js';
 import { DisplayManager } from '#src/display.js';
 import { initDisplay } from '#src/plugins/display/init.js';
 import { AgentManager } from '#src/core/agent-manager.js';
-import { wait } from '#src/core/message-queue.js';
+import { wait, enqueuePendingNotification } from '#src/core/message-queue.js';
 import { SK, agentCancelledKey, agentAbortKey } from '#src/core/store-keys.js';
 import type { ModelEntry } from '#src/core/llm.js';
 import { cac } from 'cac';
@@ -262,6 +262,9 @@ async function startCLI(options: { debug?: boolean; think?: boolean; skipPermiss
 
   // ── Plugin registry (created before LLMClient so its Store is available) ──
   const registry = new PluginRegistry();
+
+  // 将 enqueuePendingNotification 注入 store，供插件在 onInit 及之后使用
+  registry.store.set(SK.EnqueuePendingNotification, enqueuePendingNotification);
 
   // ── LLM Client ──
   let llmClient: LLMClient;

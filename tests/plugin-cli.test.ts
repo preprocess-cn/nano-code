@@ -3,7 +3,8 @@ import * as assert from 'node:assert/strict';
 import * as fs from 'fs';
 import { mkdtempSync, rmSync } from 'fs';
 import { join } from 'path';
-import { tmpdir } from 'os';
+import { tmpdir, homedir } from 'os';
+import * as yaml from 'js-yaml';
 import { handlePluginCommand, _isNanoPlugin, _isDisplayPlugin, _deriveDisplayName, _installDisplayPlugin, _PRESENTATIONS_DIR } from '../src/plugin-cli.js';
 import { PluginRegistry } from '../src/core/plugin.js';
 import { setMcpJsonPaths } from '../src/plugins/mcp/adapter.js';
@@ -218,5 +219,78 @@ describe('project config YAML format', () => {
       /SyntaxError|Unexpected|Expected/,
       'output should NOT be valid JSON',
     );
+  });
+});
+
+// ── plugin install --scope / --user ──
+
+describe('plugin install scope handling', () => {
+  const GLOBAL_CONFIG_PATH = join(homedir(), '.nano-code', 'config.yaml');
+  const PROJECT_CONFIG_PATH = join(process.cwd(), '.nano-code.yaml');
+  const TEST_PLUGIN = 'scope-test-pkg';
+
+  let origGlobal: string | null;
+  let origProject: string | null;
+
+  beforeEach(() => {
+    try { origGlobal = fs.readFileSync(GLOBAL_CONFIG_PATH, 'utf-8'); } catch { origGlobal = null; }
+    try { origProject = fs.readFileSync(PROJECT_CONFIG_PATH, 'utf-8'); } catch { origProject = null; }
+  });
+
+  afterEach(() => {
+    if (origGlobal !== null) {
+      fs.writeFileSync(GLOBAL_CONFIG_PATH, origGlobal, 'utf-8');
+    } else {
+      try { fs.rmSync(GLOBAL_CONFIG_PATH); } catch { /* ignore */ }
+    }
+    if (origProject !== null) {
+      fs.writeFileSync(PROJECT_CONFIG_PATH, origProject, 'utf-8');
+    } else {
+      try { fs.rmSync(PROJECT_CONFIG_PATH); } catch { /* ignore */ }
+    }
+  });
+
+  it('--scope user writes plugin entry to global config', async () => {
+    await handlePluginCommand(['install', TEST_PLUGIN, '--scope', 'user'], {});
+
+    const globalRaw = fs.readFileSync(GLOBAL_CONFIG_PATH, 'utf-8');
+    const globalCfg = yaml.load(globalRaw) as Record<string, any>;
+    assert.ok(globalCfg?.plugins?.[TEST_PLUGIN], 'plugin should be in global config');
+
+    if (fs.existsSync(PROJECT_CONFIG_PATH)) {
+      const projectRaw = fs.readFileSync(PROJECT_CONFIG_PATH, 'utf-8');
+      const projectCfg = yaml.load(projectRaw) as Record<string, any>;
+      assert.equal(projectCfg?.plugins?.[TEST_PLUGIN], undefined, 'plugin should NOT be in project config');
+    }
+  });
+
+  it('--user global option writes plugin entry to global config', async () => {
+    await handlePluginCommand(['install', TEST_PLUGIN], { user: true });
+
+    const globalRaw = fs.readFileSync(GLOBAL_CONFIG_PATH, 'utf-8');
+    const globalCfg = yaml.load(globalRaw) as Record<string, any>;
+    assert.ok(globalCfg?.plugins?.[TEST_PLUGIN], 'plugin should be in global config');
+  });
+
+  it('default (no scope) writes plugin entry to project config', async () => {
+    await handlePluginCommand(['install', TEST_PLUGIN], {});
+
+    const projectRaw = fs.readFileSync(PROJECT_CONFIG_PATH, 'utf-8');
+    const projectCfg = yaml.load(projectRaw) as Record<string, any>;
+    assert.ok(projectCfg?.plugins?.[TEST_PLUGIN], 'plugin should be in project config');
+  });
+
+  it('--scope project writes plugin entry to project config', async () => {
+    await handlePluginCommand(['install', TEST_PLUGIN, '--scope', 'project'], {});
+
+    const projectRaw = fs.readFileSync(PROJECT_CONFIG_PATH, 'utf-8');
+    const projectCfg = yaml.load(projectRaw) as Record<string, any>;
+    assert.ok(projectCfg?.plugins?.[TEST_PLUGIN], 'plugin should be in project config');
+
+    if (fs.existsSync(GLOBAL_CONFIG_PATH)) {
+      const globalRaw = fs.readFileSync(GLOBAL_CONFIG_PATH, 'utf-8');
+      const globalCfg = yaml.load(globalRaw) as Record<string, any>;
+      assert.equal(globalCfg?.plugins?.[TEST_PLUGIN], undefined, 'plugin should NOT be in global config');
+    }
   });
 });

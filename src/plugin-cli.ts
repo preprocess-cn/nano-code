@@ -23,7 +23,7 @@ const GLOBAL_CONFIG = path.join(GLOBAL_DIR, 'config.yaml');
 export async function handlePluginCommand(args: string[], _globalOptions: any): Promise<void> {
   const cmd = args[0];
   switch (cmd) {
-    case 'install': return installPlugin(args.slice(1));
+    case 'install': return installPlugin(args.slice(1), _globalOptions);
     case 'uninstall': return uninstallPlugin(args.slice(1), _globalOptions);
     case 'list': return listPlugins();
     case 'enable': return setEnabled(args[1], true);
@@ -46,13 +46,34 @@ export async function handlePluginCommand(args: string[], _globalOptions: any): 
 
 // ── Install ──
 
-async function installPlugin(sources: string[]): Promise<void> {
-  const source = sources[0];
+async function installPlugin(sources: string[], globalOpts: Record<string, any> = {}): Promise<void> {
+  let scope: 'project' | 'user' = 'project';
+
+  // Parse --scope from args
+  const rest: string[] = [];
+  for (let i = 0; i < sources.length; i++) {
+    if (sources[i] === '--scope' && i + 1 < sources.length) {
+      const val = sources[i + 1];
+      if (val === 'user' || val === 'project') scope = val;
+      i++;
+    } else {
+      rest.push(sources[i]);
+    }
+  }
+
+  // Fallback: cac 可能将 --scope/--user 解析为 global option
+  if (globalOpts.scope === 'user' || globalOpts.scope === 'project') {
+    scope = globalOpts.scope;
+  } else if (globalOpts.user) {
+    scope = 'user';
+  }
+
+  const source = rest[0];
   if (!source) { console.error('请指定安装源。'); return; }
 
-  if (isGitURL(source)) await installFromGit(source);
-  else if (isLocalPath(source)) await installFromPath(source);
-  else await installFromNpm(source);
+  if (isGitURL(source)) await installFromGit(source, scope);
+  else if (isLocalPath(source)) await installFromPath(source, scope);
+  else await installFromNpm(source, scope);
 }
 
 function isGitURL(s: string): boolean {
@@ -119,7 +140,7 @@ async function installDisplayPlugin(name: string, sourceDir: string | null, spec
   console.log(`提示：在 .nano-code.yaml 中设置 display.plugin: ${name} 来激活。`);
 }
 
-async function installFromNpm(spec: string): Promise<void> {
+async function installFromNpm(spec: string, scope: 'project' | 'user' = 'project'): Promise<void> {
   let name = spec.split('/').pop() || spec;
   let installed = false;
   let plugin: any;
@@ -130,7 +151,7 @@ async function installFromNpm(spec: string): Promise<void> {
 
     if (isNanoPlugin(plugin)) {
       name = plugin.name;
-      addToProjectConfig(name, { type: 'npm', spec });
+      addToScopeConfig(name, { type: 'npm', spec }, scope);
       console.log(`已安装 NanoPlugin "${name}"`);
       installed = true;
     }
@@ -143,12 +164,12 @@ async function installFromNpm(spec: string): Promise<void> {
   } catch { /* 不可解析 */ }
 
   if (!installed) {
-    addToProjectConfig(name, { type: 'mcp', command: 'npx', args: ['-y', spec] });
+    addToScopeConfig(name, { type: 'mcp', command: 'npx', args: ['-y', spec] }, scope);
     console.log(`已安装 MCP 插件 "${name}"`);
   }
 }
 
-async function installFromGit(url: string): Promise<void> {
+async function installFromGit(url: string, scope: 'project' | 'user' = 'project'): Promise<void> {
   const repoName = path.basename(url.replace(/\.git$/, ''));
   const targetDir = path.join(GLOBAL_DIR, 'sources', repoName);
 
@@ -158,14 +179,14 @@ async function installFromGit(url: string): Promise<void> {
     execSync('npm install', { cwd: targetDir, stdio: 'inherit' });
   }
 
-  if (!await detectAndInstallFromDir(targetDir, repoName, url)) {
+  if (!await detectAndInstallFromDir(targetDir, repoName, url, scope)) {
     console.error(`无法自动安装 "${url}"。`);
     console.error(`该项目可能不是 Node.js 插件。请尝试运行其官方安装脚本。`);
     console.error(`对于 MCP 类工具，nano-code 会自动从 ~/.claude/.mcp.json 发现已安装的 MCP server。`);
   }
 }
 
-async function installFromPath(localPath: string): Promise<void> {
+async function installFromPath(localPath: string, scope: 'project' | 'user' = 'project'): Promise<void> {
   const resolved = path.resolve(localPath);
   const name = path.basename(resolved);
 
@@ -174,29 +195,29 @@ async function installFromPath(localPath: string): Promise<void> {
     return;
   }
 
-  if (!await detectAndInstallFromDir(resolved, name, localPath)) {
+  if (!await detectAndInstallFromDir(resolved, name, localPath, scope)) {
     console.error(`无法识别 "${localPath}" 的插件类型。`);
   }
 }
 
 /** 从本地目录检测并安装插件（MCP / NanoPlugin / DisplayPlugin 三条检测独立运行）。 */
-async function detectAndInstallFromDir(dir: string, name: string, source: string): Promise<boolean> {
+async function detectAndInstallFromDir(dir: string, name: string, source: string, scope: 'project' | 'user' = 'project'): Promise<boolean> {
   const pkgPath = path.join(dir, 'package.json');
   if (!fs.existsSync(pkgPath)) return false;
 
   const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
   let detected = false;
 
-  // MCP 模式：package.json 有 bin 字段 → 写入项目 .mcp.json
+  // MCP 模式：package.json 有 bin 字段 → 写入 .mcp.json
   if (pkg.bin) {
-    const { addMcpServer, getProjectMcpJsonPath } = await import('#src/bootstrap/mcp-config.js');
+    const { addMcpServer, getProjectMcpJsonPath, getGlobalMcpJsonPath } = await import('#src/bootstrap/mcp-config.js');
     const binName = typeof pkg.bin === 'string' ? name : Object.keys(pkg.bin)[0];
     const binPath = typeof pkg.bin === 'string'
       ? path.join(dir, pkg.bin)
       : path.join(dir, pkg.bin[binName]);
-    const filePath = getProjectMcpJsonPath();
+    const filePath = scope === 'user' ? getGlobalMcpJsonPath() : getProjectMcpJsonPath();
     addMcpServer(filePath, binName, { command: 'node', args: [binPath] });
-    addToProjectConfig(binName, { type: 'mcp' });
+    addToScopeConfig(binName, { type: 'mcp' }, scope);
     console.log(`已安装 MCP 插件 "${binName}" <- ${source}`);
     console.log(`配置已写入 ${filePath}，重启 nano-code 后生效。`);
     detected = true;
@@ -209,7 +230,7 @@ async function detectAndInstallFromDir(dir: string, name: string, source: string
     const plugin: any = (mod as any).default || mod;
 
     if (isNanoPlugin(plugin)) {
-      addToProjectConfig(plugin.name, { type: 'npm', spec: dir });
+      addToScopeConfig(plugin.name, { type: 'npm', spec: path.join(dir, main) }, scope);
       console.log(`已安装 NanoPlugin "${plugin.name}" <- ${source}`);
       detected = true;
     }
@@ -255,6 +276,14 @@ function addToGlobalConfig(name: string, entry: Record<string, any>): void {
 
   fs.writeFileSync(GLOBAL_CONFIG, yaml.dump(cfg, { indent: 2 }), 'utf-8');
   console.log(`已写入全局配置 ${GLOBAL_CONFIG}`);
+}
+
+function addToScopeConfig(name: string, entry: Record<string, any>, scope: 'project' | 'user'): void {
+  if (scope === 'user') {
+    addToGlobalConfig(name, entry);
+  } else {
+    addToProjectConfig(name, entry);
+  }
 }
 
 /** 检查某插件名是否已在项目或全局配置的 plugins 中声明。 */

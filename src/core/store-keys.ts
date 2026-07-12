@@ -84,6 +84,14 @@ export const SK = {
   // ── Notify manager ──
   /** (source: string, message: string) => boolean: 发送通知，返回 true 表示入队成功 */
   NotifySend: 'notify:send',
+
+  // ── Command queue ──
+  /**
+   * (cmd: Omit<QueuedCommand, 'priority'> & { priority?: QueuePriority }) => void
+   * 向主 agent 循环的命令队列推送一个 task-notification 事件。
+   * 事件送达后 agent 会像处理用户输入一样调用 runTask() 执行。
+   */
+  EnqueuePendingNotification: 'queue:enqueuePendingNotification',
 } as const;
 
 export interface AgentModeInfo {

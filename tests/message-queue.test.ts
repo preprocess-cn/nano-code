@@ -2,6 +2,8 @@ import { describe, it, beforeEach } from 'node:test';
 import * as assert from 'node:assert/strict';
 
 import { enqueue, enqueuePendingNotification, requestExit, hasPending, clear, reset, wait } from '../src/core/message-queue.js';
+import { PluginRegistry } from '../src/core/plugin.js';
+import { SK } from '../src/core/store-keys.js';
 
 /**
  * 永不 resolve 的 prompt mock，模拟 Ink display 的行为。
@@ -125,6 +127,48 @@ describe('message-queue', () => {
       enqueue({ mode: 'prompt', value: 'new message' });
       const item = await wait({ prompt: neverPrompt } as any);
       assert.equal(item!.value, 'new message');
+    });
+  });
+
+  describe('store 集成 — SK.EnqueuePendingNotification', () => {
+
+    it('可通过 store 注册并获取 enqueuePendingNotification', () => {
+      const registry = new PluginRegistry();
+      registry.store.set(SK.EnqueuePendingNotification, enqueuePendingNotification);
+
+      const fn = registry.store.get<typeof enqueuePendingNotification>(SK.EnqueuePendingNotification);
+      assert.equal(typeof fn, 'function');
+      assert.equal(fn, enqueuePendingNotification);
+    });
+
+    it('插件在 onInit 中可从 store 获取并调用 enqueuePendingNotification', async () => {
+      const registry = new PluginRegistry();
+      registry.store.set(SK.EnqueuePendingNotification, enqueuePendingNotification);
+
+      let capturedArgs: any = null;
+      const plugin = {
+        name: 'test-monitor',
+        getTools: () => [],
+        async execute() { return { status: 'success' as const }; },
+        async onInit(r: PluginRegistry) {
+          const fn = r.store.get<typeof enqueuePendingNotification>(SK.EnqueuePendingNotification);
+          fn!({ mode: 'task-notification', value: '来自插件的事件', source: 'test-monitor' });
+        },
+      };
+      await registry.register(plugin);
+
+      // onInit 中调用后，队列应有积压
+      assert.equal(hasPending(), true);
+      const item = await wait({ prompt: neverPrompt } as any);
+      assert.equal(item!.mode, 'task-notification');
+      assert.equal(item!.value, '来自插件的事件');
+      assert.equal(item!.source, 'test-monitor');
+      assert.equal(item!.priority, 'later'); // 默认 priority 为 later
+    });
+
+    it('未注册 key 时 store.get 返回 undefined', () => {
+      const registry = new PluginRegistry();
+      assert.equal(registry.store.get(SK.EnqueuePendingNotification), undefined);
     });
   });
 });
