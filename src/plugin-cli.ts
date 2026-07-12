@@ -787,3 +787,4 @@ export const _isDisplayPlugin = isDisplayPlugin;
 export const _deriveDisplayName = deriveDisplayName;
 export const _installDisplayPlugin = installDisplayPlugin;
 export const _PRESENTATIONS_DIR = PRESENTATIONS_DIR;
+export const _addToScopeConfig = addToScopeConfig;

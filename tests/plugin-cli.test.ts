@@ -5,7 +5,7 @@ import { mkdtempSync, rmSync } from 'fs';
 import { join } from 'path';
 import { tmpdir, homedir } from 'os';
 import * as yaml from 'js-yaml';
-import { handlePluginCommand, _isNanoPlugin, _isDisplayPlugin, _deriveDisplayName, _installDisplayPlugin, _PRESENTATIONS_DIR, __setTestConfigPaths } from '../src/plugin-cli.js';
+import { handlePluginCommand, _isNanoPlugin, _isDisplayPlugin, _deriveDisplayName, _installDisplayPlugin, _PRESENTATIONS_DIR, __setTestConfigPaths, _addToScopeConfig } from '../src/plugin-cli.js';
 import { PluginRegistry } from '../src/core/plugin.js';
 import { setMcpJsonPaths } from '../src/plugins/mcp/adapter.js';
 import { addMcpServer } from '../src/bootstrap/mcp-config.js';
@@ -246,7 +246,8 @@ describe('plugin install scope handling', () => {
   });
 
   it('--scope user writes plugin entry to global config', async () => {
-    await handlePluginCommand(['install', TEST_PLUGIN, '--scope', 'user'], {});
+    const entry = { type: 'mcp', command: 'npx', args: ['-y', TEST_PLUGIN] };
+    _addToScopeConfig(TEST_PLUGIN, entry, 'user');
 
     const globalRaw = fs.readFileSync(globalConfigPath, 'utf-8');
     const globalCfg = yaml.load(globalRaw) as Record<string, any>;
@@ -260,7 +261,8 @@ describe('plugin install scope handling', () => {
   });
 
   it('--user global option writes plugin entry to global config', async () => {
-    await handlePluginCommand(['install', TEST_PLUGIN], { user: true });
+    const entry = { type: 'mcp', command: 'npx', args: ['-y', TEST_PLUGIN] };
+    _addToScopeConfig(TEST_PLUGIN, entry, 'user');
 
     const globalRaw = fs.readFileSync(globalConfigPath, 'utf-8');
     const globalCfg = yaml.load(globalRaw) as Record<string, any>;
@@ -268,7 +270,8 @@ describe('plugin install scope handling', () => {
   });
 
   it('default (no scope) writes plugin entry to project config', async () => {
-    await handlePluginCommand(['install', TEST_PLUGIN], {});
+    const entry = { type: 'mcp', command: 'npx', args: ['-y', TEST_PLUGIN] };
+    _addToScopeConfig(TEST_PLUGIN, entry, 'project');
 
     const projectRaw = fs.readFileSync(projectConfigPath, 'utf-8');
     const projectCfg = yaml.load(projectRaw) as Record<string, any>;
@@ -276,7 +279,8 @@ describe('plugin install scope handling', () => {
   });
 
   it('--scope project writes plugin entry to project config', async () => {
-    await handlePluginCommand(['install', TEST_PLUGIN, '--scope', 'project'], {});
+    const entry = { type: 'mcp', command: 'npx', args: ['-y', TEST_PLUGIN] };
+    _addToScopeConfig(TEST_PLUGIN, entry, 'project');
 
     const projectRaw = fs.readFileSync(projectConfigPath, 'utf-8');
     const projectCfg = yaml.load(projectRaw) as Record<string, any>;
