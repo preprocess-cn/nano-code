@@ -124,6 +124,8 @@ async function initializePlugins(
     const s: Record<string, any> = {};
     if (['skills', 'coordinator', 'skills-slash'].includes(name)) { s.llmClient = llmClient; s.agentManager = agentManager; }
     if (['skills', 'coordinator', 'commands', 'skills-slash', 'bang', 'task-plan'].includes(name)) s.displayMgr = displayMgr;
+    if (name === 'commands') s.config = config;
+    if (name === 'guidance') Object.assign(s, config.plugins[name]?.settings ?? {});
     if (name === 'skills') { s.disabled = config.skills?.disabled ?? []; s.disableSkillTool = config.skills?.disableSkillTool ?? false; }
     await registerBuiltinPlugin(registry, name, s);
   }

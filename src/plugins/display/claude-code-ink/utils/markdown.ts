@@ -71,7 +71,17 @@ export function formatToken(
     }
 
     case 'code': {
-      return `${DIM}${token.text}${BOLD_OFF}${EOL}`;
+      // Split into lines so each line is its own ANSI span.
+      // Ink's Text may not break lines inside a single styled span, so we
+      // emit one colored span per line with an unstyled newline between them.
+      const text = token.text;
+      if (!text) return EOL;
+      const lines = text.split('\n');
+      // Remove trailing empty line (marked includes it)
+      if (lines.length > 1 && lines[lines.length - 1] === '') lines.pop();
+      return lines.map((line: string, i: number) =>
+        (i > 0 ? EOL : '') + color('accent', theme)(line)
+      ).join('') + EOL;
     }
 
     case 'codespan': {

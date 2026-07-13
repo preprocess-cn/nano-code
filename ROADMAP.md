@@ -12,6 +12,7 @@
 | ✅ | **文件结构重组** | `agent-loader.ts`（`coordinator/` → `core/`）、`config-writer.ts`（`mcp/` → `core/mcp-config.ts`）；`ContextAnalysis` 类型从 plugin 的 `analyzer.ts` 提升到 `core/contract.ts`，消除类型泄漏 |
 | ✅ | **全局状态栏 + 通知管理** | Ink 底栏 `StatusBar` 组件：左侧 `KEY: VALUE` 持久状态（mode 特殊渲染 `● PLAN`）、右侧通知消息循环展示；`DisplayPlugin.setStatusBar`/`onNotify` 接口；可选 `notify-manager` 后端插件（队列管理、轮询调度、2s 间隔）；REPL `setStatusBar` mode 响应 |
 | ✅ | **核心层瘦身** | 6 个基础设施文件从 `src/core/` 迁出：`version.ts`/`tool-name.ts`/`retry.ts`/`token-counter.ts`/`logger.ts` → `src/utils/`，`session.ts` → `src/bootstrap/`；核心层文件从 15 降至 9 个 |
+| ✅ | **引导插件 + 系统提示词分段** | Guidance 插件：前置 6 段 Claude Code 风格行为约束（`# System`/`# Doing tasks`/`# Executing actions with care`/`# Using your tools`/`# Tone and style`/`# Output efficiency`），`onBeforeRequest` 注入三级 AGENT.md 上下文，可分段开关；修复 `/context` 命令缺失 config 的问题；修复 Ink 代码块多行渲染 |
 
 ## P1 — 日常体验
 

@@ -529,6 +529,7 @@ send_message({ to: "main", summary: "查询结果", message: "users 表有 3 个
 | **agent** | 自动发现 `~/.nano-code/agents/*.yaml` | `agent-<name>` 子 agent 调用工具；`agent_task_status` 查询后台任务；`send_message` agent 间通信 |
 | **task-plan** | 内建默认注册 | Plan Mode（`enter_plan_mode`/`exit_plan_mode`） + 任务系统（`task_create`/`task_list`/`task_update`/`task_stop`） |
 | **display** | 通过 `display.plugin` 配置 | 展示层插件，支持生命周期事件（独立于 PluginRegistry） |
+| **guidance** | 内建默认注册 | Claude Code 风格 system prompt 分段（`# System`、`# Doing tasks` 等行为约束），`onBeforeRequest` 注入 `AGENT.md` 项目指令上下文 |
 
 ### 可选插件
 

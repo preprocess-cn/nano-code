@@ -456,6 +456,7 @@ const BUILTIN_LOADERS: Record<string, (settings?: Record<string, any>) => Promis
   'ask-user-question': async () => (await import('#src/plugins/tools/ask-user-question.js')).askUserQuestionPlugin,
   'mcp-loader': async (s) => (await import('#src/plugins/mcp/adapter.js')).createMcpLoaderPlugin(s?.config, s?.debug),
   'notify-manager': async (s) => (await import('#src/plugins/notify-manager.js')).createNotifyManagerPlugin(s || {}),
+  guidance: async (s) => (await import('#src/plugins/guidance/index.js')).createGuidancePlugin(s as Record<string, any> | undefined),
 };
 
 /**
@@ -486,6 +487,7 @@ export const DEFAULT_FEATURE_PLUGINS: readonly string[] = [
   'task-plan',
   'ask-user-question',
   'npm-loader',
+  'guidance',
 ];
 
 /**
