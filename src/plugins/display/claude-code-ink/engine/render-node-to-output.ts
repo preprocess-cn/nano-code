@@ -610,14 +610,21 @@ function renderNodeToOutput(
           // Hyperlinks are handled per-run in applyStylesToWrappedText via
           // wrapWithOsc8Link, similar to how styles are applied per-run.
         } else {
-          // No wrapping needed: apply styles directly
+          // No wrapping needed: apply styles per-line so ANSI codes
+          // survive output.ts's text.split('\n') — a single \x1b[2m...\x1b[22m
+          // wrapper around multi-line text would only dim the first line.
           text = segments
             .map(segment => {
-              let styledText = applyTextStyles(segment.text, segment.styles)
-              if (segment.hyperlink) {
-                styledText = wrapWithOsc8Link(styledText, segment.hyperlink)
-              }
-              return styledText
+              return segment.text
+                .split('\n')
+                .map(line => {
+                  let styledText = applyTextStyles(line, segment.styles)
+                  if (segment.hyperlink) {
+                    styledText = wrapWithOsc8Link(styledText, segment.hyperlink)
+                  }
+                  return styledText
+                })
+                .join('\n')
             })
             .join('')
         }

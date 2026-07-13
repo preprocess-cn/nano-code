@@ -189,8 +189,7 @@ Ink 展示层（`claude-code-ink`）基于 React + 自研 Ink 引擎（fork 自 
 
 ### 已知问题
 
-- **BUG：`--think` 多段思考文本 dim 样式仅作用首行** — `Markdown(dimColor=true)` → Ansi 的 dim 样式通过 Ink 引擎 `applyTextStyles` 逐行包裹 `\x1b[2m...\x1b[22m`，但多段内容时只有第一行正确应用 dim，后续行以普通亮度显示。根因待查明（可能涉及 Ink 引擎多 segment 路径下的样式继承）。
-- **BUG：`○` 前缀 `dimColor` 非有效 Text prop** — `Text` 组件不支持 `dimColor`，prefix 的 `○` 实际无 dim 效果。应改为 `dim`。
+- **FIXED：`--think` 多段思考文本 dim 样式仅作用首行** — `render-node-to-output.ts` 非换行路径（`needsWrapping === false` 且 `segments.length === 1`）整段多行文本用单一 `\x1b[2m...\x1b[22m` 包裹，`output.ts` 的 `split('\n')` 把 ANSI 闭码分割到单独行导致仅首行 dim。修复：先按行分割再逐行应用样式。
 
 ## Agent 架构
 
