@@ -442,6 +442,9 @@ function createPlugin(): DisplayPlugin {
           if (seg.dim) thinkText += seg.text;
           else normalText += seg.text;
         }
+        // </think> 后面的前导 \n 如果不清理，stream 消息开头会产生空行，
+        // 导致 ● 前缀旁是空行而内容在下一行，看起来就像 ● 悬空了。
+        normalText = normalText.replace(/^\n+/, '');
 
         let anyUpdate = false;
 

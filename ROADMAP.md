@@ -187,6 +187,11 @@
 
 Ink 展示层（`claude-code-ink`）基于 React + 自研 Ink 引擎（fork 自 Claude Code），支持 ScrollBox 滚动、全屏 terminal UI、`--think` 思考内容灰色斜体视觉区分、`/` 斜杠命令建议弹出与实时过滤、`!`/`/` 输入框模式边框变色、Plan Mode 状态指示器（底栏 `○ normal`/`● PLAN` 徽标 + 任务数量）、问题对话框自定义输入（「其它」选项 + 多行文本 + 提交前确认）、弹框 ESC/Ctrl+C 关闭等功能。
 
+### 已知问题
+
+- **BUG：`--think` 多段思考文本 dim 样式仅作用首行** — `Markdown(dimColor=true)` → Ansi 的 dim 样式通过 Ink 引擎 `applyTextStyles` 逐行包裹 `\x1b[2m...\x1b[22m`，但多段内容时只有第一行正确应用 dim，后续行以普通亮度显示。根因待查明（可能涉及 Ink 引擎多 segment 路径下的样式继承）。
+- **BUG：`○` 前缀 `dimColor` 非有效 Text prop** — `Text` 组件不支持 `dimColor`，prefix 的 `○` 实际无 dim 效果。应改为 `dim`。
+
 ## Agent 架构
 
 ### 两个目录的分界
