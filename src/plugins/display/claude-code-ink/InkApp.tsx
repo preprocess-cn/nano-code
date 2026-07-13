@@ -181,7 +181,7 @@ function MessageItem({ msg }: { msg: UIMessage }): React.ReactElement {
   if (msg.kind === 'stream') {
     const label = msg.agentName !== 'main'
       ? React.createElement(AgentLabel, { agentName: msg.agentName })
-      : null;
+      : React.createElement(Text, { color: '#a78bfa' }, '● ');
     return React.createElement(
       Box,
       { flexDirection: 'row' },
@@ -193,7 +193,7 @@ function MessageItem({ msg }: { msg: UIMessage }): React.ReactElement {
   if (isThink) {
     const label = msg.agentName !== 'main'
       ? React.createElement(AgentLabel, { agentName: msg.agentName })
-      : null;
+      : React.createElement(Text, { dimColor: true }, '○ ');
     return React.createElement(
       Box,
       { flexDirection: 'row' },
@@ -205,8 +205,8 @@ function MessageItem({ msg }: { msg: UIMessage }): React.ReactElement {
   if (msg.kind === 'userInput') {
     return React.createElement(
       Box,
-      { flexDirection: 'row' },
-      React.createElement(Text, { color: '#93c5fd' }, '▶ '),
+      { flexDirection: 'row', backgroundColor: '#252542' },
+      React.createElement(Text, { color: '#6b7280' }, '❯ '),
       React.createElement(Text, null, msg.text),
     );
   }

@@ -13,7 +13,9 @@ export interface Theme {
   inactive: string;
   codeBackground: string;
   userMessage: string;
+  userMessageBackground: string;
   assistantMessage: string;
+  assistantMessagePrefix: string;
   toolMessage: string;
 }
 
@@ -28,7 +30,9 @@ const darkTheme: Theme = {
   inactive: '#6b7280',
   codeBackground: '#111827',
   userMessage: '#93c5fd',
+  userMessageBackground: '#252542',
   assistantMessage: '#a78bfa',
+  assistantMessagePrefix: '#a78bfa',
   toolMessage: '#fbbf24',
 };
 
