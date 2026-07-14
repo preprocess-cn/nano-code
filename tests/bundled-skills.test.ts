@@ -113,14 +113,14 @@ describe('Bundled Skills Registry', () => {
     assert.ok(section.includes('use it'));
   });
 
-  it('registerAllDefaultBundledSkills registers all 13 skills', () => {
+  it('registerAllDefaultBundledSkills registers all 14 skills', () => {
     registry.clearBundledSkills();
     registry.registerAllDefaultBundledSkills();
     const all = registry.getBundledSkills();
-    assert.equal(all.length, 13);
+    assert.equal(all.length, 14);
     const names = all.map(s => s.name).sort();
     assert.deepEqual(names, [
-      'batch', 'commit', 'commit-pr', 'debug', 'keybindings',
+      'batch', 'code-review', 'commit', 'commit-pr', 'debug', 'keybindings',
       'lorem-ipsum', 'remember', 'review', 'simplify', 'skillify',
       'stuck', 'update-config', 'verify',
     ]);
@@ -279,6 +279,7 @@ describe('Skills Plugin with Bundled Skills', () => {
     const data = JSON.parse(result.data!);
     // Should include bundled skills that are not disableModelInvocation
     const bundledNames = data.skills.map((s: any) => s.name);
+    assert.ok(bundledNames.includes('code-review'));
     assert.ok(bundledNames.includes('simplify'));
     assert.ok(bundledNames.includes('verify'));
     assert.ok(bundledNames.includes('commit'));
@@ -431,6 +432,9 @@ FS version`, 'utf-8');
     assert.ok(toolNames.includes('skill_view'));
     assert.ok(toolNames.includes('skill'));
     assert.ok(toolNames.includes('run_agent'));
+    const runAgentTool = tools.find((t: any) => t.function.name === 'run_agent');
+    assert.ok(runAgentTool, 'run_agent tool should be defined');
+    assert.equal(runAgentTool.function.sideEffect, false);
   });
 });
 

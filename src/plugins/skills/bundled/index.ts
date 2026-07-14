@@ -80,7 +80,6 @@ export function clearBundledSkills(): void {
 
 // ── Imports from individual skill files ──
 
-import { createSimplifySkill } from '#src/plugins/skills/bundled/simplify.js';
 import { createVerifySkill } from '#src/plugins/skills/bundled/verify.js';
 import { createLoremIpsumSkill } from '#src/plugins/skills/bundled/lorem-ipsum.js';
 import { createDebugSkill } from '#src/plugins/skills/bundled/debug.js';
@@ -91,17 +90,23 @@ import { createStuckSkill } from '#src/plugins/skills/bundled/stuck.js';
 import { createSkillifySkill } from '#src/plugins/skills/bundled/skillify.js';
 import { createKeybindingsSkill } from '#src/plugins/skills/bundled/keybindings.js';
 import { createReviewSkill } from '#src/plugins/skills/bundled/review.js';
+import { createCodeReviewSkill } from '#src/plugins/skills/bundled/code-review.js';
+import { createSimplifySkill } from '#src/plugins/skills/bundled/simplify.js';
 import { createCommitSkill } from '#src/plugins/skills/bundled/commit.js';
 import { createCommitPrSkill } from '#src/plugins/skills/bundled/commit-pr.js';
 
 export function registerAllDefaultBundledSkills(): void {
   // Phase 2 — Tier 1
-  registerBundledSkill(createSimplifySkill());
   registerBundledSkill(createVerifySkill());
   registerBundledSkill(createLoremIpsumSkill());
+
+  // review / code-review / simplify
+  registerBundledSkill(createReviewSkill());
+  registerBundledSkill(createCodeReviewSkill());
+  registerBundledSkill(createSimplifySkill());
+
   // Phase 3 — Tier 2
   registerBundledSkill(createDebugSkill());
-  registerBundledSkill(createReviewSkill());
   registerBundledSkill(createCommitSkill());
   registerBundledSkill(createCommitPrSkill());
   registerBundledSkill(createBatchSkill());
@@ -127,5 +132,5 @@ export function buildSkillsPromptSection(): string {
   if (skills.length === 0) return '';
 
   const lines = skills.map(formatSkillDescription);
-  return `\n可用的内置技能（通过 skill 工具调用）：\n${lines.join('\n')}`;
+  return `\nAvailable builtin skills (invoke via skill tool):\n${lines.join('\n')}`;
 }

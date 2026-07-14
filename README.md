@@ -63,6 +63,8 @@ npm start
 | `/plan` | 查看 Plan Mode 状态、当前计划内容 |
 | `/task`, `/tasks` | 查看任务列表 |
 | `/review` | 审查当前变更的正确性/性能/安全（Review 技能） |
+| `/code-review` | 深度审查 — 7 维度 × 6 候选 → verify → JSON 报告（Code Review 技能） |
+| `/simplify` | 审查并自动修复代码变更（Simplify 技能） |
 | `/commit` | 创建 Git 提交，附带 nano-code 归属签名（Commit 技能） |
 | `/commit-pr` | 提交变更 + 推送到远程 + 创建 Pull Request（Commit-PR 技能） |
 | `/permissions` | 查看会话已允许免确认的工具列表 |
@@ -523,7 +525,7 @@ send_message({ to: "main", summary: "查询结果", message: "users 表有 3 个
 | **file-search** | 系统白名单自动启用 | 文件搜索（glob）+ 内容搜索（grep），支持正则和 glob 限定范围 |
 | **command** | `"command": {}` | Bash 命令执行（含危险命令黑名单 + 权限确认弹窗） |
 | **memory** | `"memory": {}` | 文件化记忆系统：MEMORY.md 索引 + topic 文件，onSystemPrompt 注入行为规则和索引，save_memory/recall_memory 工具，~/.nano-code/AGENT.md 用户全局偏好 |
-| **skills** | 系统白名单自动启用 | 13 个内置 TypeScript 技能 + 文件系统 SKILL.md 技能，`skill`/`skills_list`/`skill_view`/`run_agent` 工具 |
+| **skills** | 系统白名单自动启用 | 14 个内置 TypeScript 技能 + 文件系统 SKILL.md 技能，`skill`/`skills_list`/`skill_view`/`run_agent` 工具 |
 | **store** | 内建默认 `InMemoryStore` | 插件间共享状态通道，`IStore` 接口可替换实现 |
 | **model-registry** | `"model-registry": { settings: { models: [...] } }` | 声明多个 LLM 模型，`/model` 切换；支持 `$ENV_VAR` 语法隐藏密钥 |
 | **agent** | 自动发现 `~/.nano-code/agents/*.yaml` | `agent-<name>` 子 agent 调用工具；`agent_task_status` 查询后台任务；`send_message` agent 间通信 |

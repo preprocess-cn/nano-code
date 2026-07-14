@@ -117,7 +117,7 @@ export function createSkillsPlugin(
             },
             required: ['query'],
           },
-          sideEffect: true,
+          sideEffect: false,
         },
       });
 

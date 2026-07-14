@@ -69,10 +69,10 @@
 | ✅ | **工具 sideEffect 修正** | `task_create`/`task_update`/`task_stop`/`save_memory`/`skill`/`exit_plan_mode` 改为 `sideEffect: false`，内建读操作无需审批 |
 | ✅ | 多轮摘要记忆 | 自动压缩默认启用（`autoCompactEnabled: true`），触发策略改为基于当前消息大小 + slide window 多次压缩，压缩前全量备份至 `.nano-code-session.pre-compact.json` |
 | ✅ | 角色模式 & 斜杠命令 | profiles/ 通过 `--profile` 启动时加载，主 agent 可通过斜杠 `/` 切换 agent；profile 运行时切换暂不支持 |
-| ✅ | 内置 Skill 系统 | 13 个对齐 Claude Code 的内置技能：simplify/verify/batch/debug/lorem-ipsum/update-config/remember/stuck/skillify/keybindings/review/commit/commit-pr |
+| ✅ | 内置 Skill 系统 | 14 个对齐 Claude Code 的内置技能：review/code-review/simplify/verify/batch/debug/lorem-ipsum/update-config/remember/stuck/skillify/keybindings/commit/commit-pr |
 | ☐ | ToolUseContext | 工具执行的共享运行时上下文（模型覆盖、effort、权限绑定等），贯穿 ReAct 循环 |
 | ☐ | contextModifier | 工具可通过 ToolResponse 返回上下文修改器，作用于后续工具调用的执行环境 |
-| ✅ | Skill 系统 | 13 个内置 TypeScript 技能（bundled），skills_list / skill_view / skill 工具，inline（newMessages 注入）+ fork（子 agent）双模式，skills 配置禁用开关 |
+| ✅ | Skill 系统 | 14 个内置 TypeScript 技能（bundled），skills_list / skill_view / skill 工具，inline（newMessages 注入）+ fork（子 agent）双模式，skills 配置禁用开关 |
 | ✅ | **InteractiveHandler** | PluginRegistry 原生 `registerInteractiveHandler`/`getInteractiveHandler` 替代 store callback，工具插件与 display 通过 registry 桥接，无 handler 自动降级为文本 |
 
 ## P0 — 搜索与审查
@@ -86,6 +86,8 @@
 | ✅ | WebFetch/WebSearch 工具 | 网络获取与搜索，让 LLM 获取实时信息 |
 | ✅ | **`/init` 命令** | 分析项目结构、发现构建/测试命令、记录架构和约定，生成 `nano-code.md` 代码库文档 |
 | ✅ | 代码审查 `/review` | Review 内置 skill，审查 git diff 的正确性/性能/安全，输出 CRITICAL/WARNING/SUGGESTION 三级报告 |
+| ✅ | 深度审查 `/code-review` | 7 角度 × 6 候选 → 1-vote verify → ≤10 JSON 发现，对齐 CC code-review |
+| ✅ | 代码自动修复 `/simplify` | code-review + --fix，审查并自动修复变更 |
 
 ## P1 — 规划、任务与记忆
 

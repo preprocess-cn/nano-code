@@ -1,7 +1,123 @@
 import { describe, it, beforeEach } from 'node:test';
 import * as assert from 'node:assert/strict';
 
-describe('Tier 1 — simplify skill', () => {
+describe('Tier 1 — review skill (simple PR review)', () => {
+  let skill: import('../src/plugins/skills/bundled/index.js').BundledSkillDef;
+
+  beforeEach(async () => {
+    const mod = await import('../src/plugins/skills/bundled/review.js');
+    skill = mod.createReviewSkill();
+  });
+
+  it('has correct name and description', () => {
+    assert.equal(skill.name, 'review');
+    assert.ok(skill.description);
+  });
+
+  it('getPrompt returns non-empty string', async () => {
+    const prompt = await skill.getPrompt('', { cwd: '/test' });
+    assert.ok(typeof prompt === 'string');
+    assert.ok(prompt.length > 50);
+  });
+
+  it('getPrompt references gh pr commands', async () => {
+    const prompt = await skill.getPrompt('', { cwd: '/test' });
+    assert.ok(prompt.includes('gh pr list'));
+    assert.ok(prompt.includes('gh pr view'));
+    assert.ok(prompt.includes('gh pr diff'));
+  });
+
+  it('getPrompt includes --json fields for pr view', async () => {
+    const prompt = await skill.getPrompt('', { cwd: '/test' });
+    assert.ok(prompt.includes('--json'));
+    assert.ok(prompt.includes('baseRefName'));
+    assert.ok(prompt.includes('headRefName'));
+  });
+
+  it('getPrompt includes PR number when args is a number', async () => {
+    const prompt = await skill.getPrompt('42', { cwd: '/test' });
+    assert.ok(prompt.includes('PR number: 42'));
+  });
+
+  it('getPrompt shows focus areas', async () => {
+    const prompt = await skill.getPrompt('', { cwd: '/test' });
+    assert.ok(prompt.includes('Code correctness'));
+    assert.ok(prompt.includes('Performance implications'));
+    assert.ok(prompt.includes('Security considerations'));
+  });
+});
+
+describe('Tier 1 — code-review skill (7-angle deep review)', () => {
+  let skill: import('../src/plugins/skills/bundled/index.js').BundledSkillDef;
+
+  beforeEach(async () => {
+    const mod = await import('../src/plugins/skills/bundled/code-review.js');
+    skill = mod.createCodeReviewSkill();
+  });
+
+  it('has correct name and description', () => {
+    assert.equal(skill.name, 'code-review');
+    assert.ok(skill.description);
+  });
+
+  it('getPrompt returns non-empty string', async () => {
+    const prompt = await skill.getPrompt('', { cwd: '/test' });
+    assert.ok(typeof prompt === 'string');
+    assert.ok(prompt.length > 100);
+  });
+
+  it('getPrompt includes phases', async () => {
+    const prompt = await skill.getPrompt('', { cwd: '/test' });
+    assert.ok(prompt.includes('Phase 0'));
+    assert.ok(prompt.includes('Phase 1'));
+    assert.ok(prompt.includes('Phase 2'));
+  });
+
+  it('getPrompt references run_agent and run_bash_command', async () => {
+    const prompt = await skill.getPrompt('', { cwd: '/test' });
+    assert.ok(prompt.includes('run_agent'));
+    assert.ok(prompt.includes('run_bash_command'));
+  });
+
+  it('getPrompt mentions all seven finder angles', async () => {
+    const prompt = await skill.getPrompt('', { cwd: '/test' });
+    assert.ok(prompt.includes('line-by-line diff scan'));
+    assert.ok(prompt.includes('removed-behavior auditor'));
+    assert.ok(prompt.includes('cross-file tracer'));
+    assert.ok(prompt.includes('Reuse'));
+    assert.ok(prompt.includes('Simplification'));
+    assert.ok(prompt.includes('Efficiency'));
+    assert.ok(prompt.includes('Altitude'));
+  });
+
+  it('getPrompt includes verify phase with CONFIRMED/PLAUSIBLE/REFUTED', async () => {
+    const prompt = await skill.getPrompt('', { cwd: '/test' });
+    assert.ok(prompt.includes('CONFIRMED'));
+    assert.ok(prompt.includes('PLAUSIBLE'));
+    assert.ok(prompt.includes('REFUTED'));
+  });
+
+  it('getPrompt specifies JSON array output format', async () => {
+    const prompt = await skill.getPrompt('', { cwd: '/test' });
+    assert.ok(prompt.includes('JSON array'));
+    assert.ok(prompt.includes('"file"'));
+    assert.ok(prompt.includes('"line"'));
+    assert.ok(prompt.includes('"failure_scenario"'));
+  });
+
+  it('getPrompt includes candidate cap of 6 per angle and 10 total', async () => {
+    const prompt = await skill.getPrompt('', { cwd: '/test' });
+    assert.ok(prompt.includes('up to 6'));
+    assert.ok(prompt.includes('at most 10'));
+  });
+
+  it('getPrompt does NOT include --fix section', async () => {
+    const prompt = await skill.getPrompt('', { cwd: '/test' });
+    assert.ok(!prompt.includes('Applying fixes (--fix)'));
+  });
+});
+
+describe('Tier 1 — simplify skill (wrapper: code-review + --fix)', () => {
   let skill: import('../src/plugins/skills/bundled/index.js').BundledSkillDef;
 
   beforeEach(async () => {
@@ -12,67 +128,23 @@ describe('Tier 1 — simplify skill', () => {
   it('has correct name and description', () => {
     assert.equal(skill.name, 'simplify');
     assert.ok(skill.description);
-    assert.ok(skill.whenToUse);
   });
 
-  it('getPrompt returns non-empty string', async () => {
-    const prompt = await skill.getPrompt('', { cwd: '/test' });
-    assert.ok(typeof prompt === 'string');
-    assert.ok(prompt.length > 50);
-  });
-
-  it('getPrompt includes Simplify header', async () => {
+  it('getPrompt includes Simplify title', async () => {
     const prompt = await skill.getPrompt('', { cwd: '/test' });
     assert.ok(prompt.includes('Simplify'));
   });
 
-  it('getPrompt includes phases', async () => {
+  it('getPrompt includes --fix section', async () => {
     const prompt = await skill.getPrompt('', { cwd: '/test' });
-    assert.ok(prompt.includes('Phase 1'));
-    assert.ok(prompt.includes('Phase 2'));
-    assert.ok(prompt.includes('Phase 3'));
+    assert.ok(prompt.includes('Applying fixes (--fix)'));
   });
 
-  it('getPrompt appends args as additional focus', async () => {
-    const prompt = await skill.getPrompt('check memory leaks', { cwd: '/test' });
-    assert.ok(prompt.includes('memory leaks'));
-  });
-
-  it('getPrompt references run_agent tool', async () => {
+  it('getPrompt delegates to code-review content', async () => {
     const prompt = await skill.getPrompt('', { cwd: '/test' });
-    assert.ok(prompt.includes('run_agent'));
-  });
-
-  it('getPrompt references run_bash_command', async () => {
-    const prompt = await skill.getPrompt('', { cwd: '/test' });
-    assert.ok(prompt.includes('run_bash_command'));
-  });
-
-  it('getPrompt mentions all three agent types', async () => {
-    const prompt = await skill.getPrompt('', { cwd: '/test' });
-    assert.ok(prompt.includes('Code Reuse Review'));
-    assert.ok(prompt.includes('Code Quality Review'));
-    assert.ok(prompt.includes('Efficiency Review'));
-  });
-
-  it('getPrompt instructs launching three agents in a single message', async () => {
-    const prompt = await skill.getPrompt('', { cwd: '/test' });
-    assert.ok(prompt.includes('all three agents'));
-  });
-
-  it('getPrompt mentions fallback for no git changes', async () => {
-    const prompt = await skill.getPrompt('', { cwd: '/test' });
-    assert.ok(prompt.includes('no git changes') || prompt.includes('recently modified'));
-  });
-
-  it('getPrompt includes detailed checklists for each agent', async () => {
-    const prompt = await skill.getPrompt('', { cwd: '/test' });
-    // Reuse review check
-    assert.ok(prompt.includes('duplicates'));
-    // Quality review check
-    assert.ok(prompt.includes('Redundant state') || prompt.includes('Parameter sprawl'));
-    // Efficiency review check
-    assert.ok(prompt.includes('TOCTOU') || prompt.includes('Hot-path bloat'));
+    assert.ok(prompt.includes('7 independent finder angles'));
+    assert.ok(prompt.includes('CONFIRMED'));
+    assert.ok(prompt.includes('JSON array'));
   });
 });
 
