@@ -2,7 +2,7 @@ import { describe, it, mock } from 'node:test';
 import * as assert from 'node:assert/strict';
 import { PluginRegistry } from '#src/core/plugin.js';
 import { createModelRegistryPlugin, type ModelRegistrySettings } from '#src/plugins/model-registry/index.js';
-import { SK } from '#src/core/store-keys.js';
+import { SK } from '#src/store-keys.js';
 import type { ModelEntry } from '#src/core/llm.js';
 
 describe('ModelRegistry Plugin', () => {

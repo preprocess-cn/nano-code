@@ -5,7 +5,7 @@ import { buildSystemPrompt } from '#src/core/prompt.js';
 import { loadAgentDefinitions } from '#src/plugins/coordinator/agent-loader.js';
 import { loadAllSkills } from '#src/plugins/skills/loader.js';
 import { MEMORY_RULES_PROMPT } from '#src/plugins/tools/memory.js';
-import { SK } from '#src/core/store-keys.js';
+import { SK } from '#src/store-keys.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import { countTokens, countMessagesTokens } from '#src/plugins/token-budget/counter.js';

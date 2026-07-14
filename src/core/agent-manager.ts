@@ -2,7 +2,7 @@ import { NanoCodeAgent } from '#src/core/agent.js';
 import { LLMClient, ChatMessage } from '#src/core/llm.js';
 import { PluginRegistry } from '#src/core/plugin.js';
 import { IStore, InMemoryStore } from '#src/core/store.js';
-import { SK, agentStatusKey, agentAbortKey, agentMessagesKey, agentCancelledKey } from '#src/core/store-keys.js';
+import { SK, agentStatusKey, agentAbortKey, agentMessagesKey, agentCancelledKey } from '#src/store-keys.js';
 import { AgentInfo, CreateAgentOptions } from '#src/core/contract.js';
 
 const DEFAULT_MAX_AGENTS = 10;

@@ -4,7 +4,7 @@ import * as path from 'path';
 import * as os from 'os';
 import type { ToolDefinition, ToolCall } from '#src/core/contract.js';
 import type { IStore } from '#src/core/store.js';
-import { SK } from '#src/core/store-keys.js';
+import { SK } from '#src/store-keys.js';
 import { withRetry } from '#src/utils/retry.js';
 import { logManager } from '#src/utils/logger.js';
 

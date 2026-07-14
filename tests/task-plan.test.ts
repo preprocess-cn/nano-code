@@ -5,7 +5,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { taskPlanPlugin, __setTestPlansDir } from '../src/plugins/tools/task-plan.js';
 import { ToolContext } from '../src/core/contract.js';
-import { SK } from '../src/core/store-keys.js';
+import { SK } from '../src/store-keys.js';
 import type { ChatMessage } from '../src/core/llm.js';
 
 // ── Helpers ──

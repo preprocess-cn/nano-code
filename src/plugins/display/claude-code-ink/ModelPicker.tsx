@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Box, Text, useInput } from '#src/plugins/display/claude-code-ink/ink.js';
 import type { PluginRegistry } from '#src/core/plugin.js';
 import type { ModelEntry } from '#src/core/llm.js';
-import { SK } from '#src/core/store-keys.js';
+import { SK } from '#src/store-keys.js';
 
 interface ModelPickerProps {
   registry: PluginRegistry;

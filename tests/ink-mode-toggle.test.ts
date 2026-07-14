@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import * as assert from 'node:assert/strict';
 import { PluginRegistry } from '../src/core/plugin.js';
-import { SK } from '../src/core/store-keys.js';
+import { SK } from '../src/store-keys.js';
 
 /**
  * Ink display — mode toggle via Shift+Tab

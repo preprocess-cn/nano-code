@@ -12,7 +12,7 @@ const __dirname = path.dirname(__filename);
  * 导致 MODULE_NOT_FOUND。此测试确保所有非必要动态 #src import 已被清理。
  *
  * 保留（必要）：
- * - src/core/plugin.ts BUILTIN_LOADERS — 延迟加载插件
+ * - src/bootstrap/plugin-loader.ts BUILTIN_LOADERS — 延迟加载插件
  * - src/plugins/token-budget/index.ts — CompactService 按需加载
  * - src/plugins/commands/skills-slash.ts — 循环依赖规避
  * - src/plugins/skills/index.ts — 循环依赖规避
@@ -24,7 +24,7 @@ function isAllowed(sourceFile: string, importTarget: string): boolean {
 
   // 按源文件路径匹配
   const allowedSourceFiles = [
-    'src/core/plugin.ts',                    // BUILTIN_LOADERS
+    'src/bootstrap/plugin-loader.ts',        // BUILTIN_LOADERS（已从 core 移出）
     'src/plugins/token-budget/index.ts',     // CompactService 按需加载
     'src/plugins/commands/skills-slash.ts',  // 循环依赖规避
     'src/plugins/skills/index.ts',           // 循环依赖规避

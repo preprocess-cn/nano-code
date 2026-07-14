@@ -8,7 +8,7 @@ import type { AskQuestionRequest } from '#src/plugins/tools/ask-user-question.js
 import * as readline from 'node:readline';
 
 import type { PluginRegistry } from '#src/core/plugin.js';
-import { SK } from '#src/core/store-keys.js';
+import { SK } from '#src/store-keys.js';
 
 /** 非主 agent 的消息加 [name] 前缀 */
 function p(agentName: string, msg: string): string {

@@ -1,7 +1,7 @@
 import { NanoPlugin, PluginRegistry } from '#src/core/plugin.js';
 import { ToolDefinition, ToolResponse, ToolContext } from '#src/core/contract.js';
 import { ModelEntry, resolveEnvVar } from '#src/core/llm.js';
-import { SK } from '#src/core/store-keys.js';
+import { SK } from '#src/store-keys.js';
 
 export interface ModelRegistrySettings {
   models?: ModelEntry[];

@@ -1,6 +1,6 @@
 import { NanoPlugin, PluginRegistry } from '#src/core/plugin.js';
 import type { DisplayNotifier } from '#src/display.js';
-import { SK } from '#src/core/store-keys.js';
+import { SK } from '#src/store-keys.js';
 import type { ToolResponse, ToolContext } from '#src/core/contract.js';
 
 // ── Types ──

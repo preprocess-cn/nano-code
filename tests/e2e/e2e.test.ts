@@ -5,8 +5,8 @@ import * as path from 'path';
 import * as os from 'os';
 import { NanoCodeAgent } from '#src/core/agent.js';
 import { PluginRegistry } from '#src/core/plugin.js';
-import { registerBuiltinPlugin } from '#src/core/plugin.js';
-import { SK, agentCancelledKey } from '#src/core/store-keys.js';
+import { registerBuiltinPlugin } from '#src/bootstrap/plugin-loader.js';
+import { SK, agentCancelledKey } from '#src/store-keys.js';
 import { StubLLMClient, createSpyDisplay, createToolCall, getMemoryProjectDir } from './e2e-helper.js';
 
 describe('E2E — ReAct 循环全链路', () => {

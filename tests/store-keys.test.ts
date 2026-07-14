@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert';
-import { SK } from '../src/core/store-keys.js';
+import { SK } from '../src/store-keys.js';
 
 describe('SK constants', () => {
   test('all keys have correct string values', () => {

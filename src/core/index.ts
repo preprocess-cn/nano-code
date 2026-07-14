@@ -5,7 +5,7 @@
  */
 
 // ── 插件体系 ──
-export { NanoPlugin, PluginRegistry, registerBuiltinPlugin } from '#src/core/plugin.js';
+export { NanoPlugin, PluginRegistry } from '#src/core/plugin.js';
 
 // ── Agent ──
 export { NanoCodeAgent } from '#src/core/agent.js';
@@ -51,8 +51,8 @@ export { InMemoryStore } from '#src/core/store.js';
 export type { IStore } from '#src/core/store.js';
 
 // ── 常量 ──
-export { SK } from '#src/core/store-keys.js';
-export type { AgentModeInfo } from '#src/core/store-keys.js';
+export { SK } from '#src/store-keys.js';
+export type { AgentModeInfo } from '#src/store-keys.js';
 
 // ── 版本 ──
 export { getPackageVersion, getPackageName } from '#src/utils/version.js';

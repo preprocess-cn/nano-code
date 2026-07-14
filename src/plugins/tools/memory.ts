@@ -3,7 +3,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { NanoPlugin, PluginRegistry } from '#src/core/plugin.js';
 import { ToolDefinition, ToolResponse, ToolContext } from '#src/core/contract.js';
-import { SK } from '#src/core/store-keys.js';
+import { SK } from '#src/store-keys.js';
 
 // ── Config ──
 

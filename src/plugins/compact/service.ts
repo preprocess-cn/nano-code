@@ -4,7 +4,7 @@ import { PluginRegistry } from '#src/core/plugin.js';
 import type { DisplayOutput } from '#src/display.js';
 import { countMessagesTokens } from '#src/plugins/token-budget/counter.js';
 import { CompactOptions, CompactionResult } from '#src/plugins/compact/types.js';
-import { SK } from '#src/core/store-keys.js';
+import { SK } from '#src/store-keys.js';
 import {
   COMPACT_SYSTEM_PROMPT,
   buildCompactUserPrompt,

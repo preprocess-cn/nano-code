@@ -4,7 +4,7 @@ import * as path from 'path';
 import { confirm } from '@clack/prompts';
 import { NanoPlugin, PluginRegistry } from '#src/core/plugin.js';
 import { ToolDefinition, ToolResponse, ToolContext } from '#src/core/contract.js';
-import { SK } from '#src/core/store-keys.js';
+import { SK } from '#src/store-keys.js';
 import { getPatchForDisplay, newFileHunk } from '#src/utils/diff.js';
 import { logManager } from '#src/utils/logger.js';
 

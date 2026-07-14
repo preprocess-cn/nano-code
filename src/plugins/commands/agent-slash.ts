@@ -4,7 +4,7 @@ import { NanoCodeAgent } from '#src/core/agent.js';
 import type { DisplayOutput } from '#src/display.js';
 import { loadAgentDefinitions } from '#src/plugins/coordinator/agent-loader.js';
 import type { SystemPromptConfig } from '#src/core/config.js';
-import { SK, type AgentModeInfo } from '#src/core/store-keys.js';
+import { SK, type AgentModeInfo } from '#src/store-keys.js';
 
 let _agent: NanoCodeAgent | null = null;
 let _display: DisplayOutput | null = null;

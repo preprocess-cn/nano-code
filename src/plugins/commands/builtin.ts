@@ -17,7 +17,7 @@ import * as path from 'path';
 import * as yaml from 'js-yaml';
 import type { BuiltinCommand } from '#src/plugins/commands/types.js';
 import { readAllTasks, getPlansDir, listPlanFiles } from '#src/plugins/tools/task-plan.js';
-import { SK } from '#src/core/store-keys.js';
+import { SK } from '#src/store-keys.js';
 import type { ModelEntry } from '#src/core/llm.js';
 import { runDoctor, formatDoctorResults } from '#src/plugins/commands/doctor.js';
 import { loadAgentDefinitions } from '#src/plugins/coordinator/agent-loader.js';

@@ -8,7 +8,7 @@ import {
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
-import { SK } from '#src/core/store-keys.js';
+import { SK } from '#src/store-keys.js';
 
 // ── File paths ──
 

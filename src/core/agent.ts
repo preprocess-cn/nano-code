@@ -4,7 +4,7 @@ import { SystemPromptConfig } from '#src/core/config.js';
 import { buildSystemPrompt, formatToolResponse } from '#src/core/prompt.js';
 import { ToolResponse, ToolContext, ToolCall, InjectedMessage, isMainAgent, AgentDisplay } from '#src/core/contract.js';
 import { getToolDisplayName } from '#src/utils/tool-name.js';
-import { SK, agentStatusKey, agentAbortKey, agentMessagesKey, agentCancelledKey, compactResultKey } from '#src/core/store-keys.js';
+import { SK, agentStatusKey, agentAbortKey, agentMessagesKey, agentCancelledKey, compactResultKey } from '#src/store-keys.js';
 
 export interface NanoCodeAgentOptions {
   registry: PluginRegistry;

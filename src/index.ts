@@ -1,5 +1,6 @@
 import { NanoCodeAgent } from '#src/core/agent.js';
-import { PluginRegistry, registerBuiltinPlugin, DEFAULT_SYSTEM_PLUGINS, DEFAULT_FEATURE_PLUGINS } from '#src/core/plugin.js';
+import { PluginRegistry } from '#src/core/plugin.js';
+import { registerBuiltinPlugin, DEFAULT_SYSTEM_PLUGINS, DEFAULT_FEATURE_PLUGINS } from '#src/bootstrap/plugin-loader.js';
 import { loadConfig, applyProfile, getSystemWhitelist } from '#src/bootstrap/config.js';
 import { LLMClient } from '#src/core/llm.js';
 import { loadSession, saveSession } from '#src/bootstrap/session.js';
@@ -8,7 +9,7 @@ import { DisplayManager } from '#src/display.js';
 import { initDisplay } from '#src/plugins/display/init.js';
 import { AgentManager } from '#src/core/agent-manager.js';
 import { wait, enqueuePendingNotification } from '#src/core/message-queue.js';
-import { SK, agentCancelledKey, agentAbortKey } from '#src/core/store-keys.js';
+import { SK, agentCancelledKey, agentAbortKey } from '#src/store-keys.js';
 import type { ModelEntry } from '#src/core/llm.js';
 import { cac } from 'cac';
 import { getPackageVersion } from '#src/utils/version.js';

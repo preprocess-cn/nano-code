@@ -3,7 +3,7 @@ import * as assert from 'node:assert/strict';
 
 import { enqueue, enqueuePendingNotification, requestExit, hasPending, clear, reset, wait } from '../src/core/message-queue.js';
 import { PluginRegistry } from '../src/core/plugin.js';
-import { SK } from '../src/core/store-keys.js';
+import { SK } from '../src/store-keys.js';
 
 /**
  * 永不 resolve 的 prompt mock，模拟 Ink display 的行为。

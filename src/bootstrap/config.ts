@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import * as yaml from 'js-yaml';
-import { DEFAULT_SYSTEM_PLUGINS } from '#src/core/plugin.js';
+import { DEFAULT_SYSTEM_PLUGINS } from '#src/bootstrap/plugin-loader.js';
 import { logManager } from '#src/utils/logger.js';
 import type { NanoConfig, AgentConfig, PluginConfigEntry, SystemPromptConfig, ConfigValidationWarning } from '#src/core/config.js';
 

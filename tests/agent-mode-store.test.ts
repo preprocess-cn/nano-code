@@ -1,6 +1,6 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert';
-import { SK, type AgentModeInfo } from '../src/core/store-keys.js';
+import { SK, type AgentModeInfo } from '../src/store-keys.js';
 
 describe('AgentMode via Store (DisplayPlugin 接口稳定替代方案)', () => {
   function createMockStore() {

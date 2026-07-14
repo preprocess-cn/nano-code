@@ -1,4 +1,5 @@
-import { NanoPlugin, PluginRegistry, registerBuiltinPlugin } from '#src/core/plugin.js';
+import { NanoPlugin, PluginRegistry } from '#src/core/plugin.js';
+import { registerBuiltinPlugin } from '#src/bootstrap/plugin-loader.js';
 import { ToolResponse, ToolContext, ToolDefinition, type AgentDisplay } from '#src/core/contract.js';
 import { NanoCodeAgent } from '#src/core/agent.js';
 import { AgentManager } from '#src/core/agent-manager.js';
