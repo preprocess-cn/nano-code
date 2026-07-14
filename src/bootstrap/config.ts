@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import * as yaml from 'js-yaml';
+import * as dotenv from 'dotenv';
 import { DEFAULT_SYSTEM_PLUGINS } from '#src/bootstrap/plugin-loader.js';
 import { logManager } from '#src/utils/logger.js';
 import type { NanoConfig, AgentConfig, PluginConfigEntry, SystemPromptConfig, ConfigValidationWarning } from '#src/core/config.js';
@@ -544,6 +545,10 @@ function convertSystemPromptConfig(raw: unknown): SystemPromptConfig | undefined
 
 export function loadConfig(): NanoConfig {
   ensureDefaultYAML();
+
+  // 加载 .env 文件到 process.env，优先级：shell 环境变量 > .env > YAML env
+  dotenv.config();                                                                   // $CWD/.env
+  dotenv.config({ path: path.join(os.homedir(), '.nano-code', '.env') });            // ~/.nano-code/.env 兜底
 
   const yamlData = loadYAMLConfig();
   if (yamlData) {

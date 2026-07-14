@@ -13,6 +13,8 @@
 | ✅ | **全局状态栏 + 通知管理** | Ink 底栏 `StatusBar` 组件：左侧 `KEY: VALUE` 持久状态（mode 特殊渲染 `● PLAN`）、右侧通知消息循环展示；`DisplayPlugin.setStatusBar`/`onNotify` 接口；可选 `notify-manager` 后端插件（队列管理、轮询调度、2s 间隔）；REPL `setStatusBar` mode 响应 |
 | ✅ | **核心层瘦身** | 6 个基础设施文件从 `src/core/` 迁出：`version.ts`/`tool-name.ts`/`retry.ts`/`token-counter.ts`/`logger.ts` → `src/utils/`，`session.ts` → `src/bootstrap/`；核心层文件从 15 降至 9 个 |
 | ✅ | **核心层纯净度** | `BUILTIN_LOADERS`/`registerBuiltinPlugin`/插件默认列表从 `core/plugin.ts` 移至 `bootstrap/plugin-loader.ts`；`store-keys.ts` 从 `core/` 移至 `src/` 作为接口层，消除插件 key 泄漏 |
+| ✅ | **dotenv 加载统一** | 将 `dotenv.config()` 从 `llm.ts` 模块顶层移至 `bootstrap/config.ts` 的 `loadConfig()` 内，与 YAML `env:` 段统管，消除重复的模块加载副作用 |
+| ✅ | **核心层测试覆盖补全** | `formatToolResponse`（prompt.ts 6 用例）、`resolveEnvVar`（llm.ts 4 用例）、`AgentManager` 完整生命周期（agent-manager.ts 11 用例），不修改 src 代码纯测公共 API |
 | ✅ | **引导插件 + 系统提示词分段** | Guidance 插件：前置 6 段 Claude Code 风格行为约束（`# System`/`# Doing tasks`/`# Executing actions with care`/`# Using your tools`/`# Tone and style`/`# Output efficiency`），`onBeforeRequest` 注入三级 AGENT.md 上下文，可分段开关；修复 `/context` 命令缺失 config 的问题；修复 Ink 代码块多行渲染 |
 
 ## P1 — 日常体验

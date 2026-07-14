@@ -1,16 +1,9 @@
 import OpenAI from 'openai';
-import * as dotenv from 'dotenv';
-import * as path from 'path';
-import * as os from 'os';
 import type { ToolDefinition, ToolCall } from '#src/core/contract.js';
 import type { IStore } from '#src/core/store.js';
 import { SK } from '#src/store-keys.js';
 import { withRetry } from '#src/utils/retry.js';
 import { logManager } from '#src/utils/logger.js';
-
-// 加载环境变量：项目 .env 优先于全局 ~/.nano-code/.env，shell 环境变量优先于两者
-dotenv.config();                                                                  // $CWD/.env
-dotenv.config({ path: path.join(os.homedir(), '.nano-code', '.env') });          // ~/.nano-code/.env 兜底
 
 export interface LLMConfig {
   model?: string;
