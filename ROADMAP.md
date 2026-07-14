@@ -195,6 +195,7 @@ Ink 展示层（`claude-code-ink`）基于 React + 自研 Ink 引擎（fork 自 
 ### 已知问题
 
 - **FIXED：`--think` 多段思考文本 dim 样式仅作用首行** — `render-node-to-output.ts` 非换行路径（`needsWrapping === false` 且 `segments.length === 1`）整段多行文本用单一 `\x1b[2m...\x1b[22m` 包裹，`output.ts` 的 `split('\n')` 把 ANSI 闭码分割到单独行导致仅首行 dim。修复：先按行分割再逐行应用样式。
+- **Ink 未实现 onAgentTurnStart/onAgentTurnEnd** — 子 agent 并行执行时无 lifecycle 显示，用户无法感知各 agent 处于什么阶段。需在 InkApp 中实现 `onAgentTurnStart`（创建 agent 状态追踪条目）和 `onAgentTurnEnd`（标记完成），配合底栏或进度组件展示多个 agent 的实时状态。
 
 ## Agent 架构
 

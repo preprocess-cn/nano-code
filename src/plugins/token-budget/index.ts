@@ -135,7 +135,7 @@ export function createTokenBudgetPlugin(config?: TokenBudgetConfig): NanoPlugin 
           ...messages,
           {
             role: 'user',
-            content: '注意：当前请求消息过长。请优先关注最近的消息，回复尽量简洁。',
+            content: '<system-reminder>\n注意：当前请求消息过长。请优先关注最近的消息，回复尽量简洁。\n</system-reminder>',
             isMeta: true,
           },
         ];
@@ -148,11 +148,7 @@ export function createTokenBudgetPlugin(config?: TokenBudgetConfig): NanoPlugin 
           ...messages,
           {
             role: 'user',
-            content: [
-              `SYSTEM: This session has exceeded its token budget (${cfg.maxTokensPerSession}).`,
-              'You must NOT call any more tools.',
-              'Please summarize what was accomplished and suggest next steps the user can take manually.',
-            ].join(' '),
+            content: `<system-reminder>\nThis session has exceeded its token budget (${cfg.maxTokensPerSession}). You must NOT call any more tools. Please summarize what was accomplished and suggest next steps the user can take manually.\n</system-reminder>`,
             isMeta: true,
           },
         ];
@@ -171,7 +167,7 @@ export function createTokenBudgetPlugin(config?: TokenBudgetConfig): NanoPlugin 
           ...messages,
           {
             role: 'user',
-            content: '注意：当前会话较长，请尽量简洁回复，避免不必要的工具调用。',
+            content: '<system-reminder>\n注意：当前会话较长，请尽量简洁回复，避免不必要的工具调用。\n</system-reminder>',
             isMeta: true,
           },
         ];
