@@ -5,7 +5,7 @@ import type { BundledSkillDef } from '#src/plugins/skills/bundled/index.js';
  *
  * 对齐 Claude Code 的 `SIMPLIFY_PROMPT`，三阶段结构：
  * 1. git diff 识别变更
- * 2. 多维度审查（代码复用、质量、效率）
+ * 2. 三个并行 Agent 审查（代码复用、质量、效率）
  * 3. 聚合修复
  */
 export function createSimplifySkill(): BundledSkillDef {
@@ -14,26 +14,56 @@ export function createSimplifySkill(): BundledSkillDef {
     description: '审查代码变更并自动修复问题',
     whenToUse: 'use when the user asks to simplify, clean up, or review code changes',
     getPrompt: async (args) => {
-      return `# Simplify: 代码审查与清理
+      return `# Simplify: Code Review and Cleanup
 
-运行 \`run_bash_command\` 工具执行 \`git diff\`（有暂存区更改时用 \`git diff HEAD\`）识别所有变更文件。
-如果没有 git 变更，则审查本对话中最近编辑过的文件。
+Review all changed files for reuse, quality, and efficiency. Fix any issues found.
 
-## Phase 1: 变更识别
-- 执行 git diff 获取变更列表
-- 如果没有 git 仓库或没有变更，审查对话中最近修改的文件
+## Phase 1: Identify Changes
 
-## Phase 2: 多维度审查
-并行审查每个变更文件（可多次调用 \`run_agent\`）：
+Run \`run_bash_command\` to execute \`git diff\` (use \`git diff HEAD\` if there are staged changes) to see what changed. If there are no git changes, review the most recently modified files that the user mentioned or that you edited earlier in this conversation.
 
-1. **代码复用** — 搜索可用的工具/辅助函数，标记重复功能，标记可被现有工具替代的内联逻辑
-2. **代码质量** — 检查冗余状态、参数膨胀、复制粘贴变体、抽象泄漏、不必要的注释
-3. **效率** — 检查不必要的工作、遗漏的并发、热点路径膨胀、TOCTOU、内存问题
+## Phase 2: Launch Three Review Agents
 
-## Phase 3: 修复问题
-汇总所有发现，逐个修复。误报或不值得处理的跳过即可。
-最后简要总结修复内容。
-${args ? `\n## 额外关注点\n\n${args}` : ''}`;
+Use the \`run_agent\` tool to launch all three agents in a single message. Pass each agent the full diff so it has the complete context.
+
+### Agent 1: Code Reuse Review
+
+For each change:
+
+1. **Search for existing utilities and helpers** that could replace newly written code. Look for similar patterns elsewhere in the codebase — common locations are utility directories, shared modules, and files adjacent to the changed ones.
+2. **Flag any new function that duplicates existing functionality.** Suggest the existing function to use instead.
+3. **Flag any inline logic that could use an existing utility** — hand-rolled string manipulation, manual path handling, custom environment checks, ad-hoc type guards, and similar patterns are common candidates.
+
+### Agent 2: Code Quality Review
+
+Review the same changes for hacky patterns:
+
+1. **Redundant state**: state that duplicates existing state, cached values that could be derived, observers/effects that could be direct calls
+2. **Parameter sprawl**: adding new parameters to a function instead of generalizing or restructuring existing ones
+3. **Copy-paste with slight variation**: near-duplicate code blocks that should be unified with a shared abstraction
+4. **Leaky abstractions**: exposing internal details that should be encapsulated, or breaking existing abstraction boundaries
+5. **Stringly-typed code**: using raw strings where constants, enums (string unions), or branded types already exist in the codebase
+6. **Unnecessary JSX nesting**: wrapper Boxes/elements that add no layout value — check if inner component props already provide the needed behavior
+7. **Unnecessary comments**: comments explaining WHAT the code does (well-named identifiers already do that), narrating the change, or referencing the task/caller — delete; keep only non-obvious WHY (hidden constraints, subtle invariants, workarounds)
+
+### Agent 3: Efficiency Review
+
+Review the same changes for efficiency:
+
+1. **Unnecessary work**: redundant computations, repeated file reads, duplicate network/API calls, N+1 patterns
+2. **Missed concurrency**: independent operations run sequentially when they could run in parallel
+3. **Hot-path bloat**: new blocking work added to startup or per-request/per-render hot paths
+4. **Recurring no-op updates**: state/store updates inside polling loops, intervals, or event handlers that fire unconditionally — add a change-detection guard so downstream consumers aren't notified when nothing changed. Also: if a wrapper function takes an updater/reducer callback, verify it honors same-reference returns (or whatever the "no change" signal is) — otherwise callers' early-return no-ops are silently defeated
+5. **Unnecessary existence checks**: pre-checking file/resource existence before operating (TOCTOU anti-pattern) — operate directly and handle the error
+6. **Memory**: unbounded data structures, missing cleanup, event listener leaks
+7. **Overly broad operations**: reading entire files when only a portion is needed, loading all items when filtering for one
+
+## Phase 3: Fix Issues
+
+Wait for all three agents to complete. Aggregate their findings and fix each issue directly. If a finding is a false positive or not worth addressing, note it and move on — do not argue with the finding, just skip it.
+
+When done, briefly summarize what was fixed (or confirm the code was already clean).
+${args ? `\n## Additional Focus\n\n${args}` : ''}`;
     },
   };
 }

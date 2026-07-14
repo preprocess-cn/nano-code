@@ -47,6 +47,33 @@ describe('Tier 1 — simplify skill', () => {
     const prompt = await skill.getPrompt('', { cwd: '/test' });
     assert.ok(prompt.includes('run_bash_command'));
   });
+
+  it('getPrompt mentions all three agent types', async () => {
+    const prompt = await skill.getPrompt('', { cwd: '/test' });
+    assert.ok(prompt.includes('Code Reuse Review'));
+    assert.ok(prompt.includes('Code Quality Review'));
+    assert.ok(prompt.includes('Efficiency Review'));
+  });
+
+  it('getPrompt instructs launching three agents in a single message', async () => {
+    const prompt = await skill.getPrompt('', { cwd: '/test' });
+    assert.ok(prompt.includes('all three agents'));
+  });
+
+  it('getPrompt mentions fallback for no git changes', async () => {
+    const prompt = await skill.getPrompt('', { cwd: '/test' });
+    assert.ok(prompt.includes('no git changes') || prompt.includes('recently modified'));
+  });
+
+  it('getPrompt includes detailed checklists for each agent', async () => {
+    const prompt = await skill.getPrompt('', { cwd: '/test' });
+    // Reuse review check
+    assert.ok(prompt.includes('duplicates'));
+    // Quality review check
+    assert.ok(prompt.includes('Redundant state') || prompt.includes('Parameter sprawl'));
+    // Efficiency review check
+    assert.ok(prompt.includes('TOCTOU') || prompt.includes('Hot-path bloat'));
+  });
 });
 
 describe('Tier 1 — verify skill', () => {
