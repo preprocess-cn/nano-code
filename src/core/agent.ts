@@ -277,7 +277,7 @@ export class NanoCodeAgent {
     // sideEffect=true 且不在 allowlist 中的工具需要用户确认
     // 已在 allowlist 中的工具同时跳过工具层权限确认
     let agentConfirmed = false;
-    const sideEffect = this.registry.getToolSideEffect(toolName);
+    const sideEffect = this.registry.getToolSideEffect(toolName, toolArgs);
     if (sideEffect) {
       if (this.registry.isSkipPermissionScope()) {
         agentConfirmed = true;

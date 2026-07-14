@@ -69,8 +69,8 @@ export interface ToolDefinition {
     name: string;
     description: string;
     parameters: Record<string, any>;
-    /** Whether this tool changes external state. false = read-only, auto-execute without user confirmation. */
-    sideEffect?: boolean;
+    /** Whether this tool changes external state. false = read-only, auto-execute without user confirmation. 可为函数，接收参数动态判断。 */
+    sideEffect?: boolean | ((args: any) => boolean);
     /** Tool-level timeout override in ms. undefined uses global defaultTimeout. Infinity = never timeout. */
     timeout?: number;
     /** User-friendly display name (e.g., "Bash" for "run_bash_command"). When set, display plugins show this instead of the raw tool name. */

@@ -2,6 +2,7 @@ import { spawn } from 'child_process';
 import { confirm } from '@clack/prompts';
 import { NanoPlugin } from '#src/core/plugin.js';
 import { ToolDefinition, ToolResponse, ToolContext } from '#src/core/contract.js';
+import { isReadOnlyCommand } from './command-readonly.js';
 
 /**
  * [LOCK] 危险命令黑名单模式列表
@@ -84,7 +85,7 @@ export const commandPlugin: NanoPlugin = {
             },
             required: ['command']
           },
-          sideEffect: true,
+          sideEffect: (args: any) => !isReadOnlyCommand(typeof args?.command === 'string' ? args.command.trim() : ''),
         }
       }
     ];
@@ -94,7 +95,7 @@ export const commandPlugin: NanoPlugin = {
     switch (name) {
       case 'run_bash_command': {
         try {
-          if (!args.command) {
+          if (typeof args.command !== 'string' || !args.command.trim()) {
             return {
               status: 'error',
               message: 'Error: Missing required parameter "command".'
@@ -111,7 +112,7 @@ export const commandPlugin: NanoPlugin = {
             };
           }
 
-          if (!ctx.skipPermission && ctx.sideEffect) {
+          if (!ctx.skipPermission && ctx.sideEffect && !isReadOnlyCommand(trimmedCmd)) {
             const confirmed = ctx.confirmCallback
               ? await ctx.confirmCallback({ toolName: 'command', message: '是否批准在您的本地电脑运行此命令？', details: args.command })
               : await userConfirmation.ask('[?] 是否批准在您的本地电脑运行此命令？');

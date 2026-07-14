@@ -72,6 +72,8 @@
 | ✅ | **Bash timeout 下限保护** | `Math.max(1, ...)` 防止 timeout=0/-1 导致进程立即被 kill |
 | ✅ | **maxTurns 非空校验** | `!= null` 替代 falsy 检查，`maxTurns: 0` 正确停止（零轮次），YAML 传入非数字时静默类型转换问题 |
 | ✅ | **工具 sideEffect 修正** | `task_create`/`task_update`/`task_stop`/`save_memory`/`skill`/`exit_plan_mode` 改为 `sideEffect: false`，内建读操作无需审批 |
+| ✅ | **动态 sideEffect** | `sideEffect` 支持 `boolean | ((args) => boolean)`，工具根据参数动态判断是否只读；移除 `toolSideEffects` 静态 Map，每次从插件 `getTools()` 动态获取 |
+| ✅ | **Bash 命令只读检测** | `command-readonly.ts` — 四层过滤算法（Shell 操作符 → 环境变量剥离 → 特殊命令 find/git/sed/awk → 安全命令白名单），70+ 只读命令自动放行 |
 | ✅ | 多轮摘要记忆 | 自动压缩默认启用（`autoCompactEnabled: true`），触发策略改为基于当前消息大小 + slide window 多次压缩，压缩前全量备份至 `.nano-code-session.pre-compact.json` |
 | ✅ | 角色模式 & 斜杠命令 | profiles/ 通过 `--profile` 启动时加载，主 agent 可通过斜杠 `/` 切换 agent；profile 运行时切换暂不支持 |
 | ✅ | 内置 Skill 系统 | 14 个对齐 Claude Code 的内置技能：review/code-review/simplify/verify/batch/debug/lorem-ipsum/update-config/remember/stuck/skillify/keybindings/commit/commit-pr |
@@ -99,6 +101,7 @@
 | 状态 | 功能 | 说明 |
 |------|------|------|
 | ✅ | Plan Mode | `enter_plan_mode`/`exit_plan_mode` + `plan_write`/`plan_list` 工具，`~/.nano-code/plan/` 文件持久化，4 阶段工作流（探索→设计→审查迭代→执行），写入工具拦截，`<system-reminder>` 两级节流（每 5 轮精简/完整交替），退出通知 |
+| ✅ | **Plan Mode 只读命令放行** | `onBeforeToolCall` 解析 `toolCall.function.arguments` 传入 `getToolSideEffect`，只读 Bash 命令（`cat`、`ls`、`grep` 等）在 plan mode 中不再被拦截，便于代码探索 |
 | ✅ | 任务/清单系统 | `task_create`/`task_list`/`task_update`/`task_stop` 工具，文件持久化 |
 | ✅ | 会话语义记忆 | 文件化记忆系统：MEMORY.md 索引 + topic 文件，onSystemPrompt 注入行为规则和索引，save_memory/recall_memory 工具，~/.nano-code/AGENT.md 用户全局偏好 |
 | ✅ | 权限系统 | 轻量权限框架：PluginRegistry allowlist、agent permission gate、/permissions 命令、Ink 三选项弹窗 |

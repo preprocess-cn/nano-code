@@ -57,7 +57,6 @@ export type InteractiveHandler = (args: any) => Promise<ToolResponse>;
 export class PluginRegistry {
   private plugins: Map<string, NanoPlugin> = new Map();
   private toolIndex: Map<string, string> = new Map();
-  private toolSideEffects: Map<string, boolean> = new Map();
   private toolTimeouts: Map<string, number | undefined> = new Map();
   private configs: Map<string, Record<string, any>> = new Map();
   private defaultCtx: Partial<ToolContext> = {};
@@ -137,9 +136,21 @@ export class PluginRegistry {
     return this._skipPermissionScope;
   }
 
-  /** 获取某工具的 sideEffect 标记 */
-  getToolSideEffect(toolName: string): boolean {
-    return this.toolSideEffects.get(toolName) ?? true;
+  /** 获取某工具的 sideEffect 标记。支持函数动态判断（通过 args 传入参数）。 */
+  getToolSideEffect(toolName: string, args?: any): boolean {
+    const pluginName = this.toolIndex.get(toolName);
+    if (!pluginName) return true;
+    const plugin = this.plugins.get(pluginName);
+    if (!plugin) return true;
+    for (const t of plugin.getTools()) {
+      if (t.function.name === toolName) {
+        const se = t.function.sideEffect;
+        if (se === undefined) return true;
+        if (typeof se === 'function') return se(args) ?? true;
+        return se;
+      }
+    }
+    return true;
   }
 
   setOutputHandler(handler: CommandOutputHandler): void {
@@ -170,7 +181,6 @@ export class PluginRegistry {
         logManager.warn('plugin', `Tool "${tool.function.name}" already registered by plugin "${this.toolIndex.get(tool.function.name)}", overwritten by "${plugin.name}".`);
       }
       this.toolIndex.set(tool.function.name, plugin.name);
-      this.toolSideEffects.set(tool.function.name, tool.function.sideEffect ?? true);
       this.toolTimeouts.set(tool.function.name, tool.function.timeout);
     }
     this._schemaCache = null;
@@ -195,7 +205,6 @@ export class PluginRegistry {
     }
     this.plugins.clear();
     this.toolIndex.clear();
-    this.toolSideEffects.clear();
     this.toolTimeouts.clear();
     this.configs.clear();
     this._allowlist.clear();
@@ -218,7 +227,6 @@ export class PluginRegistry {
     for (const [toolName, pluginName] of this.toolIndex.entries()) {
       if (pluginName === name) {
         this.toolIndex.delete(toolName);
-        this.toolSideEffects.delete(toolName);
         this.toolTimeouts.delete(toolName);
       }
     }
@@ -261,7 +269,7 @@ export class PluginRegistry {
       skipPermission: ctx?.skipPermission ?? this.defaultCtx.skipPermission ?? false,
       cwd: ctx?.cwd ?? this.defaultCtx.cwd ?? process.cwd(),
       defaultTimeout: effectiveTimeout,
-      sideEffect: this.toolSideEffects.get(name) ?? true,
+      sideEffect: this.getToolSideEffect(name, args),
       confirmCallback: this._confirmCallback,
       outputHandler: this._outputHandler,
     };

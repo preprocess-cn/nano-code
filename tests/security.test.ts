@@ -56,4 +56,38 @@ describe('Security 安全熔断与交互契约测试', () => {
     const response = await commandPlugin.execute('run_bash_command', { command: 'echo "no-side-effect"' }, NO_SIDE_EFFECT);
     assert.strictEqual(response.status, 'success');
   });
+
+  // ── 只读命令检测 ──
+
+  test('只读命令（echo）跳过权限确认，不弹窗', async () => {
+    mock.method(userConfirmation, 'ask', async () => { throw new Error('should not be called for readonly command'); });
+    const response = await commandPlugin.execute('run_bash_command', { command: 'echo "readonly-test"' }, WITH_CONFIRM);
+    assert.strictEqual(response.status, 'success');
+    assert.match(response.data || '', /readonly-test/);
+  });
+
+  test('只读命令（cat）跳过权限确认', async () => {
+    mock.method(userConfirmation, 'ask', async () => { throw new Error('should not be called for readonly command'); });
+    const response = await commandPlugin.execute('run_bash_command', { command: 'cat /dev/null' }, WITH_CONFIRM);
+    assert.strictEqual(response.status, 'success');
+  });
+
+  test('只读命令（ls）跳过权限确认', async () => {
+    mock.method(userConfirmation, 'ask', async () => { throw new Error('should not be called for readonly command'); });
+    const response = await commandPlugin.execute('run_bash_command', { command: 'ls /tmp' }, WITH_CONFIRM);
+    assert.strictEqual(response.status, 'success');
+  });
+
+  test('写入命令（touch）仍然触发权限确认', async () => {
+    // mock 返回 true（用户批准），验证执行不会抛错
+    mock.method(userConfirmation, 'ask', async () => true);
+    const response = await commandPlugin.execute('run_bash_command', { command: 'touch /tmp/nano-code-test-write-flag' }, WITH_CONFIRM);
+    assert.strictEqual(response.status, 'success');
+  });
+
+  test('写入命令被用户拒绝时返回 rejected_by_user', async () => {
+    mock.method(userConfirmation, 'ask', async () => false);
+    const response = await commandPlugin.execute('run_bash_command', { command: 'rm /tmp/nonexistent' }, WITH_CONFIRM);
+    assert.strictEqual(response.status, 'rejected_by_user');
+  });
 });

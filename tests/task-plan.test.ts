@@ -766,3 +766,135 @@ describe('task-plan 插件 — plan mode 钩子', () => {
     assert.notEqual(taskPlanPlugin.onBeforeToolCall!(tc), null);
   });
 });
+
+describe('task-plan 插件 — plan mode 只读命令放行', () => {
+  let store: ReturnType<typeof createTestStore>;
+  let registry: any;
+
+  beforeEach(async () => {
+    store = createTestStore();
+    registry = {
+      store,
+      getPluginConfig: () => ({}),
+      // 模拟动态 sideEffect：读取 args 判断 bash 命令是否只读
+      getToolSideEffect: (name: string, args?: any) => {
+        const map: Record<string, any> = {
+          run_bash_command: (a: any) => {
+            const cmd = a?.command?.trim() || '';
+            return !(cmd === 'cat file' || cmd === 'ls /tmp' || cmd === 'echo hello' || cmd.startsWith('grep '));
+          },
+          write_file_content: true,
+          patch_file: true,
+          list_project_files: false,
+          view_file_content: false,
+          plan_write: false,
+          plan_list: false,
+        };
+        const se = map[name];
+        if (se === undefined) return true;
+        if (typeof se === 'function') return se(args) ?? true;
+        return se;
+      },
+    };
+    await taskPlanPlugin.onInit!(registry);
+  });
+
+  test('plan mode 放行只读 bash 命令（cat）', async () => {
+    store.set(SK.Mode, 'plan');
+    const tc = {
+      id: '1', type: 'function' as const,
+      function: { name: 'run_bash_command', arguments: '{"command":"cat file"}' },
+    };
+    assert.notEqual(taskPlanPlugin.onBeforeToolCall!(tc), null,
+      '只读命令 cat 应放行');
+  });
+
+  test('plan mode 放行只读 bash 命令（ls）', async () => {
+    store.set(SK.Mode, 'plan');
+    const tc = {
+      id: '2', type: 'function' as const,
+      function: { name: 'run_bash_command', arguments: '{"command":"ls /tmp"}' },
+    };
+    assert.notEqual(taskPlanPlugin.onBeforeToolCall!(tc), null,
+      '只读命令 ls 应放行');
+  });
+
+  test('plan mode 放行只读 bash 命令（grep）', async () => {
+    store.set(SK.Mode, 'plan');
+    const tc = {
+      id: '3', type: 'function' as const,
+      function: { name: 'run_bash_command', arguments: '{"command":"grep -r foo src/"}' },
+    };
+    assert.notEqual(taskPlanPlugin.onBeforeToolCall!(tc), null,
+      '只读命令 grep 应放行');
+  });
+
+  test('plan mode 拦截写入 bash 命令（touch）', async () => {
+    store.set(SK.Mode, 'plan');
+    const tc = {
+      id: '4', type: 'function' as const,
+      function: { name: 'run_bash_command', arguments: '{"command":"touch newfile"}' },
+    };
+    assert.equal(taskPlanPlugin.onBeforeToolCall!(tc), null,
+      '写入命令 touch 应拦截');
+  });
+
+  test('plan mode 拦截写入 bash 命令（npm install）', async () => {
+    store.set(SK.Mode, 'plan');
+    const tc = {
+      id: '5', type: 'function' as const,
+      function: { name: 'run_bash_command', arguments: '{"command":"npm install"}' },
+    };
+    assert.equal(taskPlanPlugin.onBeforeToolCall!(tc), null,
+      '写入命令 npm install 应拦截');
+  });
+
+  test('plan mode 参数解析失败时保守拦截', async () => {
+    store.set(SK.Mode, 'plan');
+    const tc = {
+      id: '6', type: 'function' as const,
+      function: { name: 'run_bash_command', arguments: 'not-json' },
+    };
+    assert.equal(taskPlanPlugin.onBeforeToolCall!(tc), null,
+      '参数解析失败时保守返回 null');
+  });
+
+  test('plan mode 空参数时保守拦截', async () => {
+    store.set(SK.Mode, 'plan');
+    const tc = {
+      id: '7', type: 'function' as const,
+      function: { name: 'run_bash_command', arguments: '{}' },
+    };
+    assert.equal(taskPlanPlugin.onBeforeToolCall!(tc), null,
+      '空参数（无 command）时应拦截');
+  });
+
+  test('normal mode 放行所有 bash 命令（含写入）', async () => {
+    store.set(SK.Mode, 'normal');
+    const tc = {
+      id: '8', type: 'function' as const,
+      function: { name: 'run_bash_command', arguments: '{"command":"touch test"}' },
+    };
+    assert.notEqual(taskPlanPlugin.onBeforeToolCall!(tc), null,
+      'normal mode 不应拦截任何工具');
+  });
+
+  test('args 正确传递至 getToolSideEffect', async () => {
+    store.set(SK.Mode, 'plan');
+    let capturedArgs: any = undefined;
+    registry.getToolSideEffect = (name: string, args?: any) => {
+      if (name === 'run_bash_command') {
+        capturedArgs = args;
+        const cmd = args?.command?.trim() || '';
+        return !(cmd === 'cat file');
+      }
+      return true;
+    };
+    const tc = {
+      id: '9', type: 'function' as const,
+      function: { name: 'run_bash_command', arguments: '{"command":"cat file"}' },
+    };
+    taskPlanPlugin.onBeforeToolCall!(tc);
+    assert.deepEqual(capturedArgs, { command: 'cat file' });
+  });
+});

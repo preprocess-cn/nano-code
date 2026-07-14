@@ -635,9 +635,12 @@ export const taskPlanPlugin: NanoPlugin = {
 
 
   onBeforeToolCall(toolCall: ToolCall): ToolCall | null {
-    // Plan mode: 拦截所有有 sideEffect 的工具调用
+    // Plan mode: 拦截有 sideEffect 的工具调用
     if (_registry && _store?.get(SK.Mode) === 'plan') {
-      const sideEffect = _registry.getToolSideEffect(toolCall.function.name);
+      // 解析参数传入，让动态 sideEffect 函数（如 command.ts 的只读检测）正确求值
+      let args: any;
+      try { args = JSON.parse(toolCall.function.arguments); } catch { args = undefined; }
+      const sideEffect = _registry.getToolSideEffect(toolCall.function.name, args);
       if (sideEffect) {
         return null; // 核心循环会处理 null 并返回错误给 LLM
       }

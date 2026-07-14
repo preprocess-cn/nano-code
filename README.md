@@ -217,6 +217,22 @@ fs/command 等有副作用的工具调用会触发权限确认弹窗（Ink 模�
 2. 权限弹窗展示，选择批准/始终允许/拒绝
 3. 拒绝时也会显示被拒绝的工具调用记录
 
+#### 动态 sideEffect
+
+工具可声明 `sideEffect` 为函数，根据实际参数动态判断是否只读。Bash 工具已内置此能力：
+
+- **只读命令**（`cat`、`ls`、`grep`、`git diff`、`find` 等 70+ 条）自动跳过权限确认，不弹窗
+- **写入命令**（`touch`、`npm install`、`rm`、`git push` 等）正常弹窗
+- 只读检测覆盖 Shell 操作符、`find -exec`、`sed -i`、`awk -i inplace` 等特殊场景
+
+```typescript
+// ToolDefinition 中 sideEffect 可为函数
+{
+  name: 'run_bash_command',
+  sideEffect: (args: any) => !isReadOnlyCommand(args?.command?.trim() || ''),
+}
+```
+
 会话内通过 `/permissions` 查看已允许的工具列表，`/permissions reset` 清空 allowlist。
 
 子 agent 内部自动跳过权限确认（`skipPermission: true`），避免阻塞自动化流程。
@@ -599,7 +615,8 @@ Plan Mode 允许 LLM 在实施前先探索代码库并设计方案，经用户�
 
 ### 安全机制
 
-- **写入工具拦截**：plan mode 下所有 `sideEffect=true` 的工具（`write_file_content`、`patch_file`、`run_bash_command`）被 `onBeforeToolCall` 钩子拦截，LLM 无法执行任何写操作
+- **写入工具拦截**：plan mode 下 `sideEffect=true` 的工具被 `onBeforeToolCall` 钩子拦截，LLM 无法执行写操作
+- **只读命令放行**：Bash 写入命令（`touch`、`npm install`、`rm` 等）被拦截；只读命令（`cat`、`ls`、`grep`、`git diff`、`find` 等）自动放行，便于在 plan mode 中探索代码库
 - **退出限制**：LLM 不得自行调用 `exit_plan_mode`，必须在用户明确说"执行"/"开始执行"后才能退出
 - **退出通知**：退出 plan mode 后自动注入 `<system-reminder>` 退出提醒，清除旧指令残留
 
@@ -855,7 +872,7 @@ return { status: 'success', data: `[交互式提问] ...` };
 ## 测试
 
 ```bash
-npm test         # 单元测试（809 项）
+npm test         # 单元测试（1001 项）
 npm run test:e2e # E2E 测试（11 场景，覆盖 ReAct 全链路 + 并发执行 + 混合工具）
 npm run test:all # 全部测试
 ```
