@@ -536,7 +536,10 @@ function createPlugin(): DisplayPlugin {
         if (!thinkStream) thinkStream = new ThinkStream();
         const filtered = thinkStream.next(event.text);
         if (!filtered) return;
-        visibleAccumulator += filtered;
+        // 清理 </think> 后的前导换行，避免 stream 消息开头产生空行（● 悬空）
+        const cleaned = !visibleAccumulator ? filtered.replace(/^\n+/, '') : filtered;
+        if (!cleaned) return;
+        visibleAccumulator += cleaned;
         const visible = visibleAccumulator;
 
         const last = messages[messages.length - 1];
@@ -633,6 +636,8 @@ function createPlugin(): DisplayPlugin {
     },
 
     onAgentTurnStart(_event: AgentEvent): void {
+      // 避免子 agent 或重复调用重置计时器
+      if (llmStatus === 'running') return;
       llmStatus = 'running';
       llmTurnStartTime = Date.now();
       // 记录当前累积 token 作为基线
