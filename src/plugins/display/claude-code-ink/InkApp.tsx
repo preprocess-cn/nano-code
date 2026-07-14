@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
-import { Box, Text, useInput, useStdin, ThemeProvider, stringWidth, RawAnsi } from '#src/plugins/display/claude-code-ink/ink.js';
+import { Box, Text, useInput, useStdin, ThemeProvider, stringWidth, RawAnsi, useAnimationFrame } from '#src/plugins/display/claude-code-ink/ink.js';
 import { AlternateScreen } from '#src/plugins/display/claude-code-ink/engine/components/AlternateScreen.js';
 import ScrollBox, { type ScrollBoxHandle } from '#src/plugins/display/claude-code-ink/engine/components/ScrollBox.js';
 import { useDeclaredCursor } from '#src/plugins/display/claude-code-ink/engine/hooks/use-declared-cursor.js';
@@ -20,9 +20,10 @@ export interface TextSegment {
 export interface UIMessage {
   agentName: string;
   text: string;
-  kind: 'stream' | 'thinking' | 'status' | 'info' | 'toolCall' | 'toolResult' | 'error' | 'userInput' | 'warn' | 'success';
+  kind: 'stream' | 'thinking' | 'status' | 'info' | 'toolCall' | 'toolResult' | 'error' | 'userInput' | 'warn' | 'success' | 'turnComplete';
   segments?: TextSegment[];
   contextAnalysis?: ContextAnalysis;
+  toolStatus?: 'running' | 'success' | 'error';
 }
 
 export interface PermissionPrompt {
@@ -78,11 +79,39 @@ export interface InkAppProps {
   statusSegments?: Record<string, string>;
   /** 状态栏右侧通知消息 */
   notification?: { source: string; message: string } | null;
+
+  /** LLM 执行状态 */
+  llmStatus?: 'idle' | 'running';
+  /** LLM 本轮开始时间戳 */
+  llmStartTime?: number;
+  /** LLM 本轮累积 token */
+  turnTokens?: number;
 }
 
 function AgentLabel({ agentName }: { agentName: string }): React.ReactElement | null {
   if (agentName === 'main') return null;
   return React.createElement(Text, { dimColor: true }, `[${agentName}] `);
+}
+
+/** 工具调用状态指示器 — 参考 CC 的 ToolUseLoader */
+function ToolCallIndicator({ status }: { status: 'running' | 'success' | 'error' }): React.ReactElement {
+  const [ref, time] = useAnimationFrame(status === 'running' ? 600 : null);
+  const isBlinking = status === 'running' && Math.floor(time / 600) % 2 === 0;
+
+  if (status === 'running') {
+    const show = isBlinking;
+    return React.createElement(
+      Box,
+      { ref, minWidth: 2 },
+      React.createElement(Text, { color: '#e0e0e0' }, show ? '●' : ' '),
+    );
+  }
+  const color = status === 'success' ? '#22c55e' : '#ef4444';
+  return React.createElement(
+    Box,
+    { minWidth: 2 },
+    React.createElement(Text, { color }, '●'),
+  );
 }
 
 const DIM_COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#06b6d4', '#f97316', '#ef4444'];
@@ -220,6 +249,30 @@ function MessageItem({ msg }: { msg: UIMessage }): React.ReactElement {
       { flexDirection: 'row' },
       label,
       React.createElement(Text, { dim: true }, msg.text),
+    );
+  }
+
+  // 工具调用 — 使用 toolStatus 状态指示器
+  if (msg.kind === 'toolCall' && msg.toolStatus) {
+    const isRunning = msg.toolStatus === 'running';
+    return React.createElement(
+      Box,
+      { flexDirection: 'row', alignItems: 'center' },
+      React.createElement(ToolCallIndicator, { status: msg.toolStatus }),
+      React.createElement(
+        Text,
+        { dimColor: !isRunning },
+        msg.text,
+      ),
+    );
+  }
+
+  // 完成时间戳（仅同一行，不占用额外行空间）
+  if (msg.kind === 'turnComplete') {
+    return React.createElement(
+      Box,
+      { flexDirection: 'row' },
+      React.createElement(Text, { dimColor: true, color: '#6b7280' }, msg.text),
     );
   }
 
@@ -956,6 +1009,9 @@ function AppContent(props: InkAppProps): React.ReactElement {
           React.createElement(StatusBar, {
             segments: props.statusSegments,
             notification: props.notification,
+            llmStatus: props.llmStatus,
+            llmStartTime: props.llmStartTime,
+            turnTokens: props.turnTokens,
           }),
         ),
       ),
@@ -1052,6 +1108,9 @@ function AppContent(props: InkAppProps): React.ReactElement {
       React.createElement(StatusBar, {
         segments: props.statusSegments,
         notification: props.notification,
+        llmStatus: props.llmStatus,
+        llmStartTime: props.llmStartTime,
+        turnTokens: props.turnTokens,
       }),
     ),
   );

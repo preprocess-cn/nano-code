@@ -34,7 +34,8 @@ export function useAnimationFrame(
   const [viewportRef, { isVisible }] = useTerminalViewport()
   const [time, setTime] = useState(() => clock?.now() ?? 0)
 
-  const active = isVisible && intervalMs !== null
+  // clock may be null in test environments — remain functional
+  const active = isVisible && intervalMs !== null && clock !== null
 
   useEffect(() => {
     if (!clock || !active) return

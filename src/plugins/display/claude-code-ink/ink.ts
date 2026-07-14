@@ -25,6 +25,8 @@ export { useTerminalFocus } from '#src/plugins/display/claude-code-ink/engine/ho
 export { useTerminalTitle } from '#src/plugins/display/claude-code-ink/engine/hooks/use-terminal-title.js';
 export { useTerminalViewport } from '#src/plugins/display/claude-code-ink/engine/hooks/use-terminal-viewport.js';
 export { useTabStatus } from '#src/plugins/display/claude-code-ink/engine/hooks/use-tab-status.js';
+export { useAnimationFrame } from '#src/plugins/display/claude-code-ink/engine/hooks/use-animation-frame.js';
+export { useInterval } from '#src/plugins/display/claude-code-ink/engine/hooks/use-interval.js';
 export { stringWidth } from '#src/plugins/display/claude-code-ink/engine/stringWidth.js';
 export { default as wrapText } from '#src/plugins/display/claude-code-ink/engine/wrap-text.js';
 export { supportsTabStatus } from '#src/plugins/display/claude-code-ink/engine/termio/osc.js';

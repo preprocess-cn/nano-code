@@ -1,28 +1,71 @@
 import React from 'react';
-import { Box, Text, stringWidth } from '#src/plugins/display/claude-code-ink/ink.js';
+import { Box, Text, stringWidth, useAnimationFrame } from '#src/plugins/display/claude-code-ink/ink.js';
 
 interface StatusBarProps {
   /** 状态栏左侧段落（KEY: VALUE） */
   segments?: Record<string, string>;
   /** 状态栏右侧通知消息 */
   notification?: { source: string; message: string } | null;
+
+  /** LLM 执行状态 */
+  llmStatus?: 'idle' | 'running';
+  /** LLM 本轮开始时间戳 */
+  llmStartTime?: number;
+  /** LLM 本轮累积 token */
+  turnTokens?: number;
+}
+
+/** Starburst 动画帧序列（CC 兼容） */
+const SPINNER_FRAMES = ['·', '✢', '✳', '✶', '✻', '✽', '✻', '✶', '✳', '✢'];
+
+/** 格式化耗时：Xs / Xm Ys / Xh Ym Zs */
+function formatElapsed(startTime: number): string {
+  const ms = Date.now() - startTime;
+  const totalSec = Math.floor(ms / 1000);
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  if (h > 0) return `${h}h ${m}m ${s}s`;
+  if (m > 0) return `${m}m ${s}s`;
+  return `${s}s`;
+}
+
+/** 格式化 token 数 */
+function formatTokens(n: number): string {
+  if (n < 1000) return `${n} tokens`;
+  return `${(n / 1000).toFixed(1)}K tokens`;
+}
+
+/**
+ * 动画 LLM 指示器 — 使用 useAnimationFrame 驱动旋转图标。
+ * 拆分到独立组件以隔离 hooks 调用。
+ */
+function LlmSpinner({ startTime, tokens }: { startTime: number; tokens: number }): React.ReactElement {
+  const [spinnerRef, animTime] = useAnimationFrame(120);
+  const frameIdx = Math.floor(animTime / 120) % SPINNER_FRAMES.length;
+  const elapsedStr = formatElapsed(startTime);
+  const tokenStr = formatTokens(tokens);
+  const spinnerChar = SPINNER_FRAMES[frameIdx];
+
+  return React.createElement(
+    React.Fragment,
+    null,
+    React.createElement(Box, { key: 'spinner', ref: spinnerRef, minWidth: 2 },
+      React.createElement(Text, { color: '#ff6b35' }, spinnerChar),
+    ),
+    React.createElement(Text, { key: 'time', dimColor: true }, elapsedStr),
+    React.createElement(Text, { key: 'tokens', dimColor: true }, ` ${tokenStr}`),
+  );
 }
 
 /**
  * 状态栏组件 — 渲染在屏幕最底部。
  * 左侧: mode 特殊指示 + KEY: VALUE 段落的持久状态
- * 右侧: 来源通知消息（单行，超长截断）
- *
- * 布局结构（左/中弹性 spacer/右）保证左右区域在布局上完全独立，
- * 右侧内容变化不影响左侧渲染：
- *   <Box row>
- *     <Box flexGrow=0 flexShrink=0>  leftContent  </Box>
- *     <Box flexGrow=1 />                            ← 弹性 spacer
- *     <Box flexGrow=0 flexShrink=0 marginLeft=1>  rightContent  </Box>
- *   </Box>
+ * 右侧: LLM 执行状态（running 时显示动画+耗时+token）或通知消息
  */
-export function StatusBar({ segments, notification }: StatusBarProps): React.ReactElement | null {
+export function StatusBar({ segments, notification, llmStatus, llmStartTime, turnTokens }: StatusBarProps): React.ReactElement | null {
   const hasNotification = notification && notification.source && notification.message;
+  const isLlmRunning = llmStatus === 'running' && llmStartTime && llmStartTime > 0;
 
   // Extract "mode" segment for special rendering
   const modeValue = segments?.mode;
@@ -53,7 +96,6 @@ export function StatusBar({ segments, notification }: StatusBarProps): React.Rea
       React.createElement(Text, { key: 'hint', dimColor: true }, ' (Shift+Tab)'),
     );
   } else if (modeValue) {
-    // Non-plan string values shown as plain dim text
     leftChildren.push(
       React.createElement(Text, { key: 'mode', dimColor: true }, modeValue),
     );
@@ -61,7 +103,6 @@ export function StatusBar({ segments, notification }: StatusBarProps): React.Rea
 
   // Other segments as "KEY: VALUE"
   if (hasOtherSegments) {
-    // 如果 mode 已显示，用 | 隔开
     if (leftChildren.length > 0) {
       leftChildren.push(
         React.createElement(Text, { key: 'mode-sep', dimColor: true }, ' | '),
@@ -79,8 +120,13 @@ export function StatusBar({ segments, notification }: StatusBarProps): React.Rea
   // Build right side parts
   const rightChildren: React.ReactNode[] = [];
 
-  // Notification text
-  if (hasNotification) {
+  if (isLlmRunning) {
+    // LLM 执行中 — 动画图标 + 耗时 + token（使用隔离的子组件以安全调用 hooks）
+    rightChildren.push(
+      React.createElement(LlmSpinner, { key: 'llm', startTime: llmStartTime, tokens: turnTokens ?? 0 }),
+    );
+  } else if (hasNotification) {
+    // 通知文本
     let notifText = `[${notification!.source}] ${notification!.message}`;
     const maxWidth = Math.max(40, Math.floor((process.stdout.columns || 80) * 0.4));
     if (stringWidth(notifText) > maxWidth) {
@@ -89,9 +135,6 @@ export function StatusBar({ segments, notification }: StatusBarProps): React.Rea
       }
       notifText = notifText.slice(0, -1) + '…';
     }
-    if (rightChildren.length > 0) {
-      rightChildren.push(React.createElement(Text, { key: 'notif-sep' }, '  '));
-    }
     rightChildren.push(
       React.createElement(Text, { key: 'notif', dimColor: true }, notifText),
     );
@@ -99,12 +142,10 @@ export function StatusBar({ segments, notification }: StatusBarProps): React.Rea
 
   const hasRightContent = rightChildren.length > 0;
 
-  // 始终保留空 Text 节点（即使无通知），
-  // 让 Ink reconciler 做原地文本更新（"通知文本" → ""），
-  // 避免 DOM 节点移除导致终端旧文本残留。
-  if (!hasNotification) {
+  // 始终保留空 Text 节点（即使无内容），避免终端旧文本残留
+  if (!hasRightContent) {
     rightChildren.push(
-      React.createElement(Text, { key: 'notif' }, ''),
+      React.createElement(Text, { key: 'empty' }, ''),
     );
   }
 
@@ -124,9 +165,9 @@ export function StatusBar({ segments, notification }: StatusBarProps): React.Rea
     hasRightContent
       ? React.createElement(Box, { key: 'spacer', flexGrow: 1 })
       : null,
-    // 右侧 — 模式提示 + 通知
+    // 右侧 — LLM 状态 / 通知
     hasRightContent
-      ? React.createElement(Box, { key: 'right', flexGrow: 0, flexShrink: 0, marginLeft: 1 }, ...rightChildren)
+      ? React.createElement(Box, { key: 'right', flexGrow: 0, flexShrink: 0, marginLeft: 1, alignItems: 'center' }, ...rightChildren)
       : null,
   );
 }

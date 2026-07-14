@@ -105,6 +105,13 @@ function createPlugin(): DisplayPlugin {
   let unsubMode: (() => void) | null = null;
   let restoreStderr: (() => void) | null = null;
 
+  // ── LLM 执行状态追踪 ──
+  let llmStatus: 'idle' | 'running' = 'idle';
+  let llmTurnStartTime: number = 0;
+  let llmPrevTokens: number = 0;
+  let llmTurnTokens: number = 0;
+  let sessionDateShown: string = ''; // 已显示完整日期的日期（YYYY-MM-DD），首个对话用
+
   function cancelExecution(): void {
     if (registry) {
       registry.store.set(agentCancelledKey(agentName), true);
@@ -147,6 +154,32 @@ function createPlugin(): DisplayPlugin {
       return true;
     }
     return false;
+  }
+
+  /** 格式化耗时：Xs / Xm Ys / Xh Ym Zs（精确到秒） */
+  function formatDuration(ms: number): string {
+    const totalSec = Math.round(ms / 1000);
+    const h = Math.floor(totalSec / 3600);
+    const m = Math.floor((totalSec % 3600) / 60);
+    const s = totalSec % 60;
+    if (h > 0) return `${h}h ${m}m ${s}s`;
+    if (m > 0) return `${m}m ${s}s`;
+    return `${s}s`;
+  }
+
+  /** 格式化为 HH:MM:SS */
+  function formatTime(ts: number): string {
+    const d = new Date(ts);
+    return d.toLocaleTimeString('zh-CN', { hour12: false });
+  }
+
+  /** 格式化为 YYYY-MM-DD */
+  function formatDate(ts: number): string {
+    const d = new Date(ts);
+    const y = d.getFullYear();
+    const mo = String(d.getMonth() + 1).padStart(2, '0');
+    const da = String(d.getDate()).padStart(2, '0');
+    return `${y}-${mo}-${da}`;
   }
 
   function handleModeToggle(): void {
@@ -229,6 +262,9 @@ function createPlugin(): DisplayPlugin {
           onModeToggle: handleModeToggle,
           statusSegments,
           notification,
+          llmStatus,
+          llmStartTime: llmTurnStartTime,
+          turnTokens: llmTurnTokens,
         }),
       );
     } catch (err) {
@@ -360,6 +396,9 @@ function createPlugin(): DisplayPlugin {
           onModeToggle: handleModeToggle,
           statusSegments,
           notification,
+          llmStatus,
+          llmStartTime: llmTurnStartTime,
+          turnTokens: llmTurnTokens,
         }),
         { stdout: process.stdout, stdin: process.stdin, stderr: process.stderr, exitOnCtrlC: false, patchConsole: false },
       );
@@ -413,9 +452,12 @@ function createPlugin(): DisplayPlugin {
     onStatus(event: StatusEvent): void {
       if (event.level === 'status') {
         if (event.message === 'thinking') {
-          const msg: UIMessage = { agentName: event.agentName, text: '? 正在思考并请求大模型...', kind: 'thinking' };
-          messages.push(msg);
-          thinkingStatusMsg = msg;
+          // --think 模式下才展示"正在思考"占位（后续被 think 内容替换）
+          if (showThink) {
+            const msg: UIMessage = { agentName: event.agentName, text: '? 正在思考并请求大模型...', kind: 'thinking' };
+            messages.push(msg);
+            thinkingStatusMsg = msg;
+          }
         }
         // 'end' — no message push, just re-render
         render();
@@ -517,21 +559,65 @@ function createPlugin(): DisplayPlugin {
       lastStreamTarget = null;
       lastThinkTarget = null;
       thinkingStatusMsg = null;
+
+      // 每次 LLM 返回（调用工具前）更新本轮 token 计数
+      if (registry && llmStatus === 'running') {
+        const getUsage = registry.store.get<() => { inputTokens: number; outputTokens: number; totalTokens: number }>(SK.TokenBudgetGetApiUsage);
+        if (getUsage) {
+          const usage = getUsage();
+          llmTurnTokens = usage.outputTokens - llmPrevTokens;
+        }
+      }
+
+      const raw = formatToolCall(event.toolName, event.args, registry?.getAllSchemas());
+      // 去掉 🔧 emoji — 改用 toolStatus 指示器
+      const text = raw.replace(/^🔧\s*/, '');
       messages.push({
         agentName: event.agentName,
-        text: formatToolCall(event.toolName, event.args, registry?.getAllSchemas()),
+        text,
         kind: 'toolCall',
+        toolStatus: 'running',
       });
       render();
     },
 
     onToolResult(event: ToolResultEvent): void {
-      const text = event.status === 'success'
-        ? '✓ 工具执行完毕'
+      // 找到该 agent 最后一个 running 的工具调用消息，更新其状态
+      for (let i = messages.length - 1; i >= 0; i--) {
+        const m = messages[i];
+        if (m.agentName === event.agentName && m.kind === 'toolCall' && m.toolStatus === 'running') {
+          if (event.status === 'error') {
+            m.toolStatus = 'error';
+            // 错误时追加错误消息
+            if (event.message) {
+              messages.push({
+                agentName: event.agentName,
+                text: `✗ ${event.message}`,
+                kind: 'error',
+              });
+            }
+          } else if (event.status === 'rejected_by_user') {
+            m.toolStatus = 'error';
+            messages.push({
+              agentName: event.agentName,
+              text: '⛔ 已拦截',
+              kind: 'error',
+            });
+          } else {
+            m.toolStatus = 'success';
+            // success 不追加额外消息行
+          }
+          render();
+          return;
+        }
+      }
+      // 未找到匹配的 running 消息（异常情况），退回到旧行为
+      const fallbackText = event.status === 'success'
+        ? '✓ 完成'
         : event.status === 'error'
-          ? `✗ 工具执行失败: ${event.message || ''}`
+          ? `✗ ${event.message || '失败'}`
           : '⛔ 已拦截';
-      messages.push({ agentName: event.agentName, text, kind: 'toolResult' });
+      messages.push({ agentName: event.agentName, text: fallbackText, kind: 'toolResult' });
       render();
     },
 
@@ -546,9 +632,52 @@ function createPlugin(): DisplayPlugin {
       render();
     },
 
-    onAgentTurnStart(_event: AgentEvent): void {},
+    onAgentTurnStart(_event: AgentEvent): void {
+      llmStatus = 'running';
+      llmTurnStartTime = Date.now();
+      // 记录当前累积 token 作为基线
+      if (registry) {
+        const getUsage = registry.store.get<() => { inputTokens: number; outputTokens: number; totalTokens: number }>(SK.TokenBudgetGetApiUsage);
+        if (getUsage) {
+          const usage = getUsage();
+          llmPrevTokens = usage.outputTokens;
+        }
+      }
+      llmTurnTokens = 0;
+      render();
+    },
 
-    onAgentTurnEnd(_event: AgentEvent): void {},
+    onAgentTurnEnd(_event: AgentEvent): void {
+      llmStatus = 'idle';
+      const now = Date.now();
+      const elapsedMs = now - llmTurnStartTime;
+
+      // 更新本轮 token
+      if (registry) {
+        const getUsage = registry.store.get<() => { inputTokens: number; outputTokens: number; totalTokens: number }>(SK.TokenBudgetGetApiUsage);
+        if (getUsage) {
+          const usage = getUsage();
+          llmTurnTokens = usage.outputTokens - llmPrevTokens;
+        }
+      }
+
+      // 生成完成时间戳行
+      const today = formatDate(now);
+      let ts: string;
+      if (sessionDateShown !== today) {
+        sessionDateShown = today;
+        ts = `${today} ${formatTime(now)}`;
+      } else {
+        ts = formatTime(now);
+      }
+      const duration = formatDuration(elapsedMs);
+      messages.push({
+        agentName: _event.agentName,
+        text: `完成 · ${duration} · ${ts}`,
+        kind: 'turnComplete',
+      });
+      render();
+    },
 
     onStateSnapshot(_snapshot: StateSnapshot): void {},
 
