@@ -15,6 +15,8 @@ export interface NanoCodeAgentOptions {
   display?: AgentDisplay;
   /** 外部注入的 AbortController。子 agent 通过此控制器接收父 agent 的取消信号。 */
   abortController?: AbortController;
+  /** 最大 ReAct 轮次限制。达到上限后 agent 停止。undefined = 不限制。 */
+  maxTurns?: number;
 }
 
 export class NanoCodeAgent {
@@ -26,6 +28,7 @@ export class NanoCodeAgent {
   private name: string;
   private display?: AgentDisplay;
   private abortController?: AbortController;
+  private maxTurns?: number;
 
   constructor(options: NanoCodeAgentOptions) {
     this.llmClient = options.llmClient || new LLMClient();
@@ -35,6 +38,7 @@ export class NanoCodeAgent {
     this.name = options.name ?? 'main';
     this.display = options.display;
     this.abortController = options.abortController;
+    this.maxTurns = options.maxTurns;
   }
 
   getName(): string {
@@ -100,10 +104,16 @@ export class NanoCodeAgent {
     this.registry.store.set(agentStatusKey(this.name), { agentName: this.name, status: 'running', messageCount: this.messageHistory.length });
 
     try {
+      let turnCount = 0;
       while (true) {
         if (this.registry.store.get(agentCancelledKey(this.name))) {
           this.endTurn();
           this.registry.store.set(agentCancelledKey(this.name), undefined);
+          break;
+        }
+        if (this.maxTurns != null && turnCount >= this.maxTurns) {
+          this.display?.onStatus?.({ message: `已达最大轮次上限（${this.maxTurns}），停止`, agentName: this.name, level: 'info' });
+          this.endTurn();
           break;
         }
       this.display?.onStatus?.({ message: 'thinking', agentName: this.name, level: 'status' });
@@ -160,6 +170,7 @@ export class NanoCodeAgent {
       }
 
       this.registry.execAfterRequest(response, responseMeta);
+      turnCount++;
 
       // DEBUG: emit full response
       try { this.display?.onDebug?.({ agentName: this.name, data: `[RESPONSE]\n${JSON.stringify(response, null, 2)}` }); } catch {}

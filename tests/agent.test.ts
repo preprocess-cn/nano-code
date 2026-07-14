@@ -741,6 +741,142 @@ describe('NanoCodeAgent — cancellation', () => {
 
 });
 
+describe('NanoCodeAgent — maxTurns', () => {
+
+  it('stops after reaching maxTurns limit', async () => {
+    // LLM mock that always returns tool_calls, causing infinite loop
+    let callCount = 0;
+    const mock = {
+      sendSystemMessage: async () => {
+        callCount++;
+        return {
+          text: null,
+          toolCalls: [{ id: `call_${callCount}`, type: 'function', function: { name: 'loop_tool', arguments: '{}' } }],
+          stopReason: 'tool_use',
+        };
+      },
+      getModel: () => 'gpt-4o',
+    };
+
+    const registry = new PluginRegistry();
+    registry.register({
+      name: 'loop',
+      getTools: () => [{
+        type: 'function',
+        function: { name: 'loop_tool', description: 'loop', sideEffect: false, parameters: { type: 'object', properties: {} } },
+      }],
+      execute: async () => ({ status: 'success' as const, data: 'ok' }),
+    });
+
+    const agent = new NanoCodeAgent({
+      registry,
+      llmClient: mock as any,
+      maxTurns: 3,
+    });
+    await agent.runTask('loop');
+
+    // Should have stopped after 3 turns (each turn = LLM call + tool execution)
+    // callCount should be 3 (not more)
+    assert.equal(callCount, 3, 'should stop after maxTurns LLM calls');
+  });
+
+  it('does not limit when maxTurns is undefined', async () => {
+    let callCount = 0;
+    const mock = {
+      sendSystemMessage: async () => {
+        callCount++;
+        if (callCount < 5) {
+          return {
+            text: null,
+            toolCalls: [{ id: `call_${callCount}`, type: 'function', function: { name: 'loop_tool2', arguments: '{}' } }],
+            stopReason: 'tool_use',
+          };
+        }
+        return { text: 'done', stopReason: 'stop' };
+      },
+      getModel: () => 'gpt-4o',
+    };
+
+    const registry = new PluginRegistry();
+    registry.register({
+      name: 'loop2',
+      getTools: () => [{
+        type: 'function',
+        function: { name: 'loop_tool2', description: 'loop', sideEffect: false, parameters: { type: 'object', properties: {} } },
+      }],
+      execute: async () => ({ status: 'success' as const, data: 'ok' }),
+    });
+
+    const agent = new NanoCodeAgent({
+      registry,
+      llmClient: mock as any,
+      // maxTurns is intentionally undefined
+    });
+    await agent.runTask('loop');
+
+    // With no maxTurns, the agent should complete all 5 turns
+    assert.equal(callCount, 5, 'should not limit when maxTurns is undefined');
+  });
+
+  it('maxTurns=0 stops immediately (zero turns allowed)', async () => {
+    let llmCalled = false;
+    const mock = {
+      sendSystemMessage: async () => {
+        llmCalled = true;
+        return { text: 'should not happen', stopReason: 'stop' };
+      },
+      getModel: () => 'gpt-4o',
+    };
+
+    const agent = new NanoCodeAgent({
+      registry: new PluginRegistry(),
+      llmClient: mock as any,
+      maxTurns: 0,
+    });
+    const result = await agent.runTask('hello');
+
+    // maxTurns=0 means 0 > 0 is false, but 0 != null is true, turnCount >= 0 is true
+    assert.equal(llmCalled, false, 'LLM should not be called when maxTurns=0');
+    assert.equal(result, undefined);
+  });
+
+  it('maxTurns=1 stops after single turn', async () => {
+    let callCount = 0;
+    const mock = {
+      sendSystemMessage: async () => {
+        callCount++;
+        // Return tool_use to trigger a second turn if maxTurns didn't stop it
+        return {
+          text: null,
+          toolCalls: [{ id: 'call_single', type: 'function', function: { name: 'loop_tool3', arguments: '{}' } }],
+          stopReason: 'tool_use',
+        };
+      },
+      getModel: () => 'gpt-4o',
+    };
+
+    const registry = new PluginRegistry();
+    registry.register({
+      name: 'loop3',
+      getTools: () => [{
+        type: 'function',
+        function: { name: 'loop_tool3', description: 'loop', sideEffect: false, parameters: { type: 'object', properties: {} } },
+      }],
+      execute: async () => ({ status: 'success' as const, data: 'ok' }),
+    });
+
+    const agent = new NanoCodeAgent({
+      registry,
+      llmClient: mock as any,
+      maxTurns: 1,
+    });
+    await agent.runTask('loop');
+
+    // maxTurns=1 means only 1 LLM call is made
+    assert.equal(callCount, 1, 'should stop after 1 turn');
+  });
+});
+
 describe('NanoCodeAgent — permission gate skip', () => {
 
   function sideEffectPlugin() {

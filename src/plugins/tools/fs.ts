@@ -8,6 +8,15 @@ import { SK } from '#src/store-keys.js';
 import { getPatchForDisplay, newFileHunk } from '#src/utils/diff.js';
 import { logManager } from '#src/utils/logger.js';
 
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs)
+    ),
+  ]);
+}
+
 // ── 文件读取缓存（用于压缩后恢复上下文）──
 // 模块级缓存，但写入时校验 ctx.skipPermission 以避免子 agent 污染主 agent 缓存
 
@@ -164,10 +173,11 @@ export const fsPlugin: NanoPlugin = {
   },
 
   async execute(name: string, args: any, ctx: ToolContext): Promise<ToolResponse> {
+    const timeout = ctx.defaultTimeout;
     switch (name) {
       case 'list_project_files': {
         try {
-          const files = await listFilesRecursive(process.cwd());
+          const files = await withTimeout(listFilesRecursive(process.cwd()), timeout, 'list_project_files');
           if (files.length === 0) {
             return { status: "success", data: "this project directory is empty." };
           }
@@ -181,7 +191,7 @@ export const fsPlugin: NanoPlugin = {
         try {
           if (!args.path) return toolError("args.path missing, please provide");
           const finalPath = safeResolvePath(args.path);
-          const content = await fs.readFile(finalPath, 'utf-8');
+          const content = await withTimeout(fs.readFile(finalPath, 'utf-8'), timeout, 'read_file');
           // 仅主 agent 缓存（子 agent 使用 skipPermission: true）
           if (!ctx.skipPermission) addToReadCache(args.path, content);
           return { status: "success", data: `--- 文件内容 开始: ${args.path} ---\n${content}\n--- 文件内容 结束 ---` };

@@ -20,6 +20,25 @@ export const DANGEROUS_COMMAND_BLACKLIST = [
  */
 const LOG_LIMIT = 4000;
 
+// ── 超时配置（可通过环境变量覆盖，动态读取以支持测试） ──
+function getDefaultTimeoutMs(): number {
+  const envValue = process.env.BASH_DEFAULT_TIMEOUT_MS;
+  if (envValue) {
+    const parsed = parseInt(envValue, 10);
+    if (!isNaN(parsed) && parsed > 0) return parsed;
+  }
+  return 120_000;
+}
+
+function getMaxTimeoutMs(): number {
+  const envValue = process.env.BASH_MAX_TIMEOUT_MS;
+  if (envValue) {
+    const parsed = parseInt(envValue, 10);
+    if (!isNaN(parsed) && parsed > 0) return Math.max(parsed, getDefaultTimeoutMs());
+  }
+  return Math.max(600_000, getDefaultTimeoutMs());
+}
+
 /**
  * 原生命令行确认对象
  */
@@ -57,7 +76,11 @@ export const commandPlugin: NanoPlugin = {
               command: {
                 type: 'string',
                 description: '准备在终端执行的完整 Bash 命令行语句（例如：npm run build）'
-              }
+              },
+              timeout: {
+                type: 'number',
+                description: `可选超时毫秒数（默认 120000，最大 600000）`,
+              },
             },
             required: ['command']
           },
@@ -129,13 +152,17 @@ export const commandPlugin: NanoPlugin = {
               else process.stderr.write(chunk);
             });
 
+            const bashTimeout = Math.max(1, Math.min(
+              args.timeout ?? ctx.defaultTimeout ?? getDefaultTimeoutMs(),
+              getMaxTimeoutMs(),
+            ));
             const timeoutTimer = setTimeout(() => {
               child.kill();
               resolve({
                 status: 'error',
-                message: `Command execution timed out after ${ctx.defaultTimeout}ms.`
+                message: `Command execution timed out after ${bashTimeout}ms.`
               });
-            }, ctx.defaultTimeout);
+            }, bashTimeout);
 
             child.on('close', (code) => {
               clearTimeout(timeoutTimer);

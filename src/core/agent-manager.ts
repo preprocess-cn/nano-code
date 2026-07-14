@@ -76,6 +76,7 @@ export class AgentManager {
       name: uniqueName,
       display: opts.display,
       abortController: opts.abortController,
+      maxTurns: opts.maxTurns,
     });
 
     this.agents.set(uniqueName, agent);

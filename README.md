@@ -461,6 +461,47 @@ agent-dba({ query: "分析慢查询", run_in_background: true })
   - **REPL 模式**：打印 `[后台] agent名（taskId）...` 消息
   - **Ink 模式**：底栏显示 `BackgroundTaskBar`，实时展示运行/完成/失败状态，完成后 5 秒自动消失
 
+### 自动后台（Auto-background）
+
+同步执行的子 agent 运行超过阈值后自动转为后台任务，避免阻塞主 agent：
+
+```bash
+# 通过环境变量启用（设置超时毫秒数）
+NANO_AUTO_BACKGROUND_TASKS=120000 nano-code
+
+# 子 agent 执行超过 120s 后自动转入后台，主 agent 收到 taskId 继续处理
+agent-dba({ query: "分析慢查询" })
+# 120s 后 → { taskId: "task_1", agentName: "dba", status: "started" }
+```
+
+支持 `NANO_AUTO_BACKGROUND_TASKS` 和 `CLAUDE_AUTO_BACKGROUND_TASKS` 两个环境变量。默认禁用（值为 0 或未设置）。后台清理由 BackgroundTaskManager 管理。
+
+### Agent 轮次限制（maxTurns）
+
+子 agent 可通过 `maxTurns` 字段限制最大 ReAct 轮次，防止无限循环：
+
+```yaml
+# ~/.nano-code/agents/dba.yaml
+name: dba
+description: 数据库专家
+role: 你是一个专业的 DBA
+maxTurns: 20    # 最多执行 20 轮 LLM 调用
+plugins:
+  command:
+    enabled: true
+```
+
+`maxTurns: 10` 表示最多 10 次 LLM 调用（含工具执行轮次）。未设置时不限制。
+
+### 超时策略
+
+工具超时分为两层：
+
+1. **工具定义超时**：`ToolDefinition.function.timeout` 字段显式设置超时（如 `timeout: 5000` 为 5 秒）。仅在显式设置时由 PluginRegistry 的 `Promise.race` 强制执行。
+2. **工具内部超时**：工具自行管理超时（如 Bash 工具内置 `setTimeout` kill 倒计时，fs/search 工具使用 `ctx.defaultTimeout` 包裹 async 操作）。
+
+未设置 `timeout` 的工具不会自动被 Promise.race 包裹，子 agent 的工具可运行任意长时间。Bash 工具支持 `timeout` 参数供模型传入，由 `BASH_DEFAULT_TIMEOUT_MS`（默认 120s）和 `BASH_MAX_TIMEOUT_MS`（默认 600s）环境变量控制上下限。
+
 ### 并发工具执行
 
 同一 LLM 轮次中，多个无副作用的工具（如 `view_file_content`、`search_code`）自动并行执行，减少总等待时间。有副作用的工具（`write_file`、`command` 等）保持串行执行，确保执行顺序和权限流程正确。
@@ -523,7 +564,7 @@ send_message({ to: "main", summary: "查询结果", message: "users 表有 3 个
 |------|---------|---------|
 | **fs** | `"fs": {}` | 文件列表、读取、写入、精准修改；文件读取缓存（最近 5 个文件，5 分钟 TTL）供 `/compact` 后恢复上下文 |
 | **file-search** | 系统白名单自动启用 | 文件搜索（glob）+ 内容搜索（grep），支持正则和 glob 限定范围 |
-| **command** | `"command": {}` | Bash 命令执行（含危险命令黑名单 + 权限确认弹窗） |
+| **command** | `"command": {}` | Bash 命令执行（含危险命令黑名单 + 权限确认弹窗 + 可选 `timeout` 参数 + `BASH_DEFAULT_TIMEOUT_MS`/`BASH_MAX_TIMEOUT_MS` 环境变量配置） |
 | **memory** | `"memory": {}` | 文件化记忆系统：MEMORY.md 索引 + topic 文件，onSystemPrompt 注入行为规则和索引，save_memory/recall_memory 工具，~/.nano-code/AGENT.md 用户全局偏好 |
 | **skills** | 系统白名单自动启用 | 14 个内置 TypeScript 技能 + 文件系统 SKILL.md 技能，`skill`/`skills_list`/`skill_view`/`run_agent` 工具 |
 | **store** | 内建默认 `InMemoryStore` | 插件间共享状态通道，`IStore` 接口可替换实现 |
@@ -814,7 +855,7 @@ return { status: 'success', data: `[交互式提问] ...` };
 ## 测试
 
 ```bash
-npm test         # 单元测试（677 项）
+npm test         # 单元测试（809 项）
 npm run test:e2e # E2E 测试（11 场景，覆盖 ReAct 全链路 + 并发执行 + 混合工具）
 npm run test:all # 全部测试
 ```

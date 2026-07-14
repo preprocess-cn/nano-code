@@ -267,8 +267,12 @@ export class PluginRegistry {
     };
 
     try {
-      // Infinity means never timeout — skip Promise.race entirely
-      if (effectiveTimeout === Infinity) {
+      // Only wrap with Promise.race when the tool has an explicit timeout registered in
+      // its ToolDefinition. This lets tools like Bash manage their own kill timers, and
+      // lets sub-agents run beyond the default timeout without being killed.
+      // The effectiveTimeout in context is still passed as a config value for tools to
+      // read internally (e.g. Bash uses ctx.defaultTimeout for its kill timer).
+      if (effectiveTimeout === Infinity || toolTimeout === undefined) {
         return await plugin.execute(name, args, fullContext);
       }
 

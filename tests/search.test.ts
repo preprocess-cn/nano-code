@@ -202,3 +202,34 @@ describe('grep_file_content 内容搜索功能', () => {
     assert.ok(res.data);
   });
 });
+
+describe('search — 超时防护', () => {
+  let tmpDir: string;
+  const origCwd = process.cwd;
+
+  beforeEach(() => {
+    tmpDir = createTempDir();
+    fs.mkdirSync(path.join(tmpDir, 'src'), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, 'src/index.ts'), 'export const a = 1;', 'utf8');
+    process.cwd = () => tmpDir;
+  });
+
+  afterEach(() => {
+    process.cwd = origCwd;
+    removeTempDir(tmpDir);
+  });
+
+  test('glob_files 接受 defaultTimeout 上下文且正常工作', async () => {
+    const ctx = { skipPermission: true, cwd: process.cwd(), defaultTimeout: 100, sideEffect: false };
+    const res = await searchPlugin.execute('glob_files', { pattern: '**/*.ts' }, ctx);
+    assert.strictEqual(res.status, 'success');
+    assert.ok((res.data as string).includes('src/index.ts'));
+  });
+
+  test('grep_file_content 接受 defaultTimeout 上下文且正常工作', async () => {
+    const ctx = { skipPermission: true, cwd: process.cwd(), defaultTimeout: 100, sideEffect: false };
+    const res = await searchPlugin.execute('grep_file_content', { pattern: 'export' }, ctx);
+    assert.strictEqual(res.status, 'success');
+    assert.ok((res.data as string).includes('src/index.ts'));
+  });
+});

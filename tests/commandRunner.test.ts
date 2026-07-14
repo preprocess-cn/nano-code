@@ -39,4 +39,45 @@ describe('Command Runner 环境与执行测试', () => {
     assert.strictEqual(response.status, 'success');
     assert.match(response.data || '', /Command executed with no output/);
   });
+
+  test('timeout 参数被接受且不影响快速命令', async () => {
+    const response = await commandPlugin.execute('run_bash_command', { command: 'echo ok', timeout: 5000 }, NO_CONFIRM);
+    assert.strictEqual(response.status, 'success');
+    assert.match(response.data || '', /ok/);
+  });
+
+  test('timeout 参数较小时命令被 kill', { timeout: 5000 }, async () => {
+    const start = Date.now();
+    const response = await commandPlugin.execute('run_bash_command', { command: 'sleep 10', timeout: 200 }, NO_CONFIRM);
+    const elapsed = Date.now() - start;
+    assert.strictEqual(response.status, 'error');
+    assert.match(response.message || '', /timed out/);
+    assert.ok(elapsed < 5000, 'should timeout well before sleep completes');
+  });
+
+  test('context defaultTimeout 作为超时基准', async () => {
+    const shortCtx = { ...NO_CONFIRM, defaultTimeout: 150 };
+    const start = Date.now();
+    const response = await commandPlugin.execute('run_bash_command', { command: 'sleep 10' }, shortCtx);
+    const elapsed = Date.now() - start;
+    assert.strictEqual(response.status, 'error');
+    assert.match(response.message || '', /timed out/);
+    assert.ok(elapsed < 3000, 'defaultTimeout should cause quick timeout');
+  });
+
+  test('timeout=0 不会导致崩溃，被下限保护', { timeout: 3000 }, async () => {
+    // timeout=0 会被 Math.max(1, ...) 提升到 1ms，命令会被快速 kill
+    const start = Date.now();
+    const response = await commandPlugin.execute('run_bash_command', { command: 'sleep 10', timeout: 0 }, NO_CONFIRM);
+    const elapsed = Date.now() - start;
+    assert.strictEqual(response.status, 'error');
+    assert.match(response.message || '', /timed out/);
+    assert.ok(elapsed < 2000, 'should timeout very quickly');
+  });
+
+  test('timeout=-1 不会导致崩溃，被下限保护', { timeout: 3000 }, async () => {
+    const response = await commandPlugin.execute('run_bash_command', { command: 'sleep 10', timeout: -1 }, NO_CONFIRM);
+    assert.strictEqual(response.status, 'error');
+    assert.match(response.message || '', /timed out/);
+  });
 });

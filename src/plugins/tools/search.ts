@@ -4,6 +4,15 @@ import * as path from 'path';
 import { NanoPlugin } from '#src/core/plugin.js';
 import { ToolDefinition, ToolResponse, ToolContext } from '#src/core/contract.js';
 
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`${label} timed out after ${timeoutMs}ms`)), timeoutMs)
+    ),
+  ]);
+}
+
 // ── Simple glob implementation ──
 
 function patternToRegex(pattern: string): RegExp {
@@ -212,13 +221,14 @@ export const searchPlugin: NanoPlugin = {
     ];
   },
 
-  async execute(name: string, args: any, _ctx: ToolContext): Promise<ToolResponse> {
+  async execute(name: string, args: any, ctx: ToolContext): Promise<ToolResponse> {
+    const timeout = ctx.defaultTimeout;
     switch (name) {
       case 'glob_files': {
         try {
           if (!args.pattern) return toolError('args.pattern missing, please provide a glob pattern');
           const ignore = args.ignore ? args.ignore.split(',').map((s: string) => s.trim()).filter(Boolean) : undefined;
-          const files = await simpleGlob(args.pattern, { ignore });
+          const files = await withTimeout(simpleGlob(args.pattern, { ignore }), timeout, 'glob_files');
           if (files.length === 0) {
             return { status: 'success', data: `No files matched pattern "${args.pattern}".` };
           }
@@ -233,7 +243,7 @@ export const searchPlugin: NanoPlugin = {
         try {
           if (!args.pattern) return toolError('args.pattern missing, please provide a search pattern');
           const maxResults = args.maxResults ?? 50;
-          const matches = await grepContent(args.pattern, args.glob);
+          const matches = await withTimeout(grepContent(args.pattern, args.glob), timeout, 'grep_content');
           if (matches.length === 0) {
             return { status: 'success', data: `No matches found for pattern "${args.pattern}".` };
           }

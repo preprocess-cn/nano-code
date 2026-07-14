@@ -101,6 +101,40 @@ plugins:
     }
   });
 
+  it('loads maxTurns from YAML when present', () => {
+    const dir = tmpDir();
+    try {
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, 'limited.yaml'), `
+name: limited
+description: Agent with turn limit
+role: You are limited
+maxTurns: 10
+`, 'utf-8');
+
+      const result = loadAgentDefinitions(dir);
+      assert.equal(result.length, 1);
+      assert.equal(result[0].name, 'limited');
+      assert.equal(result[0].maxTurns, 10);
+    } finally {
+      rmDir(dir);
+    }
+  });
+
+  it('returns undefined maxTurns when not in YAML', () => {
+    const dir = tmpDir();
+    try {
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, 'unlimited.yaml'), 'name: unlimited\ndescription: No limit\nrole: No limit\n', 'utf-8');
+
+      const result = loadAgentDefinitions(dir);
+      assert.equal(result.length, 1);
+      assert.equal(result[0].maxTurns, undefined);
+    } finally {
+      rmDir(dir);
+    }
+  });
+
   it('skips non-yaml files', () => {
     const dir = tmpDir();
     try {

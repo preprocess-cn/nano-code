@@ -11,6 +11,7 @@ export interface AgentDefinition {
   greeting?: string;
   enabled?: boolean;
   plugins?: Record<string, any>;
+  maxTurns?: number;
   systemPrompt?: {
     withTools?: string;
     noTools?: string;

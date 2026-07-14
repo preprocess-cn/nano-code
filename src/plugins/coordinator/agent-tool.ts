@@ -30,6 +30,19 @@ async function createSubRegistry(def: AgentDefinition, store?: import('#src/core
   return subRegistry;
 }
 
+/**
+ * 读取 auto-background 阈值。通过 NANO_AUTO_BACKGROUND_TASKS 或 CLAUDE_AUTO_BACKGROUND_TASKS 环境变量控制。
+ * 值为正整数的毫秒数。未设置或值为 0 时禁用 auto-background。
+ */
+function getAutoBackgroundMs(): number {
+  const envVal = process.env.NANO_AUTO_BACKGROUND_TASKS || process.env.CLAUDE_AUTO_BACKGROUND_TASKS;
+  if (envVal) {
+    const parsed = parseInt(envVal, 10);
+    if (!isNaN(parsed) && parsed > 0) return parsed;
+  }
+  return 0;
+}
+
 export function createAgentToolPlugin(
   def: AgentDefinition,
   llmClient: LLMClient,
@@ -93,8 +106,8 @@ export function createAgentToolPlugin(
             // Background agents run headless (no display)
             const agentName = `${def.name}_bg_${assignedTaskId}`;
             const subAgent = agentManager
-              ? agentManager.createAgent({ registry: subRegistry, agentRole: def.role, promptConfig: def.systemPrompt, name: agentName, abortController: taskController })
-              : new NanoCodeAgent({ registry: subRegistry, llmClient, agentRole: def.role, promptConfig: def.systemPrompt, name: def.name, abortController: taskController });
+              ? agentManager.createAgent({ registry: subRegistry, agentRole: def.role, promptConfig: def.systemPrompt, name: agentName, abortController: taskController, maxTurns: def.maxTurns })
+              : new NanoCodeAgent({ registry: subRegistry, llmClient, agentRole: def.role, promptConfig: def.systemPrompt, name: def.name, abortController: taskController, maxTurns: def.maxTurns });
 
             try {
               return await subAgent.runTask(query);
@@ -128,28 +141,109 @@ export function createAgentToolPlugin(
         };
       }
 
-      // Synchronous execution
+      // Synchronous execution with auto-background support.
+      // When the env var is set and the sub-agent runs longer than the threshold,
+      // it is auto-converted to a background task instead of being killed.
       const lifecycle = AgentLifecycle.getInstance();
       const syncControllerId = `sync_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
       const subRegistry = await createSubRegistry(def, agentManager?.getStore());
 
       const agentName = `${def.name}_sync_${syncControllerId.slice(0, 8)}`;
       const subAgent = agentManager
-        ? agentManager.createAgent({ registry: subRegistry, agentRole: def.role, promptConfig: def.systemPrompt, name: agentName, display, abortController: lifecycle.createTaskController(syncControllerId) })
-        : new NanoCodeAgent({ registry: subRegistry, llmClient, agentRole: def.role, promptConfig: def.systemPrompt, name: def.name, display, abortController: lifecycle.createTaskController(syncControllerId) });
+        ? agentManager.createAgent({ registry: subRegistry, agentRole: def.role, promptConfig: def.systemPrompt, name: agentName, display, abortController: lifecycle.createTaskController(syncControllerId), maxTurns: def.maxTurns })
+        : new NanoCodeAgent({ registry: subRegistry, llmClient, agentRole: def.role, promptConfig: def.systemPrompt, name: def.name, display, abortController: lifecycle.createTaskController(syncControllerId), maxTurns: def.maxTurns });
 
-      let result;
-      try {
-        result = await subAgent.runTask(query);
-      } finally {
+      const autoBgMs = getAutoBackgroundMs();
+      let wasBackgrounded = false;
+      let bgTaskId: string | null = null;
+      let bgError: string | null = null;
+
+      // Capture the promise so the background callback can await the same result
+      const runTaskPromise = subAgent.runTask(query);
+
+      // Shared cleanup for non-backgrounded paths
+      const cleanupSync = () => {
         if (agentManager) agentManager.removeAgent(subAgent.getName());
         lifecycle.cleanup(syncControllerId);
-      }
-
-      return {
-        status: 'success',
-        data: result || '(子 agent 未返回内容)',
       };
+
+      // Auto-background timer: fires when the sub-agent runs too long
+      const autoBgTimer = autoBgMs > 0 ? setTimeout(() => {
+        try {
+          wasBackgrounded = true;
+          const manager = BackgroundTaskManager.getInstance();
+          bgTaskId = manager.startTask(def.name, query, async (assignedTaskId) => {
+            // Register messaging plugins so the background agent is addressable
+            const identity: AgentIdentity = { taskId: assignedTaskId, agentName: def.name };
+            await subRegistry.register(createAgentSendMessagePlugin(identity));
+            await subRegistry.register(createMessageDeliveryPlugin(assignedTaskId));
+            MessageBus.getInstance().registerAgent(assignedTaskId, def.name);
+
+            display?.onBackgroundTask?.({
+              agentName: def.name,
+              taskId: assignedTaskId,
+              taskStatus: 'started',
+              message: `${def.name}（${assignedTaskId}）已超时自动转入后台${query ? ': ' + query.slice(0, 60) : ''}`,
+            });
+
+            try {
+              return await runTaskPromise;
+            } finally {
+              if (agentManager) agentManager.removeAgent(subAgent.getName());
+              MessageBus.getInstance().unregisterAgent(assignedTaskId);
+              lifecycle.cleanup(syncControllerId);
+              lifecycle.cleanup(assignedTaskId);
+            }
+          });
+        } catch (timerErr) {
+          bgError = timerErr instanceof Error ? timerErr.message : String(timerErr);
+        }
+      }, autoBgMs) : null;
+
+      try {
+        const result = await runTaskPromise;
+        if (autoBgTimer) clearTimeout(autoBgTimer);
+
+        if (wasBackgrounded) {
+          return {
+            status: 'success',
+            data: JSON.stringify({
+              taskId: bgTaskId,
+              agentName: def.name,
+              status: 'started',
+              message: `Agent "${def.name}" 执行超时，已自动转入后台（${bgTaskId}）。可用 agent_task_status 查询进度，完成后会自动收到通知。`,
+            }),
+          };
+        }
+
+        if (bgError) {
+          return {
+            status: 'error',
+            message: `Agent "${def.name}" 自动转入后台失败：${bgError}`,
+          };
+        }
+
+        // Normal sync completion
+        cleanupSync();
+
+        return {
+          status: 'success',
+          data: result || '(子 agent 未返回内容)',
+        };
+      } catch (err) {
+        if (autoBgTimer) clearTimeout(autoBgTimer);
+        if (!wasBackgrounded) {
+          cleanupSync();
+        }
+        if (wasBackgrounded) {
+          const errMsg = err instanceof Error ? err.message : String(err);
+          return {
+            status: 'error',
+            message: `Agent "${def.name}" 自动转入后台后执行出错：${errMsg}`,
+          };
+        }
+        throw err;
+      }
     },
   };
 }

@@ -200,6 +200,7 @@ export interface CreateAgentOptions {
   promptConfig?: import('#src/core/config.js').SystemPromptConfig;
   display?: AgentDisplay;
   abortController?: AbortController;
+  maxTurns?: number;
 }
 
 /**

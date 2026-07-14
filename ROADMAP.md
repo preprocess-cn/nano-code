@@ -66,6 +66,10 @@
 | ✅ | 后台任务展示层事件 | `BackgroundTaskEvent` + `onBackgroundTask` 回调，REPL 和 Ink 双实现 |
 | ✅ | **Ink 上下文可视化** | `InkApp.tsx` 内联 `ContextVis` 组件渲染色块网格，数据源为 `analyzer.ts` 的 8 维度分析 |
 | ✅ | **工具级自定义超时** | `ToolDefinition.function.timeout` 字段，按工具设定超时时间；`Infinity` 永不超时（`ask_user_question`），未指定沿用全局默认 |
+| ✅ | **超时控制 CC 对齐** | Phase 1: PluginRegistry 仅显式 timeout 工具才 Promise.race 包裹，子 agent 不再被 120s kill；Phase 2: Bash timeout 参数 + `BASH_DEFAULT_TIMEOUT_MS`/`BASH_MAX_TIMEOUT_MS` 环境变量；Phase 3.2: auto-background 子 agent 超阈值自动转后台；Phase 3.3: Agent `maxTurns` 轮次限制，YAML 可配置 |
+| ✅ | **fs/search 超时保护** | `search.ts`/`fs.ts` async 操作使用 `ctx.defaultTimeout` 驱动的 `withTimeout` 包裹，防止 NFS stall 等场景无限挂起 |
+| ✅ | **Bash timeout 下限保护** | `Math.max(1, ...)` 防止 timeout=0/-1 导致进程立即被 kill |
+| ✅ | **maxTurns 非空校验** | `!= null` 替代 falsy 检查，`maxTurns: 0` 正确停止（零轮次），YAML 传入非数字时静默类型转换问题 |
 | ✅ | **工具 sideEffect 修正** | `task_create`/`task_update`/`task_stop`/`save_memory`/`skill`/`exit_plan_mode` 改为 `sideEffect: false`，内建读操作无需审批 |
 | ✅ | 多轮摘要记忆 | 自动压缩默认启用（`autoCompactEnabled: true`），触发策略改为基于当前消息大小 + slide window 多次压缩，压缩前全量备份至 `.nano-code-session.pre-compact.json` |
 | ✅ | 角色模式 & 斜杠命令 | profiles/ 通过 `--profile` 启动时加载，主 agent 可通过斜杠 `/` 切换 agent；profile 运行时切换暂不支持 |
