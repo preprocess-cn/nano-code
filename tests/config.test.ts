@@ -57,9 +57,10 @@ describe('Config — merge', () => {
 
   it('non-object core override is ignored', () => {
     const cfg = _mergeConfigs(null, { core: 'invalid' } as any);
-    // Falls back to default (model/temperature 无默认，由 LLMClient 兜底)
-    assert.equal(cfg.core.model, undefined);
-    assert.equal(cfg.core.temperature, undefined);
+    // cfg.core 应保持默认对象结构，不被字符串覆盖
+    assert.equal(typeof cfg.core, 'object');
+    assert.ok(cfg.core !== null);
+    assert.ok(!Array.isArray(cfg.core));
   });
 
   it('merges plugins from global and project', () => {
@@ -98,8 +99,9 @@ describe('Config — merge', () => {
     const cfg = _mergeConfigs(null, {
       unknownKey: { foo: 1 },
     } as any);
-    // Should still produce a valid config
-    assert.equal(cfg.core.model, undefined);
+    // 未知 key 被忽略，已知字段保持不变
+    assert.equal(typeof cfg.core, 'object');
+    assert.equal(cfg.core.maxTokens, 128000);
   });
 
 });

@@ -25,14 +25,33 @@ describe('DisplayPlugin — repl', () => {
     replDisplay.onStop?.('bye');
   });
 
-  it('onUserInput with self source does not echo', () => {
-    // repl 自身来源不回显，只是验证不抛异常
-    replDisplay.onUserInput?.('hello', 'repl');
-  });
+  describe('onUserInput', () => {
+    let writes: string[];
+    let originalWrite: typeof process.stdout.write;
 
-  it('onUserInput with other source echoes preview', () => {
-    replDisplay.onUserInput?.('a very long input message', 'web');
-    // visible output: "[来自 web] >> a very lon…"
+    const mockWrite = (chunk: unknown): boolean => { writes.push(String(chunk)); return true; };
+
+    beforeEach(() => {
+      writes = [];
+      originalWrite = process.stdout.write.bind(process.stdout);
+      process.stdout.write = mockWrite as typeof process.stdout.write;
+    });
+
+    afterEach(() => {
+      process.stdout.write = originalWrite;
+    });
+
+    it('onUserInput with self source does not echo', () => {
+      replDisplay.onUserInput?.('hello', 'repl');
+      assert.equal(writes.length, 0);
+    });
+
+    it('onUserInput with other source echoes preview', () => {
+      replDisplay.onUserInput?.('a very long input message', 'web');
+      assert.equal(writes.length, 1);
+      assert.ok(writes[0].includes('[来自 web]'));
+      assert.ok(writes[0].includes('a very lon…'));
+    });
   });
 
   describe('onStatus', () => {
@@ -306,37 +325,13 @@ describe('DisplayManager — multi-plugin', () => {
     assert.equal(calls[1], 'B:stateSnapshot:5');
   });
 
-  it('onAgentTurnStart/End and onStateSnapshot are no-ops when no plugin implements them', () => {
+  it('onAgentTurnStart/End and onStateSnapshot do not throw when plugin does not implement them', () => {
     const mgr = new DisplayManager();
-    // plugin with no lifecycle hooks
     mgr.addPlugin({ name: 'silent' });
-    // None of these should throw
-    mgr.onAgentTurnStart({ agentName: 'test' });
-    mgr.onAgentTurnEnd({ agentName: 'test' });
-    mgr.onStateSnapshot({ agentName: 'test', messageCount: 0 });
-    assert.equal(calls.length, 0);
-  });
-
-  it('DisplayPlugin interface supports ownsOutput and rawInput properties', () => {
-    const plugin: any = { name: 'custom' };
-    plugin.ownsOutput = true;
-    plugin.rawInput = true;
-    assert.equal(plugin.ownsOutput, true);
-    assert.equal(plugin.rawInput, true);
-  });
-
-  it('StartConfig supports stdio fields', () => {
-    const config: any = {
-      greeting: 'hi',
-      agentName: 'main',
-      hasTools: false,
-      stdout: process.stdout,
-      stderr: process.stderr,
-      stdin: process.stdin,
-    };
-    assert.equal(config.stdout, process.stdout);
-    assert.equal(config.stderr, process.stderr);
-    assert.equal(config.stdin, process.stdin);
+    // 插件未实现这些方法时，DisplayManager 应安全跳过而不是抛异常
+    assert.doesNotThrow(() => mgr.onAgentTurnStart({ agentName: 'test' }));
+    assert.doesNotThrow(() => mgr.onAgentTurnEnd({ agentName: 'test' }));
+    assert.doesNotThrow(() => mgr.onStateSnapshot({ agentName: 'test', messageCount: 0 }));
   });
 
   describe('showPluginManager', () => {

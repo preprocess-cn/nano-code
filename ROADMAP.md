@@ -16,6 +16,7 @@
 | ✅ | **dotenv 加载统一** | 将 `dotenv.config()` 从 `llm.ts` 模块顶层移至 `bootstrap/config.ts` 的 `loadConfig()` 内，与 YAML `env:` 段统管，消除重复的模块加载副作用 |
 | ✅ | **核心层测试覆盖补全** | `formatToolResponse`（prompt.ts 6 用例）、`resolveEnvVar`（llm.ts 4 用例）、`AgentManager` 完整生命周期（agent-manager.ts 11 用例），不修改 src 代码纯测公共 API |
 | ✅ | **引导插件 + 系统提示词分段** | Guidance 插件：前置 6 段 Claude Code 风格行为约束（`# System`/`# Doing tasks`/`# Executing actions with care`/`# Using your tools`/`# Tone and style`/`# Output efficiency`），`onBeforeRequest` 注入三级 AGENT.md 上下文，可分段开关；修复 `/context` 命令缺失 config 的问题；修复 Ink 代码块多行渲染 |
+| ✅ | **测试假阳性审查与修复** | 全面审查 52 个测试文件，识别并修复 12 类假阳性：模拟实现替换为真实插件测试（notify-manager/ink-mode-toggle/agent-mode-store）、条件断言硬化、无断言测试补全、移除 tautology 测试、`toggleMode()` 导出提升可测试性 |
 
 ## P1 — 日常体验
 

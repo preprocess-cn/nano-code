@@ -63,6 +63,19 @@ export function setSuggestionProvider(provider: (() => CommandSuggestion[]) | nu
   _suggestionProvider = provider;
 }
 
+/** @internal 纯切换逻辑（不涉及渲染），导出供测试使用 */
+export function toggleMode(store: { get<T>(key: string): T | undefined; set<T>(key: string, value: T): void }): void {
+  const currentMode = store.get<string>(SK.Mode) || 'normal';
+  if (currentMode === 'plan') {
+    const preMode = store.get<string>(SK.PrePlanMode) || 'normal';
+    store.set(SK.Mode, preMode);
+    store.set(SK.PrePlanMode, undefined);
+  } else {
+    store.set(SK.PrePlanMode, currentMode);
+    store.set(SK.Mode, 'plan');
+  }
+}
+
 function createPlugin(): DisplayPlugin {
   let inkInstance: Instance | null = null;
   let messages: UIMessage[] = [];
@@ -138,15 +151,7 @@ function createPlugin(): DisplayPlugin {
 
   function handleModeToggle(): void {
     if (!registry) return;
-    const currentMode = registry.store.get<string>(SK.Mode) || 'normal';
-    if (currentMode === 'plan') {
-      const preMode = registry.store.get<string>(SK.PrePlanMode) || 'normal';
-      registry.store.set(SK.Mode, preMode);
-      registry.store.set(SK.PrePlanMode, undefined);
-    } else {
-      registry.store.set(SK.PrePlanMode, currentMode);
-      registry.store.set(SK.Mode, 'plan');
-    }
+    toggleMode(registry.store);
     render();
   }
 

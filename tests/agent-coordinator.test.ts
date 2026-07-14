@@ -149,14 +149,13 @@ describe('AgentCoordinator', () => {
     }
   });
 
-  it('onSystemPrompt passes through unchanged when no agents and no running tasks', () => {
+  it('onSystemPrompt preserves base prompt content', () => {
     const plugin = createAgentCoordinatorPlugin(mockLLMClient());
-    const input = 'Simple prompt without agents.';
+    const input = 'Base prompt.';
     const result = plugin.onSystemPrompt!(input);
-    // If no agent defs exist on disk and no running tasks, prompt should be unchanged
-    if (!result.includes('## Specialist Agents') && !result.includes('Running Background Tasks')) {
-      assert.equal(result, input);
-    }
+    // 基础提示词始终被保留，agent 段落按需追加
+    assert.ok(result.startsWith(input));
+    assert.ok(result.length >= input.length);
   });
 
   it('onBeforeRequest injects completed task notification', async () => {
@@ -203,11 +202,14 @@ describe('AgentCoordinator', () => {
     assert.ok(result[1].content!.includes('fail'));
   });
 
-  it('onInit registers individual agent tool plugins', async () => {
+  it('onInit does not throw when no agent definitions', async () => {
     const plugin = createAgentCoordinatorPlugin(mockLLMClient());
     const registry = new PluginRegistry();
+    // 无 agent 定义时，onInit 应正常完成且不报错
     await plugin.onInit!(registry);
-    // Should not throw — no agents means nothing to register
+    // 不应注册 send_message 工具（需有 agent 定义才会注册）
+    const sendTool = registry.getAllSchemas().find(t => t.function.name === 'send_message');
+    assert.equal(sendTool, undefined);
   });
 
   // ── Phase 3: send_message ──

@@ -15,10 +15,14 @@ describe('plugin command — collectPlugins', () => {
     setMcpJsonPaths([]);
   });
 
-  it('returns empty array when config has no plugins', () => {
+  it('returns array when config has no explicit plugins', () => {
     const result = collectPlugins({ plugins: {} } as NanoConfig);
-    // agent 定义加载可能返回 0
+    // 结果包含系统白名单插件 + agent 定义 + MCP 插件，不保证为空
     assert.ok(Array.isArray(result));
+    for (const row of result) {
+      assert.equal(typeof row.name, 'string');
+      assert.ok(['active', 'inactive'].includes(row.status));
+    }
   });
 
   it('includes plugins from config.plugins', () => {

@@ -137,7 +137,7 @@ describe('ModelRegistry Plugin', () => {
     assert.equal(override?.apiKey, 'sk-reg');
   });
 
-  it('throws on unset $ENV_VAR', async () => {
+  it('swallows error on unset $ENV_VAR and leaves store unmodified', async () => {
     const registry = new PluginRegistry();
     const plugin = createModelRegistryPlugin({
       models: [
@@ -145,10 +145,10 @@ describe('ModelRegistry Plugin', () => {
       ],
     });
 
-    // onInit should throw, and registry.register catches it without crashing
+    // onInit 抛异常，但 registry.register 内部会捕获并记录日志，不崩溃
     await registry.register(plugin);
 
-    // Store should be unmodified
+    // Store 不应被修改
     const override = registry.store.get(SK.ModelOverride);
     assert.equal(override, undefined);
   });

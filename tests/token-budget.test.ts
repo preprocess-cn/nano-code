@@ -62,11 +62,16 @@ describe('Token Budget Plugin', () => {
     assert.match(last.content!, /token budget/);
   });
 
-  it('does not reject tool calls (onBeforeToolCall removed per Claude Code pattern)', () => {
+  it('does not intercept tool calls (budget enforced via onBeforeRequest)', () => {
     const plugin = createTokenBudgetPlugin({ maxTokensPerSession: 10 });
-    // Simply verify the method does not exist — budget enforcement
-    // is done via onBeforeRequest, not tool call interception
-    assert.equal((plugin as any).onBeforeToolCall, undefined);
+    // 验证插件不实现 onBeforeToolCall（预算在 onBeforeRequest 消息级别执行）
+    assert.equal('onBeforeToolCall' in plugin, false);
+    // 验证 onBeforeRequest 不会拒绝包含 tool_call 的消息
+    const msgsWithTool: ChatMessage[] = [
+      { role: 'assistant', content: null, tool_calls: [{ id: 'call_1', type: 'function', function: { name: 'test', arguments: '{}' } }] },
+    ];
+    const result = plugin.onBeforeRequest!(msgsWithTool);
+    assert.equal(result, msgsWithTool);
   });
 
   it('injects isMeta flag on compression hint', () => {

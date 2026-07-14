@@ -177,7 +177,7 @@ describe('agent-slash plugin', () => {
     }
   });
 
-  it('handles agent name with trailing args', async () => {
+  it('matches agent name even with trailing text after it', async () => {
     const dir = tmpDir();
     try {
       writeAgent(dir, 'dba', { description: 'DB expert', role: 'You are a DBA' });

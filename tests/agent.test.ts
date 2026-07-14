@@ -78,6 +78,7 @@ describe('NanoCodeAgent — getHistory / loadHistory', () => {
   it('agent stores constructor args correctly', () => {
     const registry = new PluginRegistry();
     const agent = new NanoCodeAgent({ registry: registry, llmClient: mockLLM(), agentRole: 'custom-role' });
+    assert.equal(agent.getAgentRole(), 'custom-role');
     assert.deepEqual(agent.getHistory(), []);
   });
 
@@ -410,6 +411,7 @@ describe('NanoCodeAgent — malformed tool call JSON', () => {
 
   it('handles valid JSON arguments normally', async () => {
     let callCount = 0;
+    let capturedArgs: any = null;
     const mock = {
       sendSystemMessage: async (_messages: any, _tools: any, _onChunk?: any) => {
         callCount++;
@@ -430,13 +432,20 @@ describe('NanoCodeAgent — malformed tool call JSON', () => {
     };
 
     const registry = new PluginRegistry();
+    registry.register({
+      name: 'test-plugin',
+      getTools: () => [{ type: 'function', function: { name: 'test_tool', description: 'test', parameters: {} } }],
+      execute: async (_name: string, args: any) => {
+        capturedArgs = args;
+        return { status: 'success' };
+      },
+    } as any);
+
     const agent = new NanoCodeAgent({ registry: registry, llmClient: mock as any });
     await agent.runTask('do something');
 
-    const history = agent.getHistory();
-    // Should still complete without crash
-    const toolCalls = history.filter(m => m.role === 'tool');
-    assert.ok(toolCalls.length > 0, 'should have tool responses');
+    // 验证 JSON 参数被正确解析并传递到工具执行
+    assert.deepEqual(capturedArgs, { key: 'value' });
   });
 
 });

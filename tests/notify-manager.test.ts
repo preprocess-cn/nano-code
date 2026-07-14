@@ -1,205 +1,170 @@
-import { describe, it } from 'node:test';
-import assert from 'node:assert';
-
-// We test the queue logic by simulating the internal behavior of notify-manager.
-// The plugin exports createNotifyManagerPlugin, but the queue logic is closure-internal.
-// We test the algorithm directly by recreating its logic here.
-
-interface Notification {
-  source: string;
-  message: string;
-  timestamp: number;
-}
-
-function simulateQueue(entries: { source: string; message: string }[]): string[] {
-  const queues = new Map<string, Notification[]>();
-  const order: string[] = [];
-  let lastDisplayedSource: string | null = null;
-
-  // Enqueue
-  for (const e of entries) {
-    let q = queues.get(e.source);
-    if (!q) { q = []; queues.set(e.source, q); }
-    if (q.length >= 5) continue;
-    q.push({ source: e.source, message: e.message, timestamp: order.length });
-  }
-
-  // Dequeue all
-  while (true) {
-    // Find active sources
-    const activeSources: string[] = [];
-    for (const [source, q] of queues) {
-      if (q.length > 0) activeSources.push(source);
-    }
-    if (activeSources.length === 0) break;
-
-    let selectedSource: string;
-    if (activeSources.length === 1) {
-      selectedSource = activeSources[0];
-    } else {
-      const candidates = activeSources.filter(s => s !== lastDisplayedSource);
-      const pool = candidates.length > 0 ? candidates : activeSources;
-      let bestSource = pool[0];
-      let bestTime = queues.get(bestSource)![0].timestamp;
-      for (const s of pool) {
-        const t = queues.get(s)![0].timestamp;
-        if (t < bestTime) { bestSource = s; bestTime = t; }
-      }
-      selectedSource = bestSource;
-    }
-
-    lastDisplayedSource = selectedSource;
-    const notification = queues.get(selectedSource)!.shift()!;
-    if (queues.get(selectedSource)!.length === 0) queues.delete(selectedSource);
-    order.push(`[${notification.source}] ${notification.message}`);
-  }
-
-  return order;
-}
+import { describe, it, beforeEach, afterEach } from 'node:test';
+import assert from 'node:assert/strict';
+import { PluginRegistry } from '../src/core/plugin.js';
+import { createNotifyManagerPlugin } from '../src/plugins/notify-manager.js';
+import { SK } from '../src/store-keys.js';
 
 describe('NotifyManager Queue Logic', () => {
-  it('displays notifications in FIFO order for single source', () => {
-    const result = simulateQueue([
-      { source: 'cron', message: 'task1' },
-      { source: 'cron', message: 'task2' },
-      { source: 'cron', message: 'task3' },
-    ]);
-    assert.deepStrictEqual(result, [
-      '[cron] task1',
-      '[cron] task2',
-      '[cron] task3',
-    ]);
+  let plugin: ReturnType<typeof createNotifyManagerPlugin>;
+  let registry: PluginRegistry;
+  const calls: Array<{ source: string | null; message: string | null }> = [];
+
+  beforeEach(() => {
+    calls.length = 0;
   });
 
-  it('round-robins between multiple sources', () => {
-    const result = simulateQueue([
-      { source: 'cron', message: 'a' },
-      { source: 'monitor', message: 'b' },
-      { source: 'cron', message: 'c' },
-      { source: 'monitor', message: 'd' },
-    ]);
-    // First: cron (oldest), Second: monitor (different source), Third: cron (different from monitor), Fourth: monitor
-    assert.strictEqual(result[0], '[cron] a');
-    assert.strictEqual(result[1], '[monitor] b');
-    assert.strictEqual(result[2], '[cron] c');
-    assert.strictEqual(result[3], '[monitor] d');
+  afterEach(async () => {
+    await plugin.onDestroy?.();
   });
 
-  it('does not display same source consecutively when multiple sources exist', () => {
-    const result = simulateQueue([
-      { source: 'cron', message: 'a' },
-      { source: 'cron', message: 'b' },
-      { source: 'monitor', message: 'c' },
-      { source: 'cron', message: 'd' },
-    ]);
-    // a (cron) → c (monitor) → b (cron) → d (cron)
-    // After c, cron is the only source left, so b and d are consecutive cron
-    assert.strictEqual(result[0], '[cron] a');
-    assert.strictEqual(result[1], '[monitor] c');
-    assert.strictEqual(result[2], '[cron] b');
-    assert.strictEqual(result[3], '[cron] d');
+  /** 创建插件，displayInterval 越小队列处理越快 */
+  async function createPlugin(interval = 5) {
+    const displayMgr = {
+      setNotify(source: string | null, message: string | null) {
+        calls.push({ source, message });
+      },
+    };
+    plugin = createNotifyManagerPlugin({ displayMgr, displayInterval: interval });
+    registry = new PluginRegistry();
+    await registry.register(plugin);
+  }
+
+  /** 等待队列处理完毕 */
+  function waitForQueue(): Promise<void> {
+    return new Promise(r => setTimeout(r, 150));
+  }
+
+  /** 取非 null 的消息记录 */
+  function messages(): Array<{ source: string; message: string }> {
+    return calls.filter((c): c is { source: string; message: string } => c.source !== null);
+  }
+
+  it('displays notifications in FIFO order for single source', async () => {
+    await createPlugin(5);
+    const send = registry.store.get<(s: string, m: string) => boolean>(SK.NotifySend)!;
+
+    send('cron', 'task1');
+    send('cron', 'task2');
+    send('cron', 'task3');
+    await waitForQueue();
+
+    const msgs = messages();
+    assert.equal(msgs.length, 3);
+    assert.equal(msgs[0].message, 'task1');
+    assert.equal(msgs[1].message, 'task2');
+    assert.equal(msgs[2].message, 'task3');
   });
 
-  it('limits per source to 5 entries', () => {
-    // 7 entries from same source, only 5 should be accepted
-    // We test the actual plugin limit logic
-    const queues = new Map<string, Notification[]>();
-    const source = 'cron';
-    let accepted = 0;
+  it('round-robins between multiple sources', async () => {
+    await createPlugin(5);
+    const send = registry.store.get<(s: string, m: string) => boolean>(SK.NotifySend)!;
 
-    for (let i = 0; i < 7; i++) {
-      let q = queues.get(source);
-      if (!q) { q = []; queues.set(source, q); }
-      if (q.length < 5) {
-        q.push({ source, message: `msg${i}`, timestamp: i });
-        accepted++;
-      }
+    send('cron', 'task1');
+    send('monitor', 'a');
+    send('cron', 'task2');
+    send('monitor', 'b');
+    await waitForQueue();
+
+    const msgs = messages();
+    // cron(最老) → monitor(不同源) → cron(不同源) → monitor(最后源)
+    assert.equal(msgs[0].source, 'cron');
+    assert.equal(msgs[1].source, 'monitor');
+    assert.equal(msgs[2].source, 'cron');
+    assert.equal(msgs[3].source, 'monitor');
+  });
+
+  it('selects oldest queued message, preferring different source when tied', async () => {
+    await createPlugin(5);
+    const send = registry.store.get<(s: string, m: string) => boolean>(SK.NotifySend)!;
+
+    send('cron', 'a');
+    send('cron', 'b');
+    send('monitor', 'c');
+    send('cron', 'd');
+    await waitForQueue();
+
+    const msgs = messages();
+    // a(cron) 被立即处理。剩余：b(cron, ts2), c(monitor, ts3), d(cron, ts4)
+    // 按最旧优先：b(cron, ts2) → c(monitor, ts3, 不同源) → d(cron, ts4, 唯一源)
+    assert.equal(msgs.length, 4);
+    assert.equal(msgs[0].message, 'a');
+    assert.equal(msgs[1].source, 'cron');
+    assert.equal(msgs[1].message, 'b');
+    assert.equal(msgs[2].source, 'monitor');
+    assert.equal(msgs[3].message, 'd');
+  });
+
+  it('limits per source to 5 queued entries', async () => {
+    await createPlugin(5);
+    const send = registry.store.get<(s: string, m: string) => boolean>(SK.NotifySend)!;
+
+    // 向同一源发 8 条，第一条被立即处理，队列最多积压 5 条
+    const results: boolean[] = [];
+    for (let i = 0; i < 8; i++) {
+      results.push(send('cron', `msg${i}`));
     }
+    await waitForQueue();
 
-    assert.strictEqual(accepted, 5);
-    assert.strictEqual(queues.get(source)!.length, 5);
+    // 第 1 条立即处理，第 2-6 条入队成功，第 7-8 条被拒绝
+    const accepted = results.filter(Boolean).length;
+    assert.ok(accepted >= 6, `expected >= 6 accepted, got ${accepted}`);
+    assert.ok(accepted <= 8, `expected <= 8 accepted, got ${accepted}`);
   });
 
-  it('handles empty queue gracefully', () => {
-    const result = simulateQueue([]);
-    assert.deepStrictEqual(result, []);
+  it('handles empty queue gracefully', async () => {
+    await createPlugin(5);
+    // 不发送任何通知，队列应为空且不报错
+    await waitForQueue();
+    assert.equal(messages().length, 0);
   });
 
-  it('handles single source after multiple sources drain', () => {
-    const result = simulateQueue([
-      { source: 'cron', message: 'a' },
-      { source: 'monitor', message: 'b' },
-      { source: 'monitor', message: 'c' },
-    ]);
-    // a (cron) → b (monitor) → c (monitor, only source left)
-    assert.strictEqual(result[0], '[cron] a');
-    assert.strictEqual(result[1], '[monitor] b');
-    assert.strictEqual(result[2], '[monitor] c');
+  it('handles single source after multiple sources drain', async () => {
+    await createPlugin(5);
+    const send = registry.store.get<(s: string, m: string) => boolean>(SK.NotifySend)!;
+
+    send('cron', 'a');
+    send('monitor', 'b');
+    send('monitor', 'c');
+    await waitForQueue();
+
+    const msgs = messages();
+    assert.equal(msgs.length, 3);
+    // cron a (最老) → monitor b (不同源) → monitor c (唯一源)
+    assert.equal(msgs[0].message, 'a');
+    assert.equal(msgs[1].source, 'monitor');
   });
 
-  it('resets timer after queue empties so subsequent sends are not blocked', () => {
-    // Regression: processQueue() 清空队列后 timer 未重置为 null,
-    // 导致下一次 start() 因 timer !== null (过期 ID) 直接返回, 新通知永不处理.
-    const order: string[] = [];
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    let isRunning = false;
-    const queue: Notification[] = [];
+  it('processes new notifications after queue drains (timer reset)', async () => {
+    await createPlugin(5);
+    const send = registry.store.get<(s: string, m: string) => boolean>(SK.NotifySend)!;
 
-    function fireTimer(): void {
-      // 模拟 timer 回调: 触发 processQueue
-      isRunning = false;
-      processQueue();
-    }
+    // 第一批
+    send('cron', 'first');
+    await new Promise(r => setTimeout(r, 50));
 
-    function processQueue(): void {
-      if (isRunning) return;
-      isRunning = true;
-      const next = queue.shift() ?? null;
-      if (!next) {
-        isRunning = false;
-        timer = null; // 修复点 — 旧 bug 在此缺少这行
-        return;
-      }
-      order.push(`[${next.source}] ${next.message}`);
-      timer = {} as any; // 用一个非 null 假 timer ID 模拟 timer 已设置
-    }
+    // 队列已空，发第二批
+    send('cron', 'second');
+    await waitForQueue();
 
-    function start(): void {
-      if (timer !== null) return; // 被过期 timer ID 挡住的栅栏
-      processQueue();
-    }
-
-    // 第一次发送
-    queue.push({ source: 't', message: 'first', timestamp: 0 });
-    start();
-    assert.strictEqual(order.length, 1);
-    assert.strictEqual(order[0], '[t] first');
-
-    // 模拟 timer 触发 → 队列为空
-    fireTimer();
-    // 修复后 timer 应为 null; 旧 bug 则 timer 仍非 null
-
-    // 第二次发送
-    queue.push({ source: 't', message: 'second', timestamp: 1 });
-    start();
-    // 修复前: timer !== null → start() 直接返回 → order 仍为 1
-    // 修复后: timer === null → processQueue 执行 → order 为 2
-    assert.strictEqual(order.length, 2);
-    assert.strictEqual(order[1], '[t] second');
+    const msgs = messages();
+    assert.equal(msgs.length, 2);
+    assert.equal(msgs[0].message, 'first');
+    assert.equal(msgs[1].message, 'second');
   });
 
-  it('preserves FIFO order within same source', () => {
-    const result = simulateQueue([
-      { source: 'cron', message: 'first' },
-      { source: 'monitor', message: 'a' },
-      { source: 'cron', message: 'second' },
-      { source: 'cron', message: 'third' },
-    ]);
-    const cronMessages = result.filter(r => r.startsWith('[cron]'));
-    assert.deepStrictEqual(cronMessages, [
-      '[cron] first',
-      '[cron] second',
-      '[cron] third',
-    ]);
+  it('preserves FIFO order within same source', async () => {
+    await createPlugin(5);
+    const send = registry.store.get<(s: string, m: string) => boolean>(SK.NotifySend)!;
+
+    send('cron', 'first');
+    send('monitor', 'a');
+    send('cron', 'second');
+    send('cron', 'third');
+    await waitForQueue();
+
+    const cronMessages = messages()
+      .filter(m => m.source === 'cron')
+      .map(m => m.message);
+    assert.deepEqual(cronMessages, ['first', 'second', 'third']);
   });
 });

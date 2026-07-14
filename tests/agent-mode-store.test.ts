@@ -1,67 +1,59 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert';
+import { PluginRegistry } from '../src/core/plugin.js';
 import { SK, type AgentModeInfo } from '../src/store-keys.js';
 
-describe('AgentMode via Store (DisplayPlugin 接口稳定替代方案)', () => {
-  function createMockStore() {
-    const map = new Map<string, unknown>();
-    return {
-      get<T>(key: string): T | undefined { return map.get(key) as T | undefined; },
-      set<T>(key: string, value: unknown): void { map.set(key, value); },
-      subscribe(): () => void { return () => {}; },
-    };
-  }
+describe('AgentMode via Store (Store 接口协议验证)', () => {
 
   test('default AgentMode is undefined', () => {
-    const store = createMockStore();
-    const mode = store.get<AgentModeInfo>(SK.AgentMode);
+    const registry = new PluginRegistry();
+    const mode = registry.store.get<AgentModeInfo>(SK.AgentMode);
     assert.equal(mode, undefined);
   });
 
-  test('repl reads AgentMode from Store', () => {
-    const store = createMockStore();
-    // Simulate what agent-slash plugin writes
-    store.set(SK.AgentMode, { name: 'dba', description: '数据库专家' });
+  test('AgentMode round-trip through store', () => {
+    const registry = new PluginRegistry();
+    registry.store.set(SK.AgentMode, { name: 'dba', description: '数据库专家' });
 
-    // Simulate what repl reads
-    const agentMode = store.get<AgentModeInfo>(SK.AgentMode);
-    assert.ok(agentMode !== null);
+    const agentMode = registry.store.get<AgentModeInfo>(SK.AgentMode);
+    assert.ok(agentMode !== undefined);
     assert.equal(agentMode!.name, 'dba');
     assert.equal(agentMode!.description, '数据库专家');
   });
 
-  test('repl prompt prefix uses name from Store', () => {
-    const store = createMockStore();
-    store.set(SK.AgentMode, { name: 'reviewer', description: '代码审查' });
+  test('AgentMode name is used for display prefix', () => {
+    const registry = new PluginRegistry();
+    registry.store.set(SK.AgentMode, { name: 'reviewer', description: '代码审查' });
 
-    const agentMode = store.get<AgentModeInfo>(SK.AgentMode);
+    const agentMode = registry.store.get<AgentModeInfo>(SK.AgentMode);
     const prefix = agentMode ? `[${agentMode.name}]` : '';
     assert.equal(prefix, '[reviewer]');
   });
 
-  test('ink display reads AgentMode from Store', () => {
-    const store = createMockStore();
-    store.set(SK.AgentMode, { name: 'helper', description: '助手' });
+  test('AgentMode name is readable by display plugin', () => {
+    const registry = new PluginRegistry();
+    registry.store.set(SK.AgentMode, { name: 'helper', description: '助手' });
 
-    const activeName = store.get<AgentModeInfo>(SK.AgentMode)?.name;
+    const activeName = registry.store.get<AgentModeInfo>(SK.AgentMode)?.name;
     assert.equal(activeName, 'helper');
   });
 
   test('resetting to main mode clears AgentMode in Store', () => {
-    const store = createMockStore();
+    const registry = new PluginRegistry();
     // Switch to agent
-    store.set(SK.AgentMode, { name: 'dba', description: '数据库专家' });
-    assert.ok(store.get<AgentModeInfo>(SK.AgentMode) !== undefined);
+    registry.store.set(SK.AgentMode, { name: 'dba', description: '数据库专家' });
+    assert.ok(registry.store.get<AgentModeInfo>(SK.AgentMode) !== undefined);
 
     // Reset to main
-    store.set(SK.AgentMode, undefined);
-    assert.equal(store.get<AgentModeInfo>(SK.AgentMode), undefined);
+    registry.store.set(SK.AgentMode, undefined);
+    assert.equal(registry.store.get<AgentModeInfo>(SK.AgentMode), undefined);
   });
 
   test('store.get/set typed round-trip with AgentMode', () => {
-    const store = createMockStore();
-    store.set(SK.AgentMode, { name: 'test', description: 'test agent' });
-    const result = store.get<AgentModeInfo>(SK.AgentMode);
+    const registry = new PluginRegistry();
+    registry.store.set(SK.AgentMode, { name: 'test', description: 'test agent' });
+    const result = registry.store.get<AgentModeInfo>(SK.AgentMode);
     assert.deepEqual(result, { name: 'test', description: 'test agent' });
   });
+
 });
