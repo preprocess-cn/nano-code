@@ -458,6 +458,29 @@ plugins:
 - 递归防护：子 agent 内部不注册 agent 工具
 - 子 agent 如需持久记忆，在定义中指定独立 `namespace`
 
+### 内置 Explore Agent
+
+`agent-explore` 是一个内置的只读搜索子 agent，始终可用，无需 YAML 定义文件：
+
+```bash
+nano-code --list-plugins
+# → agent:explore [agent]  • agent-explore  快速搜索和探索代码库
+```
+
+特性：
+- **只读强制** — 隐藏 Write/Patch 等写工具，Bash 命令仅允许只读操作（ls、grep、find、git log/diff 等）
+- **专用提示词** — 代码搜索导向的 system prompt，强调只读和效率
+- **跳过项目指令文件** — 不加载 AGENT.md，节省 token
+- **可用工具**：List（浏览结构）、Glob（路径匹配）、Grep（内容搜索）、Read（读取文件）、Bash（只读命令）、Web 搜索
+- **后台执行**：支持 `run_in_background: true`，与其他子 agent 一致
+
+```bash
+# 主 agent 自动调用 Explore 搜索代码
+agent-explore({ query: "搜索 src/ 下所有 .ts 文件中的 TODO 注释" })
+# 支持后台异步执行
+agent-explore({ query: "彻底分析项目架构", run_in_background: true })
+```
+
 ### 后台执行
 
 子 agent 支持异步后台执行，适用于耗时任务：

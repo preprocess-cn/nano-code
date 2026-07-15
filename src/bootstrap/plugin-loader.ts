@@ -75,11 +75,14 @@ export async function registerBuiltinPlugin(
   registry: PluginRegistry,
   name: string,
   settings?: Record<string, any>,
+  transform?: (plugin: NanoPlugin) => NanoPlugin,
 ): Promise<boolean> {
   const loader = BUILTIN_LOADERS[name];
   if (!loader) return false;
 
   if (settings) registry.setPluginConfig(name, settings);
-  await registry.register(await loader(settings));
+  let plugin = await loader(settings);
+  if (transform) plugin = transform(plugin);
+  await registry.register(plugin);
   return true;
 }

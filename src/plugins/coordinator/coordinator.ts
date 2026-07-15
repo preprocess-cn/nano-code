@@ -8,6 +8,8 @@ import { createAgentToolPlugin } from '#src/plugins/coordinator/agent-tool.js';
 import { BackgroundTaskManager } from '#src/plugins/coordinator/task-manager.js';
 import { MessageBus } from '#src/plugins/coordinator/message-bus.js';
 import { validateSendMessageArgs } from '#src/plugins/coordinator/messaging-plugins.js';
+import { EXPLORE_AGENT_DEF, EXPLORE_AGENT_NAME } from '#src/plugins/explore/explore-definition.js';
+import { createFilteredPlugin, createReadonlyCommandPlugin } from '#src/plugins/explore/tool-utils.js';
 
 export function createAgentCoordinatorPlugin(
   llmClient: LLMClient,
@@ -15,7 +17,11 @@ export function createAgentCoordinatorPlugin(
   agentManager?: AgentManager,
   agentDir?: string,
 ): NanoPlugin {
-  const defs = loadAgentDefinitions(agentDir).filter((d) => d.enabled !== false);
+  const yamlDefs = loadAgentDefinitions(agentDir).filter((d) => d.enabled !== false);
+
+  // Merge built-in agents (Explore) with YAML-defined agents.
+  // Built-in agents are always available even when ~/.nano-code/agents/ is empty.
+  const defs = [EXPLORE_AGENT_DEF, ...yamlDefs];
 
   return {
     name: 'agent-coordinator',
@@ -103,7 +109,18 @@ export function createAgentCoordinatorPlugin(
       MessageBus.getInstance().registerAgent('main', 'main');
 
       for (const def of defs) {
-        const plugin = createAgentToolPlugin(def, llmClient, displayMgr, agentManager);
+        const isExplore = def.name === EXPLORE_AGENT_NAME;
+        const plugin = createAgentToolPlugin(
+          def, llmClient, displayMgr, agentManager,
+          isExplore
+            ? {
+                pluginTransforms: {
+                  fs: (p) => createFilteredPlugin(p, new Set(['list_project_files', 'view_file_content'])),
+                  command: (p) => createReadonlyCommandPlugin(p),
+                },
+              }
+            : undefined,
+        );
         await registry.register(plugin);
       }
     },

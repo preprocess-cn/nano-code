@@ -15,7 +15,17 @@ import {
   type AgentIdentity,
 } from '#src/plugins/coordinator/messaging-plugins.js';
 
-async function createSubRegistry(def: AgentDefinition, store?: import('#src/core/store.js').IStore): Promise<PluginRegistry> {
+/** createSubRegistry 的额外选项 */
+export interface SubRegistryOptions {
+  /** 按插件名注册前对插件实例进行 transform */
+  pluginTransforms?: Record<string, (plugin: NanoPlugin) => NanoPlugin>;
+}
+
+async function createSubRegistry(
+  def: AgentDefinition,
+  store?: import('#src/core/store.js').IStore,
+  options?: SubRegistryOptions,
+): Promise<PluginRegistry> {
   const subRegistry = store ? new PluginRegistry({ store }) : new PluginRegistry();
   subRegistry.setAgentName(def.name);
   subRegistry.setDefaultContext({ skipPermission: true, defaultTimeout: 120000 });
@@ -23,7 +33,8 @@ async function createSubRegistry(def: AgentDefinition, store?: import('#src/core
   if (def.plugins) {
     for (const [name, pluginCfg] of Object.entries(def.plugins)) {
       if (pluginCfg?.enabled === false) continue;
-      await registerBuiltinPlugin(subRegistry, name, pluginCfg?.settings);
+      const transform = options?.pluginTransforms?.[name];
+      await registerBuiltinPlugin(subRegistry, name, pluginCfg?.settings, transform);
     }
   }
 
@@ -48,6 +59,7 @@ export function createAgentToolPlugin(
   llmClient: LLMClient,
   display?: AgentDisplay & DisplayBackgroundTask,
   agentManager?: AgentManager,
+  options?: SubRegistryOptions,
 ): NanoPlugin {
   return {
     name: `agent:${def.name}`,
@@ -96,7 +108,7 @@ export function createAgentToolPlugin(
           // 使用 BackgroundTaskManager 的 taskId 创建生命周期控制器，与 cancelTask 的 key 一致
           const taskController = lifecycle.createTaskController(assignedTaskId);
           try {
-            const subRegistry = await createSubRegistry(def, agentManager?.getStore());
+            const subRegistry = await createSubRegistry(def, agentManager?.getStore(), options);
 
             // Register inter-agent communication plugins
             const identity: AgentIdentity = { taskId: assignedTaskId, agentName: def.name };
@@ -146,7 +158,7 @@ export function createAgentToolPlugin(
       // it is auto-converted to a background task instead of being killed.
       const lifecycle = AgentLifecycle.getInstance();
       const syncControllerId = `sync_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-      const subRegistry = await createSubRegistry(def, agentManager?.getStore());
+      const subRegistry = await createSubRegistry(def, agentManager?.getStore(), options);
 
       const agentName = `${def.name}_sync_${syncControllerId.slice(0, 8)}`;
       const subAgent = agentManager

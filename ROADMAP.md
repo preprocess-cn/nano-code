@@ -95,6 +95,7 @@
 | ✅ | 代码审查 `/review` | Review 内置 skill，审查 git diff 的正确性/性能/安全，输出 CRITICAL/WARNING/SUGGESTION 三级报告 |
 | ✅ | 深度审查 `/code-review` | 7 角度 × 6 候选 → 1-vote verify → ≤10 JSON 发现，对齐 CC code-review |
 | ✅ | 代码自动修复 `/simplify` | code-review + --fix，审查并自动修复变更 |
+| ✅ | **内置 Explore Agent** | 只读搜索子 agent，始终可用无需 YAML 定义；`createFilteredPlugin` 过滤写工具、`createReadonlyCommandPlugin` 强制 Bash 只读；专用 search-oriented system prompt，跳过 AGENT.md 节省 token |
 
 ## P1 — 规划、任务与记忆
 
@@ -207,6 +208,7 @@ Ink 展示层（`claude-code-ink`）基于 React + 自研 Ink 引擎（fork 自 
 - **FIXED：`--think` 多段思考文本 dim 样式仅作用首行** — `render-node-to-output.ts` 非换行路径（`needsWrapping === false` 且 `segments.length === 1`）整段多行文本用单一 `\x1b[2m...\x1b[22m` 包裹，`output.ts` 的 `split('\n')` 把 ANSI 闭码分割到单独行导致仅首行 dim。修复：先按行分割再逐行应用样式。
 - **Ink 未实现 onAgentTurnStart/onAgentTurnEnd** — 子 agent 并行执行时无 lifecycle 显示，用户无法感知各 agent 处于什么阶段。需在 InkApp 中实现 `onAgentTurnStart`（创建 agent 状态追踪条目）和 `onAgentTurnEnd`（标记完成），配合底栏或进度组件展示多个 agent 的实时状态。
 - **FIXED：状态栏计时器跳变** — `sleep` 等静默命令执行期间，状态栏右侧 LLM 计时器数值跳变（如 14s→31s→76s）。根因：(1) `emoji-regex` 将 spinner 字符 `✳` (U+2733) 误判为 emoji 导致 `stringWidth` 返回 2（宽字符），spinner Box 宽度抖动挤占 timer 位置；(2) Box `width: 2` 仅含 1 字符导致第二列为空 cell，diff 引擎对空 cell 输出空 stdout 使 VirtualScreen 与终端光标不同步；(3) flexbox spacer 吸收左区宽度变化导致右区位置漂移。修复：`✳`→`✲`（非 emoji）、`spinnerChar + ' '` 填满 width=2、右区 `position: absolute` + `padEnd` 固定文本宽度。
+- **REGRESSION：`--think` 模式下计时器显示异常** — 偶发，运行 1 分钟后出现。之前已修复的计时器相关问题（跳变/消失）在 `--think` 模式下有复现。需要更多调试信息来追踪根因，目前难以稳定复现。
 
 ## Agent 架构
 
