@@ -8,6 +8,17 @@ import { SK } from '#src/store-keys.js';
 import { getPatchForDisplay, newFileHunk } from '#src/utils/diff.js';
 import { logManager } from '#src/utils/logger.js';
 
+/**
+ * Permission plugin active flag.
+ * Set by the permission plugin on onInit/onDestroy.
+ * When true, path validation is delegated to the permission plugin's PathValidator
+ * and safeResolvePath relaxes cwd restrictions.
+ */
+let _permissionPluginActive = false;
+export function setPermissionPluginActive(active: boolean): void {
+  _permissionPluginActive = active;
+}
+
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number, label: string): Promise<T> {
   return Promise.race([
     promise,
@@ -48,9 +59,17 @@ export function getReadCache(): ReadCacheEntry[] {
   return [...readCache];
 }
 
-function safeResolvePath(relativeTarget: string): string {
+/**
+ * 安全解析路径。
+ * - 当 permissionPluginActive 时，路径验证由 PermissionManager.PathValidator 处理，放行。
+ * - 否则，严格检查路径是否在 cwd 内（子 agent skipPermission=true 时仍生效）。
+ */
+function safeResolvePath(relativeTarget: string, ctx?: ToolContext): string {
   const cwd = process.cwd();
   const absoluteTarget = path.resolve(cwd, relativeTarget);
+  if (_permissionPluginActive) {
+    return absoluteTarget;
+  }
   if (!absoluteTarget.startsWith(cwd)) {
     throw new Error(`安全拒绝：路径 "${relativeTarget}" 超出了当前工作区目录。`);
   }
@@ -190,7 +209,7 @@ export const fsPlugin: NanoPlugin = {
       case 'view_file_content': {
         try {
           if (!args.path) return toolError("args.path missing, please provide");
-          const finalPath = safeResolvePath(args.path);
+          const finalPath = safeResolvePath(args.path, ctx);
           const content = await withTimeout(fs.readFile(finalPath, 'utf-8'), timeout, 'read_file');
           // 仅主 agent 缓存（子 agent 使用 skipPermission: true）
           if (!ctx.skipPermission) addToReadCache(args.path, content);
@@ -208,7 +227,7 @@ export const fsPlugin: NanoPlugin = {
           if (typeof args.content === 'string' && args.content.length > 10 * 1024 * 1024) {
             return toolError('Error: File content exceeds 10MB limit. Please split into smaller files.');
           }
-          const finalPath = safeResolvePath(args.path);
+          const finalPath = safeResolvePath(args.path, ctx);
           let fileExists = false;
           let oldContent = '';
           try { oldContent = await fs.readFile(finalPath, 'utf-8'); fileExists = true; } catch { fileExists = false; }

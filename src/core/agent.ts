@@ -274,40 +274,106 @@ export class NanoCodeAgent {
     this.display?.onToolCall?.({ id: toolCall.id, toolName, args: toolArgs, agentName: this.name });
 
     // ── Permission gate ──
-    // sideEffect=true 且不在 allowlist 中的工具需要用户确认
-    // 已在 allowlist 中的工具同时跳过工具层权限确认
+    // 支持两种模式:
+    //   1. 权限插件模式 (permission:evaluator 注册在 store 中) — 完整评估管道
+    //   2. 回退模式 — sideEffect + allowlist（当前默认行为）
+    // 回退模式确保权限插件不存在时行为完全不变。
     let agentConfirmed = false;
     const sideEffect = this.registry.getToolSideEffect(toolName, toolArgs);
-    if (sideEffect) {
-      if (this.registry.isSkipPermissionScope()) {
-        agentConfirmed = true;
-      } else if (!this.registry.isToolAllowed(toolName)) {
-        const confirmCb = this.registry.getConfirmCallback();
-        if (confirmCb) {
-          const displayName = getToolDisplayName(toolName, this.registry.getAllSchemas());
-          const response = await confirmCb({
-            toolName,
-            displayName,
-            message: `${displayName} 需要执行操作，是否批准？`,
-            details: JSON.stringify(toolArgs, null, 2).slice(0, 1000),
+
+    // Step 1: 检查权限插件是否注册
+    const permEval = this.registry.store.get<
+      (toolName: string, args: any, sideEffect: boolean) => Promise<{
+        behavior: 'allow' | 'deny' | 'ask';
+        message?: string;
+        skipPermission?: boolean;
+        reason?: string;
+      }>
+    >('permission:evaluator');
+
+    if (permEval) {
+      // ── 权限插件模式 ──
+      const decision = await permEval(toolName, toolArgs, sideEffect);
+
+      switch (decision.behavior) {
+        case 'deny': {
+          this.display?.onToolResult?.({
+            id: toolCall.id, status: 'rejected_by_user',
+            message: decision.message ?? '权限拒绝', agentName: this.name,
           });
-          if (response === 'always_allow') {
-            this.registry.allowTool(toolName);
-            agentConfirmed = true;
-          } else if (response) {
-            agentConfirmed = true;
-          } else {
-            this.display?.onToolResult?.({ id: toolCall.id, status: 'rejected_by_user', message: '用户拒绝', agentName: this.name });
-            toolMessages.push({
-              role: 'tool', tool_call_id: toolCall.id, name: toolName,
-              content: JSON.stringify({ status: 'rejected_by_user', message: '用户拒绝工具调用' }),
-            });
-            return { status: 'rejected', toolMessages };
-          }
+          toolMessages.push({
+            role: 'tool', tool_call_id: toolCall.id, name: toolName,
+            content: JSON.stringify({ status: 'rejected_by_user', message: decision.message ?? '权限拒绝' }),
+          });
+          return { status: 'rejected', toolMessages };
         }
-      } else {
-        // 工具已在 allowlist 中 — 跳过工具层的二次权限确认
-        agentConfirmed = true;
+
+        case 'ask': {
+          const confirmCb = this.registry.getConfirmCallback();
+          if (confirmCb) {
+            const displayName = getToolDisplayName(toolName, this.registry.getAllSchemas());
+            const response = await confirmCb({
+              toolName,
+              displayName,
+              message: decision.message ?? `${displayName} 需要您的批准`,
+              details: JSON.stringify(toolArgs, null, 2).slice(0, 1000),
+              filePath: typeof toolArgs?.path === 'string' ? toolArgs.path : undefined,
+            });
+            if (response === 'always_allow') {
+              this.registry.allowTool(toolName);
+              agentConfirmed = true;
+            } else if (response) {
+              agentConfirmed = true;
+            } else {
+              this.display?.onToolResult?.({ id: toolCall.id, status: 'rejected_by_user', message: '用户拒绝', agentName: this.name });
+              toolMessages.push({
+                role: 'tool', tool_call_id: toolCall.id, name: toolName,
+                content: JSON.stringify({ status: 'rejected_by_user', message: '用户拒绝工具调用' }),
+              });
+              return { status: 'rejected', toolMessages };
+            }
+          }
+          break;
+        }
+
+        case 'allow': {
+          agentConfirmed = decision.skipPermission !== false;
+          break;
+        }
+      }
+    } else {
+      // ── 回退模式: sideEffect + allowlist（与原始逻辑完全一致） ──
+      if (sideEffect) {
+        if (this.registry.isSkipPermissionScope()) {
+          agentConfirmed = true;
+        } else if (!this.registry.isToolAllowed(toolName)) {
+          const confirmCb = this.registry.getConfirmCallback();
+          if (confirmCb) {
+            const displayName = getToolDisplayName(toolName, this.registry.getAllSchemas());
+            const response = await confirmCb({
+              toolName,
+              displayName,
+              message: `${displayName} 需要执行操作，是否批准？`,
+              details: JSON.stringify(toolArgs, null, 2).slice(0, 1000),
+            });
+            if (response === 'always_allow') {
+              this.registry.allowTool(toolName);
+              agentConfirmed = true;
+            } else if (response) {
+              agentConfirmed = true;
+            } else {
+              this.display?.onToolResult?.({ id: toolCall.id, status: 'rejected_by_user', message: '用户拒绝', agentName: this.name });
+              toolMessages.push({
+                role: 'tool', tool_call_id: toolCall.id, name: toolName,
+                content: JSON.stringify({ status: 'rejected_by_user', message: '用户拒绝工具调用' }),
+              });
+              return { status: 'rejected', toolMessages };
+            }
+          }
+        } else {
+          // 工具已在 allowlist 中 — 跳过工具层的二次权限确认
+          agentConfirmed = true;
+        }
       }
     }
 

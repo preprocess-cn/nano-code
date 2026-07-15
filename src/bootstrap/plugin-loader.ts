@@ -33,6 +33,7 @@ const BUILTIN_LOADERS: Record<string, (settings?: Record<string, any>) => Promis
   'mcp-loader': async (s) => (await import('#src/plugins/mcp/adapter.js')).createMcpLoaderPlugin(s?.config, s?.debug),
   'notify-manager': async (s) => (await import('#src/plugins/notify-manager.js')).createNotifyManagerPlugin(s || {}),
   guidance: async (s) => (await import('#src/plugins/guidance/index.js')).createGuidancePlugin(s as Record<string, any> | undefined),
+  permission: async () => (await import('#src/plugins/permission/index.js')).createPermissionPlugin(),
 };
 
 /**
@@ -47,6 +48,7 @@ export const DEFAULT_SYSTEM_PLUGINS: readonly string[] = [
   'token-budget',
   'file-search',
   'mcp-loader',
+  'permission',
 ];
 
 /**

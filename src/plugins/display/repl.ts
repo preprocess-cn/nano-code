@@ -1,6 +1,7 @@
 import { intro, text, outro, isCancel, confirm } from '@clack/prompts';
 import { DisplayPlugin, StartConfig, StatusEvent, StreamEvent, ToolCallEvent, ToolResultEvent, ErrorEvent, DebugEvent, BackgroundTaskEvent, MessageLevel } from '#src/display.js';
 import { isMainAgent } from '#src/core/contract.js';
+import type { ToolResponse } from '#src/core/contract.js';
 import { formatToolCall } from '#src/plugins/display/tool-display.js';
 import { ThinkStream } from '#src/plugins/display/think-stream.js';
 import { askQuestionsDialog } from '#src/plugins/display/ask-questions-dialog.js';
@@ -78,12 +79,68 @@ export const replDisplay: DisplayPlugin = {
 
   async onInit(registry: PluginRegistry): Promise<void> {
     _store = registry.store;
+
+    // ── 统一弹窗队列（FIFO，一次只弹一个） ──
+    interface ModalEntry {
+      type: 'permission' | 'ask_question';
+      data: any;
+      resolve: (value: any) => void;
+      toolName?: string;
+    }
+
+    const modalQueue: ModalEntry[] = [];
+    let showingModal = false;
+
+    async function processQueue(): Promise<void> {
+      if (showingModal || modalQueue.length === 0) return;
+      showingModal = true;
+
+      const entry = modalQueue[0];
+
+      try {
+        if (entry.type === 'permission') {
+          // 重检查: 用 evaluator（路径级规则可能已通过前一个弹窗添加）
+          const evalFn = registry.store?.get<any>('permission:evaluator');
+          if (evalFn) {
+            const req = entry.data;
+            const fakeArgs = req.filePath ? { path: req.filePath } : {};
+            const decision = await evalFn(entry.toolName, fakeArgs, false);
+            if (decision.behavior !== 'ask') {
+              entry.resolve(decision.behavior === 'allow' ? true : 'always_allow');
+              modalQueue.shift();
+              showingModal = false;
+              processQueue();
+              return;
+            }
+          }
+
+          const req = entry.data;
+          console.log(`\n[!]  AI 正在申请执行：${req.displayName ?? req.toolName}`);
+          if (req.details) console.log(`-> \x1b[33m${req.details}\x1b[0m`);
+          const result = await confirm({ message: req.message, initialValue: true });
+          entry.resolve(typeof result === 'symbol' || !result ? false : true);
+        } else {
+          const questions = entry.data.questions as AskQuestionRequest[];
+          const answers = await askQuestionsDialog(questions);
+          entry.resolve({ status: 'success', data: JSON.stringify({ questions, answers }) });
+        }
+      } finally {
+        modalQueue.shift();
+        showingModal = false;
+        processQueue();
+      }
+    }
+
     registry.setConfirmCallback(async (req) => {
-      console.log(`\n[!]  AI 正在申请执行：${req.displayName ?? req.toolName}`);
-      if (req.details) console.log(`-> \x1b[33m${req.details}\x1b[0m`);
-      const result = await confirm({ message: req.message, initialValue: true });
-      if (typeof result === 'symbol' || !result) return false;
-      return true;
+      return new Promise<boolean | 'always_allow'>((resolve) => {
+        modalQueue.push({
+          type: 'permission',
+          data: req,
+          resolve,
+          toolName: req.toolName,
+        });
+        processQueue();
+      });
     });
     registry.setOutputHandler({
       stdout(chunk: string) { process.stdout.write(chunk); },
@@ -91,9 +148,14 @@ export const replDisplay: DisplayPlugin = {
     });
     // Register AskUserQuestion handler — uses raw-mode box dialog
     registry.registerInteractiveHandler('ask_user_question', async (args: any) => {
-      const questions = args.questions as AskQuestionRequest[];
-      const answers = await askQuestionsDialog(questions);
-      return { status: 'success', data: JSON.stringify({ questions, answers }) };
+      return new Promise<ToolResponse>((resolve) => {
+        modalQueue.push({
+          type: 'ask_question',
+          data: args,
+          resolve,
+        });
+        processQueue();
+      });
     });
   },
 

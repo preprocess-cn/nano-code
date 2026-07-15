@@ -85,6 +85,16 @@ export const SK = {
   /** (source: string, message: string) => boolean: 发送通知，返回 true 表示入队成功 */
   NotifySend: 'notify:send',
 
+  // ── Permission evaluator (permission plugin) ──
+  /**
+   * PermissionEvaluatorFn | undefined:
+   * (toolName: string, args: any, sideEffect: boolean) =>
+   *   Promise<{ behavior: 'allow' | 'deny' | 'ask'; message?: string; skipPermission?: boolean; reason?: string }>
+   * 注册在 store 中的权限评估回调。agent.ts 在执行工具前检查此回调，
+   * 存在则委托评估，不存在则回退到 sideEffect + allowlist 逻辑。
+   */
+  PermissionEvaluator: 'permission:evaluator',
+
   // ── Command queue ──
   /**
    * (cmd: Omit<QueuedCommand, 'priority'> & { priority?: QueuePriority }) => void

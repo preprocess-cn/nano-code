@@ -11,6 +11,7 @@ import type { ModelEntry } from '#src/core/llm.js';
 import { logManager } from '#src/utils/logger.js';
 import { formatToolCall, getToolArgsPreview } from '#src/plugins/display/tool-display.js';
 import type { ToolResponse } from '#src/core/contract.js';
+import * as path from 'path';
 import React from 'react';
 import { enqueue, requestExit } from '#src/core/message-queue.js';
 
@@ -91,6 +92,80 @@ function createPlugin(): DisplayPlugin {
   let thinkingStatusMsg: UIMessage | null = null; // "正在思考"占位符，被 think 内容替换
   let greetingShown = false; // 是否已在消息列表中展示 greeting
   // Permission confirm state — 支持 allow_once / always_allow / deny
+  // ── 统一弹窗队列（FIFO，一次只弹一个） ──
+  interface ModalEntry {
+    id: string;
+    type: 'permission' | 'ask_question';
+    data: any;
+    resolve: (value: any) => void;
+    toolName?: string;
+  }
+
+  const modalQueue: ModalEntry[] = [];
+  let showingModal = false;
+  let nextModalId = 0;
+
+  async function processQueue(): Promise<void> {
+    if (showingModal || modalQueue.length === 0) return;
+    // 立即锁定，防止并行 confirmCallback 再次进入
+    showingModal = true;
+
+    const entry = modalQueue[0];
+
+    // permission: 用 evaluator 重检查（路径级规则可能已通过前一个弹窗添加）
+    if (entry.type === 'permission') {
+      const evalFn = registry?.store?.get<any>('permission:evaluator');
+      if (evalFn) {
+        const req = entry.data;
+        // 从 filePath 或 details 重构 args 供 evaluator 评估
+        let fakeArgs: any = {};
+        if (req.filePath) {
+          fakeArgs = { path: req.filePath };
+        } else if (req.details) {
+          try {
+            const parsed = JSON.parse(req.details);
+            if (parsed?.path) fakeArgs = { path: parsed.path };
+          } catch {}
+        }
+        const sideEffect = entry.toolName
+          ? registry?.getToolSideEffect?.(entry.toolName, fakeArgs) ?? true
+          : true;
+        const decision = await evalFn(entry.toolName, fakeArgs, sideEffect);
+        if (decision.behavior !== 'ask') {
+          showingModal = false;
+          modalQueue.shift();
+          entry.resolve(decision.behavior === 'allow' ? true : 'always_allow');
+          processQueue();
+          return;
+        }
+      }
+    }
+
+    if (entry.type === 'permission') {
+      const req = entry.data;
+      pendingPermission = { toolName: req.toolName, displayName: req.displayName, message: req.message, details: req.details, diff: req.diff, filePath: req.filePath };
+      permissionResolve = entry.resolve;
+    } else {
+      pendingQuestions = {
+        questions: entry.data.questions,
+        resolve: (answers: Record<string, string>) => {
+          entry.resolve({ status: 'success', data: JSON.stringify({ questions: entry.data.questions, answers }) });
+        },
+      };
+    }
+    render();
+  }
+
+  function onModalComplete(): void {
+    showingModal = false;
+    pendingPermission = null;
+    permissionResolve = null;
+    pendingQuestions = null;
+    modalQueue.shift();
+    render();
+    processQueue();
+  }
+
   let pendingPermission: PermissionPrompt | null = null;
   let permissionResolve: ((value: boolean | 'always_allow') => void) | null = null;
   let pendingQuestions: { questions: any[]; resolve: (answers: Record<string, string>) => void } | null = null;
@@ -286,19 +361,24 @@ function createPlugin(): DisplayPlugin {
           onPermissionResponse: (response: PermissionResponse) => {
             if (permissionResolve) {
               const r = permissionResolve;
-              permissionResolve = null;
-              pendingPermission = null;
+              // "始终允许": 加路径级 session 规则（如 Read(/tmp/**)），而非工具级 allow
+              if (response === 'always_allow' && pendingPermission?.filePath) {
+                const permMgr = registry?.store?.get<any>('permission:manager');
+                if (permMgr) {
+                  const parentDir = path.dirname(path.resolve(pendingPermission.filePath));
+                  permMgr.addSessionRule('allow', pendingPermission.toolName, parentDir + '/**');
+                }
+              }
               r(response === 'allow_once' ? true : response === 'always_allow' ? 'always_allow' : false);
-              render();
+              onModalComplete();
             }
           },
           pendingQuestions,
           onQuestionsResponse: (answers: Record<string, string>) => {
             if (pendingQuestions) {
               const r = pendingQuestions.resolve;
-              pendingQuestions = null;
               r(answers);
-              render();
+              onModalComplete();
             }
           },
           onModeToggle: handleModeToggle,
@@ -327,9 +407,14 @@ function createPlugin(): DisplayPlugin {
       registry = r;
       registry.setConfirmCallback(async (req) => {
         return new Promise<boolean | 'always_allow'>((resolve) => {
-          pendingPermission = { toolName: req.toolName, displayName: req.displayName, message: req.message, details: req.details, diff: req.diff, filePath: req.filePath };
-          permissionResolve = resolve;
-          render();
+          modalQueue.push({
+            id: `perm-${nextModalId++}`,
+            type: 'permission',
+            data: req,
+            resolve,
+            toolName: req.toolName,
+          });
+          processQueue();
         });
       });
       // Ink controls all terminal output; tool stdout/stderr is rendered
@@ -361,15 +446,14 @@ function createPlugin(): DisplayPlugin {
         restoreStderr = () => { if (process.stderr.write === intercept) process.stderr.write = _origWrite; };
       }
       registry.registerInteractiveHandler('ask_user_question', async (args: any) => {
-        const questions = args.questions as Array<{ question: string; header: string; options: Array<{ label: string; description: string; preview?: string }>; multiSelect?: boolean }>;
         return new Promise<ToolResponse>((resolve) => {
-          pendingQuestions = {
-            questions,
-            resolve: (answers: Record<string, string>) => {
-              resolve({ status: 'success', data: JSON.stringify({ questions, answers }) });
-            },
-          };
-          render();
+          modalQueue.push({
+            id: `ask-${nextModalId++}`,
+            type: 'ask_question',
+            data: args,
+            resolve,
+          });
+          processQueue();
         });
       });
 

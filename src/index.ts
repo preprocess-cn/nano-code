@@ -1,3 +1,4 @@
+import * as path from 'path';
 import { NanoCodeAgent } from '#src/core/agent.js';
 import { PluginRegistry } from '#src/core/plugin.js';
 import { registerBuiltinPlugin, DEFAULT_SYSTEM_PLUGINS, DEFAULT_FEATURE_PLUGINS } from '#src/bootstrap/plugin-loader.js';
@@ -76,7 +77,19 @@ async function initializePlugins(
   registry.setPluginConfig('token-budget', { ...(tbSettings ?? {}), llmClient, displayMgr });
   registry.setPluginConfig('mcp-loader', { config, debug });
 
-  // 2. Register system plugins (fs, command, memory, token-budget, file-search, mcp-loader)
+  // 1.5 Pre-configure permission plugin settings from config.permissions before system plugins load
+  if (config.permissions) {
+    const settings: Record<string, any> = {
+      mode: config.permissions.mode ?? 'default',
+      rules: config.permissions.rules,
+      additionalDirectories: (config.permissions.additionalDirectories ?? []).map(
+        (d: string) => path.resolve(process.cwd(), d),
+      ),
+    };
+    registry.setPluginConfig('permission', settings);
+  }
+
+  // 2. Register system plugins (fs, command, memory, token-budget, file-search, mcp-loader, permission)
   const systemWhitelist = getSystemWhitelist(config);
   for (const name of systemWhitelist) {
     if (config.plugins[name]) continue;
