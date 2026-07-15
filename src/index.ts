@@ -158,6 +158,16 @@ async function restoreSession(
     } else if (msg.role === 'assistant') {
       const text = msg.content ?? '';
       if (text) displayMgr.onStreamChunk({ text, agentName: 'main' });
+      if (msg.tool_calls) {
+        for (const tc of msg.tool_calls) {
+          let args: any;
+          try { args = JSON.parse(tc.function.arguments); } catch { args = tc.function.arguments; }
+          displayMgr.onToolCall({ id: tc.id, toolName: tc.function.name, args, agentName: 'main' });
+        }
+      }
+    } else if (msg.role === 'tool') {
+      const summary = (msg.content ?? '').slice(0, 200);
+      displayMgr.onToolResult({ id: msg.tool_call_id, status: 'success', message: summary, agentName: 'main' });
     }
   }
   displayMgr.onStatus({ message: MSG_SESSION_RESTORED(session.messages.length, session.updatedAt), agentName: 'main', level: 'info' });
