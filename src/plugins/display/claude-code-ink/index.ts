@@ -1,7 +1,7 @@
 import type { DisplayPlugin, StartConfig, StatusEvent, StreamEvent, ToolCallEvent, ToolResultEvent, ErrorEvent, DebugEvent, AgentEvent, BackgroundTaskEvent, StateSnapshot, MessageLevel, NotifyEvent } from '#src/display.js';
 import type { ContextAnalysis } from '#src/core/contract.js';
 import { inkRender, type Instance } from '#src/plugins/display/claude-code-ink/ink.js';
-import { InkApp, type UIMessage, type TextSegment, type PermissionPrompt, type PermissionResponse, type BackgroundTaskInfo } from '#src/plugins/display/claude-code-ink/InkApp.js';
+import { InkApp, type UIMessage, type TextSegment, type PermissionPrompt, type PermissionResponse, type BackgroundTaskInfo, type AgentRuntimeState, getAgentColor } from '#src/plugins/display/claude-code-ink/InkApp.js';
 import { ThinkStream } from '#src/plugins/display/think-stream.js';
 import type { PluginRegistry } from '#src/core/plugin.js';
 import type { AgentModeInfo } from '#src/store-keys.js';
@@ -99,6 +99,13 @@ function createPlugin(): DisplayPlugin {
   let pluginManagerResolve: (() => void) | null = null;
   // Background task display state
   let backgroundTasks: BackgroundTaskInfo[] = [];
+  // Agent runtime tracking
+  const agentStates = new Map<string, AgentRuntimeState>();
+  const agentColors: Record<string, string> = {};
+  // 指向主视图中 agent 启动摘要消息，便于 onAgentTurnEnd 更新
+  const agentStartMessages = new Map<string, UIMessage>();
+  // 定时更新 agent 进度消息的计时器（每秒刷新运行耗时）
+  let agentProgressTimer: ReturnType<typeof setInterval> | null = null;
   // Status bar state — segments map for left side, notification for right side
   let statusSegments: Record<string, string> = {};
   let notification: { source: string; message: string } | null = null;
@@ -180,6 +187,41 @@ function createPlugin(): DisplayPlugin {
     const mo = String(d.getMonth() + 1).padStart(2, '0');
     const da = String(d.getDate()).padStart(2, '0');
     return `${y}-${mo}-${da}`;
+  }
+
+  /** 从 agentName 中提取类型名（'explore_sync_abc123' → 'explore'） */
+  function extractAgentType(agentName: string): string {
+    if (agentName === 'main') return 'main';
+    const syncIdx = agentName.indexOf('_sync_');
+    if (syncIdx !== -1) return agentName.slice(0, syncIdx);
+    const bgIdx = agentName.indexOf('_bg_');
+    if (bgIdx !== -1) return agentName.slice(0, bgIdx);
+    return agentName;
+  }
+
+  /** 刷新所有运行中 agent 的进度消息文本（工具计数 + 耗时） */
+  function updateAgentProgress(): void {
+    for (const [name, state] of agentStates) {
+      if (state.status !== 'running') continue;
+      const startMsg = agentStartMessages.get(name);
+      if (!startMsg) continue;
+      const elapsed = formatDuration(Date.now() - state.startTime);
+      startMsg.text = `  ├─ ${state.type} · ${state.toolUseCount}工具 · ${elapsed}`;
+    }
+  }
+
+  function startAgentTimer(): void {
+    if (agentProgressTimer) return;
+    agentProgressTimer = setInterval(() => {
+      updateAgentProgress();
+      render();
+    }, 1000);
+  }
+
+  function stopAgentTimer(): void {
+    if (!agentProgressTimer) return;
+    clearInterval(agentProgressTimer);
+    agentProgressTimer = null;
   }
 
   function handleModeToggle(): void {
@@ -265,6 +307,8 @@ function createPlugin(): DisplayPlugin {
           llmStatus,
           llmStartTime: llmTurnStartTime,
           turnTokens: llmTurnTokens,
+          agentColorMap: agentColors,
+          agentStates: Array.from(agentStates.values()),
         }),
       );
     } catch (err) {
@@ -399,6 +443,8 @@ function createPlugin(): DisplayPlugin {
           llmStatus,
           llmStartTime: llmTurnStartTime,
           turnTokens: llmTurnTokens,
+          agentColorMap: {},
+          agentStates: [],
         }),
         { stdout: process.stdout, stdin: process.stdin, stderr: process.stderr, exitOnCtrlC: false, patchConsole: false },
       );
@@ -421,6 +467,10 @@ function createPlugin(): DisplayPlugin {
       }
       messages = [];
       backgroundTasks = [];
+      stopAgentTimer();
+      agentStates.clear();
+      agentStartMessages.clear();
+      for (const key of Object.keys(agentColors)) delete agentColors[key];
       streamAccumulator = '';
       visibleAccumulator = '';
       thinkStream = null;
@@ -444,6 +494,11 @@ function createPlugin(): DisplayPlugin {
       lastStreamTarget = null;
       lastThinkTarget = null;
       thinkingStatusMsg = null;
+      // 新对话开始，清除所有子 agent 状态（含因异常未触发 onAgentTurnEnd 的残留）
+      stopAgentTimer();
+      agentStates.clear();
+      agentStartMessages.clear();
+      for (const key of Object.keys(agentColors)) delete agentColors[key];
       // Show user's query in message list (separate kind for scroll indicator)
       messages.push({ agentName, text: input, kind: 'userInput' });
       render();
@@ -465,8 +520,11 @@ function createPlugin(): DisplayPlugin {
       }
       if (!event.message) { render(); return; }
       const kind: UIMessage['kind'] = event.level === 'warn' ? 'warn' : event.level === 'error' ? 'error' : event.level === 'success' ? 'success' : event.level === 'info' ? 'info' : 'status';
-      // 非 main agent 的结果消息：清除旧消息，仅保留最新一次执行结果
-      if (event.agentName !== 'main' && (event.level === 'success' || event.level === 'warn' || event.level === 'error')) {
+      // 非 main agent 且被 agentStates 追踪时：仅清除该 agent 的流式消息，保留启动/完成摘要
+      if (event.agentName !== 'main' && agentStates.has(event.agentName)) {
+        messages = messages.filter(m => !(m.agentName === event.agentName && (m.kind === 'stream' || m.kind === 'thinking' || m.kind === 'toolCall')));
+      } else if (event.agentName !== 'main' && (event.level === 'success' || event.level === 'warn' || event.level === 'error')) {
+        // 未追踪的 agent：旧逻辑，清除所有该 agent 消息
         messages = messages.filter(m => m.agentName !== event.agentName);
       }
       messages.push({ agentName: event.agentName, text: event.message, kind });
@@ -563,6 +621,21 @@ function createPlugin(): DisplayPlugin {
       lastThinkTarget = null;
       thinkingStatusMsg = null;
 
+      // 子 agent 工具调用：递增计数，同步更新主视图进度消息
+      if (event.agentName !== 'main') {
+        const state = agentStates.get(event.agentName);
+        if (state) {
+          state.toolUseCount++;
+          state.lastToolName = event.toolName;
+          // 更新主视图中的进度消息：工具计数 + 耗时
+          const startMsg = agentStartMessages.get(event.agentName);
+          if (startMsg) {
+            const elapsed = formatDuration(Date.now() - state.startTime);
+            startMsg.text = `  ├─ ${state.type} · ${state.toolUseCount}工具 · ${elapsed}`;
+          }
+        }
+      }
+
       // 每次 LLM 返回（调用工具前）更新本轮 token 计数
       if (registry && llmStatus === 'running') {
         const getUsage = registry.store.get<() => { inputTokens: number; outputTokens: number; totalTokens: number }>(SK.TokenBudgetGetApiUsage);
@@ -636,7 +709,33 @@ function createPlugin(): DisplayPlugin {
     },
 
     onAgentTurnStart(_event: AgentEvent): void {
-      // 避免子 agent 或重复调用重置计时器
+      const isMain = _event.agentName === 'main';
+      // 子 agent 启动：记录状态、推送到主视图
+      if (!isMain) {
+        const type = extractAgentType(_event.agentName);
+        if (!agentColors[_event.agentName]) {
+          agentColors[_event.agentName] = getAgentColor(type);
+        }
+        agentStates.set(_event.agentName, {
+          type,
+          fullName: _event.agentName,
+          status: 'running',
+          startTime: Date.now(),
+          toolUseCount: 0,
+        });
+        // 在主视图中推送启动摘要 — CC 风格：树形字符 + type + 状态
+        const statusMsg: UIMessage = {
+          agentName: 'main',
+          text: `  ├─ ${type} · 搜索中...`,
+          kind: 'info',
+        };
+        messages.push(statusMsg);
+        agentStartMessages.set(_event.agentName, statusMsg);
+        startAgentTimer();
+        render();
+        return;
+      }
+      // 主 agent — 管理 LLM 状态栏
       if (llmStatus === 'running') return;
       llmStatus = 'running';
       llmTurnStartTime = Date.now();
@@ -654,23 +753,65 @@ function createPlugin(): DisplayPlugin {
 
     onAgentTurnEnd(_event: AgentEvent): void {
       const now = Date.now();
-      const elapsedMs = now - llmTurnStartTime;
+      const isMain = _event.agentName === 'main';
+
+      // 子 agent 结束：更新状态、更新主视图摘要
+      if (!isMain) {
+        const state = agentStates.get(_event.agentName);
+        // 防止重复处理同一 agent 的 onAgentTurnEnd
+        if (state && state.status !== 'running') {
+          render();
+          return;
+        }
+        if (state) {
+          state.status = 'completed';
+          state.endTime = now;
+        }
+        // 更新主视图中的启动摘要为完成摘要 — CC 风格：└─ + 完成 + 工具计数 + 耗时
+        const startMsg = agentStartMessages.get(_event.agentName);
+        if (startMsg && state) {
+          const elapsed = formatDuration(state.endTime! - state.startTime);
+          startMsg.text = `  └─ ${state.type} · 完成 · ${state.toolUseCount}工具 · ${elapsed}`;
+          agentStartMessages.delete(_event.agentName);
+        }
+        // 仅在所有子 agent 都完成时才停止进度计时器
+        if (!Array.from(agentStates.values()).some(s => s.status === 'running')) {
+          stopAgentTimer();
+        }
+        // 子 agent 仍记录时间戳
+        const elapsedMs = state ? state.endTime! - state.startTime : 0;
+        const duration = formatDuration(elapsedMs);
+        const today = formatDate(now);
+        let ts: string;
+        if (sessionDateShown !== today) {
+          sessionDateShown = today;
+          ts = `${today} ${formatTime(now)}`;
+        } else {
+          ts = formatTime(now);
+        }
+        messages.push({
+          agentName: _event.agentName,
+          text: `完成 · ${duration} · ${ts}`,
+          kind: 'turnComplete',
+        });
+        render();
+        return;
+      }
 
       // 仅主 agent 结束 turn 时修改全局 llmStatus，子 agent 复用同一 display
       // 实例，若重置 llmStatus 会导致主 agent 状态栏计时器在子 agent 完成后过早消失
-      if (_event.agentName === 'main') {
-        llmStatus = 'idle';
-        // 更新本轮 token
-        if (registry) {
-          const getUsage = registry.store.get<() => { inputTokens: number; outputTokens: number; totalTokens: number }>(SK.TokenBudgetGetApiUsage);
-          if (getUsage) {
-            const usage = getUsage();
-            llmTurnTokens = usage.outputTokens - llmPrevTokens;
-          }
+      llmStatus = 'idle';
+      // 更新本轮 token
+      if (registry) {
+        const getUsage = registry.store.get<() => { inputTokens: number; outputTokens: number; totalTokens: number }>(SK.TokenBudgetGetApiUsage);
+        if (getUsage) {
+          const usage = getUsage();
+          llmTurnTokens = usage.outputTokens - llmPrevTokens;
         }
       }
 
       // 生成完成时间戳行
+      const elapsedMs = now - llmTurnStartTime;
       const today = formatDate(now);
       let ts: string;
       if (sessionDateShown !== today) {

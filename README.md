@@ -179,7 +179,7 @@ display:
 | 插件 | 说明 |
 |------|------|
 | `repl` | 默认（交互式），基于 `@clack/prompts` + `console` 的 REPL 交互；流分页器（大输出分段展示）、plan mode `(plan)` 提示符前缀 |
-| `claude-code-ink` | 基于 React + Ink 的全屏终端 UI，支持 ScrollBox 滚动、`--think` 思考内容灰色斜体区分、agent 前缀、keybinding 系统、多行输入（Shift+Enter / `\`+Enter 换行）、交互式问题对话框（自定义文本输入 + 确认）、ESC/Ctrl+C 关闭弹框等；内含全局 stderr 拦截，防止第三方输出腐蚀 alt-screen |
+| `claude-code-ink` | 基于 React + Ink 的全屏终端 UI，支持 ScrollBox 滚动、`--think` 思考内容灰色斜体区分、agent 前缀、keybinding 系统、多行输入（Shift+Enter / `\`+Enter 换行）、交互式问题对话框（自定义文本输入 + 确认）、ESC/Ctrl+C 关闭弹框等；内含全局 stderr 拦截，防止第三方输出腐蚀 alt-screen；**子 agent 跟踪**：消息流内联进度（树形字符 + 工具计数 + 耗时 + 实时刷新）、底部焦点环 agent 列表（↓ 切换、↑↓ 选择、Enter 查看详情、Esc 返回）、agent 完成自动回退主视图 |
 | `cli` | 非交互式 CLI 展示，AI 响应输出到 stdout，状态/错误输出到 stderr；`display.enabled: false` 时的兜底方案 |
 
 自定义展示插件可通过 `nano-code plugin install <source>` 安装，自动注册到 `~/.nano-code/presentations/`，设置 `display.plugin: <name>` 即可激活。详见 [DisplayPlugin 安装](#displayplugin-安装)。
@@ -202,6 +202,10 @@ display:
 | `@<agent名>` | 切换到对应 agent 的子视图（仅 Ink 模式） | — |
 | `Esc`（子视图中） | 返回主视图 | — |
 | `↑`/`↓`（子视图中） | 切换上一个/下一个 agent 视图 | — |
+| `↓`（有子 agent 运行中） | 焦点切换到底部 Agent 列表 | — |
+| `↑`/`↓`（Agent 列表中） | 选择上一个/下一个 agent | — |
+| `Enter`（Agent 列表中） | 查看选中 agent 的执行详情 | — |
+| `Esc`（Agent 列表中） | 焦点返回输入框 | — |
 | `Esc`（弹框中） | 权限弹框 → 拒绝并终止；问题弹框 → 取消 | 取消操作 |
 | `Ctrl+C`（弹框中） | 关闭弹框 + 终止当前 ReAct 过程 | 取消操作 |
 
@@ -473,6 +477,7 @@ nano-code --list-plugins
 - **跳过项目指令文件** — 不加载 AGENT.md，节省 token
 - **可用工具**：List（浏览结构）、Glob（路径匹配）、Grep（内容搜索）、Read（读取文件）、Bash（只读命令）、Web 搜索
 - **后台执行**：支持 `run_in_background: true`，与其他子 agent 一致
+- **内联跟踪**：Ink 模式消息流中显示实时进度（`├─ explore · N工具 · Xs`→`└─ explore · 完成 · N工具 · Xs`），底部 Agent 列表支持焦点选择和 Enter 查看详情
 
 ```bash
 # 主 agent 自动调用 Explore 搜索代码

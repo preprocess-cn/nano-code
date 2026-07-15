@@ -56,6 +56,7 @@
 | ✅ | **`plugin install` 检测 DisplayPlugin** | 安装时自动检测包中的 DisplayPlugin，写入 `~/.nano-code/presentations/`（绝对路径 re-export），全局配置注册为 `type: display`（默认 disabled），`plugin list` 显示 `[display]` 标签 |
 | ✅ | **轻量权限系统** | PluginRegistry allowlist + agent 层 permission gate + fs/command 加固，Ink 权限弹窗三选项（批准/始终允许/拒绝），`/permissions` 查看/管理已允许工具 |
 | ✅ | **交互式 `/plugin` 命令** | 会话中通过 `/plugin list/enable/disable/manage` 管理插件；Ink 下进入全屏交互式插件管理器，`↑↓`/`Enter`/`/` 搜索/Esc 退出；REPL 回退文本列表 |
+| ✅ | **子 Agent 内联跟踪** | Ink 消息流中显示 agent 实时进度（树形字符 + 工具计数 + 耗时 + 每秒刷新），底部 Agent 列表支持焦点环导航（↓ 进入、↑↓ 选择、Enter 查看详情、Esc 返回），agent 完成自动回退主视图 |
 | ✅ | **Model Registry 插件** | 声明多个 LLM 模型，`/model` 命令 + Ink 交互式选择器 + `--model` CLI 启动切换，`$ENV_VAR` 加密钥隐藏 |
 | ☐ | 插件热加载 | 运行时开关插件无需重启 |
 | ✅ | 上下文裁剪与压缩 | `/compact` 内建命令 + 基于 LLM 摘要的智能压缩，保留最近对话、移植 Claude Code 9 段总结模板 |
@@ -206,7 +207,7 @@ Ink 展示层（`claude-code-ink`）基于 React + 自研 Ink 引擎（fork 自 
 - **FIXED：子 agent 完成后主 agent 状态栏计时器消失** — 共享 display 实例下子 agent 的 onAgentTurnEnd 无条件设置全局 llmStatus='idle'，导致主 agent 仍在执行工具调用时状态栏 LLM 指示器过早消失。修复：onAgentTurnEnd 仅在 agentName === 'main' 时修改全局状态，子 agent 仅推送完成时间戳消息。
 - **FIXED：`-c` 恢复会话缺少工具调用和结果展示** — restoreSession() 遍历历史消息时仅重放 user/assistant 纯文本，忽略 assistant 消息中的 tool_calls 和 role='tool' 的工具结果消息。修复：增加对应分支，回放 onToolCall/onToolResult 事件。
 - **FIXED：`--think` 多段思考文本 dim 样式仅作用首行** — `render-node-to-output.ts` 非换行路径（`needsWrapping === false` 且 `segments.length === 1`）整段多行文本用单一 `\x1b[2m...\x1b[22m` 包裹，`output.ts` 的 `split('\n')` 把 ANSI 闭码分割到单独行导致仅首行 dim。修复：先按行分割再逐行应用样式。
-- **Ink 未实现 onAgentTurnStart/onAgentTurnEnd** — 子 agent 并行执行时无 lifecycle 显示，用户无法感知各 agent 处于什么阶段。需在 InkApp 中实现 `onAgentTurnStart`（创建 agent 状态追踪条目）和 `onAgentTurnEnd`（标记完成），配合底栏或进度组件展示多个 agent 的实时状态。
+- **FIXED：Ink 未实现 onAgentTurnStart/onAgentTurnEnd** — 子 agent 并行执行时无 lifecycle 显示，用户无法感知各 agent 处于什么阶段。已在 Ink 插件中实现 agent 状态追踪（`AgentRuntimeState`）、消息流内联进度（树形字符 + 工具计数 + 耗时 + 每秒定时刷新）、底部 Agent 列表焦点导航（↓ 进入、↑↓ 选择、Enter 查看详情、Esc 返回）、agent 完成自动回退主视图。
 - **FIXED：状态栏计时器跳变** — `sleep` 等静默命令执行期间，状态栏右侧 LLM 计时器数值跳变（如 14s→31s→76s）。根因：(1) `emoji-regex` 将 spinner 字符 `✳` (U+2733) 误判为 emoji 导致 `stringWidth` 返回 2（宽字符），spinner Box 宽度抖动挤占 timer 位置；(2) Box `width: 2` 仅含 1 字符导致第二列为空 cell，diff 引擎对空 cell 输出空 stdout 使 VirtualScreen 与终端光标不同步；(3) flexbox spacer 吸收左区宽度变化导致右区位置漂移。修复：`✳`→`✲`（非 emoji）、`spinnerChar + ' '` 填满 width=2、右区 `position: absolute` + `padEnd` 固定文本宽度。
 - **REGRESSION：`--think` 模式下计时器显示异常** — 偶发，运行 1 分钟后出现。之前已修复的计时器相关问题（跳变/消失）在 `--think` 模式下有复现。需要更多调试信息来追踪根因，目前难以稳定复现。
 

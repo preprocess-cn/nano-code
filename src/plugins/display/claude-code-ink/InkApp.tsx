@@ -6,6 +6,7 @@ import { useDeclaredCursor } from '#src/plugins/display/claude-code-ink/engine/h
 import { ColorDiff } from '#src/plugins/display/claude-code-ink/color-diff.js';
 import { Markdown, StreamingMarkdown } from '#src/plugins/display/claude-code-ink/components/Markdown.js';
 import { BackgroundTaskBar } from '#src/plugins/display/claude-code-ink/components/BackgroundTaskBar.js';
+import { AgentTrackerBar } from '#src/plugins/display/claude-code-ink/components/AgentTrackerBar.js';
 import type { DiffHunk, ContextAnalysis } from '#src/core/contract.js';
 import { QuestionsDialog } from './QuestionsDialog.js';
 import { StatusBar } from './components/StatusBar.js';
@@ -24,6 +25,35 @@ export interface UIMessage {
   segments?: TextSegment[];
   contextAnalysis?: ContextAnalysis;
   toolStatus?: 'running' | 'success' | 'error';
+}
+
+/**
+ * Ink 插件内部用于追踪子 Agent 运行状态的接口。
+ * 定义在此处而非 contract.ts，因为它是 Ink display 私有的 UI 数据类型。
+ */
+export interface AgentRuntimeState {
+  /** 从 agentName 提取的类型名，如 'explore' */
+  type: string;
+  /** 完整 agentName，如 'explore_sync_abc123' */
+  fullName: string;
+  status: 'running' | 'completed' | 'error';
+  startTime: number;
+  endTime?: number;
+  toolUseCount: number;
+  lastToolName?: string;
+}
+
+/** 8 色调色板，按 agent type 哈希映射（参考 CC 的 _FOR_SUBAGENTS_ONLY 颜色集） */
+export const AGENT_COLORS = ['#06b6d4', '#f97316', '#8b5cf6', '#22c55e', '#eab308', '#ef4444', '#ec4899', '#3b82f6'];
+
+/** 根据 agent type 名分配稳定颜色 */
+export function getAgentColor(type: string): string {
+  let hash = 0;
+  for (let i = 0; i < type.length; i++) {
+    hash = ((hash << 5) - hash) + type.charCodeAt(i);
+    hash |= 0;
+  }
+  return AGENT_COLORS[Math.abs(hash) % AGENT_COLORS.length];
 }
 
 export interface PermissionPrompt {
@@ -86,11 +116,21 @@ export interface InkAppProps {
   llmStartTime?: number;
   /** LLM 本轮累积 token */
   turnTokens?: number;
+
+  /** agentName → 颜色映射 */
+  agentColorMap?: Record<string, string>;
+  /** 子 Agent 运行时状态列表（由 index.ts 维护） */
+  agentStates?: AgentRuntimeState[];
 }
 
-function AgentLabel({ agentName }: { agentName: string }): React.ReactElement | null {
+function AgentLabel({ agentName, color }: { agentName: string; color?: string }): React.ReactElement | null {
   if (agentName === 'main') return null;
-  return React.createElement(Text, { dimColor: true }, `[${agentName}] `);
+  const agentColor = color || undefined;
+  return React.createElement(
+    Text,
+    agentColor ? { color: agentColor } : { dimColor: true },
+    `[${agentName}] `,
+  );
 }
 
 /** 工具调用状态指示器 — 参考 CC 的 ToolUseLoader */
@@ -199,7 +239,9 @@ function ContextVis({ analysis }: { analysis: ContextAnalysis }): React.ReactEle
   );
 }
 
-function MessageItem({ msg }: { msg: UIMessage }): React.ReactElement {
+function MessageItem({ msg, agentColorMap }: { msg: UIMessage; agentColorMap?: Record<string, string> }): React.ReactElement {
+  const agentLabelColor = agentColorMap?.[msg.agentName];
+
   // Context analysis visualization
   if (msg.contextAnalysis) {
     return React.createElement(ContextVis, { analysis: msg.contextAnalysis });
@@ -209,7 +251,7 @@ function MessageItem({ msg }: { msg: UIMessage }): React.ReactElement {
 
   if (msg.kind === 'stream') {
     const label = msg.agentName !== 'main'
-      ? React.createElement(AgentLabel, { agentName: msg.agentName })
+      ? React.createElement(AgentLabel, { agentName: msg.agentName, color: agentLabelColor })
       : React.createElement(Text, { color: '#a78bfa' }, '● ');
     return React.createElement(
       Box,
@@ -221,7 +263,7 @@ function MessageItem({ msg }: { msg: UIMessage }): React.ReactElement {
 
   if (isThink) {
     const label = msg.agentName !== 'main'
-      ? React.createElement(AgentLabel, { agentName: msg.agentName })
+      ? React.createElement(AgentLabel, { agentName: msg.agentName, color: agentLabelColor })
       : React.createElement(Text, { dimColor: true }, '○ ');
     return React.createElement(
       Box,
@@ -242,7 +284,7 @@ function MessageItem({ msg }: { msg: UIMessage }): React.ReactElement {
 
   if (msg.kind === 'info') {
     const label = msg.agentName !== 'main'
-      ? React.createElement(AgentLabel, { agentName: msg.agentName })
+      ? React.createElement(AgentLabel, { agentName: msg.agentName, color: agentLabelColor })
       : null;
     return React.createElement(
       Box,
@@ -295,7 +337,7 @@ function MessageItem({ msg }: { msg: UIMessage }): React.ReactElement {
     React.createElement(
       Text,
       textProps,
-      React.createElement(AgentLabel, { agentName: msg.agentName }),
+      React.createElement(AgentLabel, { agentName: msg.agentName, color: agentLabelColor }),
       msg.text,
     ),
   );
@@ -450,13 +492,24 @@ function filterSuggestions(suggestions: CommandSuggestion[], query: string): Com
     .map(r => r.s);
 }
 
-function AgentHeader({ name }: { name: string }): React.ReactElement {
+function AgentHeader({ name, state, color }: { name: string; state?: AgentRuntimeState; color?: string }): React.ReactElement {
+  const agentColor = color || '#06b6d4';
+  const statusText = state
+    ? state.status === 'running'
+      ? `运行中 · ${state.toolUseCount}工具`
+      : state.status === 'completed'
+        ? `完成 · ${state.toolUseCount}工具`
+        : '错误'
+    : '';
   return React.createElement(
     Box,
     { flexDirection: 'row', paddingX: 1, marginTop: 1 },
     React.createElement(Box, { flexDirection: 'row', flexGrow: 1 },
       React.createElement(Text, null, 'Viewing '),
-      React.createElement(Text, { color: '#06b6d4', bold: true }, `@${name}`),
+      React.createElement(Text, { color: agentColor, bold: true }, `@${name}`),
+      statusText
+        ? React.createElement(Text, { dimColor: true }, `  ·  ${statusText}`)
+        : null,
     ),
     React.createElement(Text, { dimColor: true, color: '#6b7280' }, 'Esc to return'),
   );
@@ -480,11 +533,13 @@ function offsetFromLineCol(lines: string[], lineIdx: number, col: number): numbe
 }
 
 function AppContent(props: InkAppProps): React.ReactElement {
-  const { messages, onInputSubmit, onExit, greeting, pendingPermission, onPermissionResponse, pendingQuestions, onQuestionsResponse, activeAgentName, viewAgent, onViewAgentClear, onViewAgentChange, mode } = props;
+  const { messages, onInputSubmit, onExit, greeting, pendingPermission, onPermissionResponse, pendingQuestions, onQuestionsResponse, activeAgentName, viewAgent, onViewAgentClear, onViewAgentChange, mode, agentColorMap, agentStates } = props;
   const { setRawMode } = useStdin();
   const [input, setInput] = useState('');
   const [cursorPos, setCursorPos] = useState(0);
   const [historyIdx, setHistoryIdx] = useState(-1);
+  const [focusMode, setFocusMode] = useState<'input' | 'agent-list'>('input');
+  const [trackerIndex, setTrackerIndex] = useState(0);
   const draftRef = useRef('');
   const desiredColumnRef = useRef<number | null>(null);
   const [, setScrollTick] = useState(0);
@@ -542,9 +597,21 @@ function AppContent(props: InkAppProps): React.ReactElement {
 
   const beforeCursor = input.slice(0, cursorPos);
   const lastNl = beforeCursor.lastIndexOf('\n');
+  // \n-based line index (used by up/down arrow navigation)
   const cursorLine = lastNl === -1 ? 0 : beforeCursor.split('\n').length - 1;
-  const cursorColumn = stringWidth(beforeCursor.slice(lastNl + 1));
-  const declaredCursorLine = Math.max(0, cursorLine - renderOffset);
+  const logicalColumn = stringWidth(beforeCursor.slice(lastNl + 1));
+
+  // Soft-wrap aware cursor position for terminal cursor placement.
+  // Effective input width: terminal columns minus padding (1 per side) and prompt ("> " = 2)
+  const inputWidth = Math.max(1, (process.stdout.columns ?? 80) - 4);
+  const linesBefore = beforeCursor.split('\n');
+  let visualLine = 0;
+  for (let i = 0; i < linesBefore.length - 1; i++) {
+    visualLine += Math.max(1, Math.ceil(stringWidth(linesBefore[i]) / inputWidth));
+  }
+  visualLine += Math.floor(logicalColumn / inputWidth);
+  const cursorColumn = logicalColumn % inputWidth;
+  const declaredCursorLine = Math.max(0, visualLine - renderOffset);
   const cursorRef = useDeclaredCursor({
     line: declaredCursorLine,
     column: cursorColumn,
@@ -557,6 +624,15 @@ function AppContent(props: InkAppProps): React.ReactElement {
     if (!h) return;
     return h.subscribe(() => setScrollTick(n => n + 1));
   }, []);
+
+  // 查看的 agent 执行完毕时自动回退到主视图（类似 CC 的 useTeammateViewAutoExit）
+  useEffect(() => {
+    if (!viewAgent) return;
+    const state = (agentStates ?? []).find(s => s.fullName === viewAgent);
+    if (!state || state.status === 'completed' || state.status === 'error') {
+      onViewAgentClear?.();
+    }
+  }, [viewAgent, agentStates, onViewAgentClear]);
 
   // Dynamic border color based on input prefix and view mode
   const isAtPrefix = input.startsWith('@');
@@ -761,6 +837,34 @@ function AppContent(props: InkAppProps): React.ReactElement {
       }
     }
 
+    // ── Agent 列表焦点模式键盘导航 ──
+    const trackerStates = (agentStates ?? []).filter(s => s.type && s.fullName !== 'main');
+    if (focusMode === 'agent-list') {
+      if (key.escape) {
+        setFocusMode('input');
+        setTrackerIndex(0);
+        return;
+      }
+      if (key.upArrow) {
+        setTrackerIndex(i => i <= 0 ? trackerStates.length - 1 : i - 1);
+        return;
+      }
+      if (key.downArrow) {
+        setTrackerIndex(i => i >= trackerStates.length - 1 ? 0 : i + 1);
+        return;
+      }
+      if (key.return) {
+        const safeIdx = Math.min(trackerIndex, trackerStates.length - 1);
+        const target = trackerStates[safeIdx];
+        if (target && onViewAgentChange) {
+          onViewAgentChange(target.fullName);
+        }
+        setFocusMode('input');
+        return;
+      }
+      return; // 焦点在 agent 列表时屏蔽其他输入
+    }
+
     // Up arrow: multi-line line-up, then input history
     if (key.upArrow) {
       if (viewAgent) {
@@ -776,7 +880,7 @@ function AppContent(props: InkAppProps): React.ReactElement {
       const lines = input.split('\n');
       if (lines.length > 1 && cursorLine > 0) {
         if (desiredColumnRef.current === null) {
-          desiredColumnRef.current = cursorColumn;
+          desiredColumnRef.current = logicalColumn;
         }
         const targetLine = cursorLine - 1;
         const targetDisplayWidth = stringWidth(lines[targetLine]);
@@ -812,11 +916,17 @@ function AppContent(props: InkAppProps): React.ReactElement {
         }
         return;
       }
+      // 输入模式且有 agent 列表 → 下箭头切换到 agent 列表
+      if (!input && trackerStates.length > 0) {
+        setFocusMode('agent-list');
+        setTrackerIndex(0);
+        return;
+      }
       // 多行输入：先尝试在行间移动
       const lines = input.split('\n');
       if (lines.length > 1 && cursorLine < lines.length - 1) {
         if (desiredColumnRef.current === null) {
-          desiredColumnRef.current = cursorColumn;
+          desiredColumnRef.current = logicalColumn;
         }
         const targetLine = cursorLine + 1;
         const targetDisplayWidth = stringWidth(lines[targetLine]);
@@ -1034,7 +1144,7 @@ function AppContent(props: InkAppProps): React.ReactElement {
         ScrollBox,
         { ref: scrollRef, flexGrow: 1, stickyScroll: true, paddingTop: 1 },
         ...messages.map((msg, i) =>
-          React.createElement(MessageItem, { key: i, msg }),
+          React.createElement(MessageItem, { key: i, msg, agentColorMap }),
         ),
         pendingPermission && onPermissionResponse
           ? React.createElement(PermissionDialog, {
@@ -1052,7 +1162,10 @@ function AppContent(props: InkAppProps): React.ReactElement {
     ),
     // Agent header — shown when user has switched to an agent
     activeAgentName
-      ? React.createElement(AgentHeader, { name: activeAgentName })
+      ? React.createElement(AgentHeader, {
+          name: activeAgentName,
+          color: agentColorMap?.[activeAgentName],
+        })
       : null,
     // Bottom area — flexShrink=0 prevents Yoga from compressing it
     // Claude Code style: bottom-border row for prompt + input + suggestions
@@ -1061,6 +1174,14 @@ function AppContent(props: InkAppProps): React.ReactElement {
       { flexDirection: 'column', flexShrink: 0, paddingLeft: 1, paddingRight: 1, paddingBottom: 1, marginTop: 1 },
       // Mode indicator bar — now part of StatusBar
       React.createElement(BackgroundTaskBar, { tasks: props.backgroundTasks ?? [] }),
+      // Agent 列表（可聚焦选择）
+      React.createElement(AgentTrackerBar, {
+        states: props.agentStates ?? [],
+        agentColorMap: props.agentColorMap,
+        selectedIndex: trackerIndex,
+        currentView: viewAgent,
+        focusMode,
+      }),
       React.createElement(
         Box,
         {
@@ -1102,7 +1223,7 @@ function AppContent(props: InkAppProps): React.ReactElement {
         ? React.createElement(
             Text,
             { dim: true },
-            'Agent 视图页面，输入 @ 命令切换 · Esc 返回主页面',
+            'Agent 视图 · ↑↓ 切换Agent · Esc 返回',
           )
         : null,
       React.createElement(StatusBar, {

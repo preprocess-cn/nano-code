@@ -38,6 +38,10 @@ async function createSubRegistry(
     }
   }
 
+  // 抑制子 agent 工具 stdout/stderr 直写终端（否则会破坏 Ink alt-screen）。
+  // 工具输出仍被 result 捕获，通过消息历史展示。
+  subRegistry.setOutputHandler({ stdout() {}, stderr() {} });
+
   return subRegistry;
 }
 
