@@ -215,11 +215,26 @@ display:
 
 ### 权限系统
 
-fs/command 等有副作用的工具调用会触发权限确认弹窗（Ink 模式下为三选项 Select：**批准** / **始终允许**（会话级） / **拒绝**）。工具调用信息先展示，再弹出确认：
+nano-code 内置 `permission` 系统插件，提供完整的 8 阶段权限评估管道：
+
+```
+deny 规则 → tool-ask 规则 → allow 规则（含路径级）→ 路径检查 → 
+content-ask 规则 → 安全检查 → bypassPermissions 模式 → 默认行为
+```
+
+fs/command 等有副作用的工具调用触发权限确认弹窗（Ink 模式下为三选项 Select：**批准** / **始终允许**（路径级会话规则） / **拒绝**）。工具调用信息先展示，再弹出确认：
 
 1. 用户看到 `🔧 toolName(args)` 调用信息
 2. 权限弹窗展示，选择批准/始终允许/拒绝
 3. 拒绝时也会显示被拒绝的工具调用记录
+
+#### 路径级授权（CC 对齐）
+
+点「始终允许」时自动创建**目录级路径规则**（如 `Read(/tmp/**)`），后续同目录下所有文件不再弹窗。规则通过 gitignore 风格通配匹配，支持 `/**` 递归、`/*` 直接子级、前缀匹配。
+
+#### 弹窗队列（FIFO）
+
+并行只读工具触发的多个权限请求按 FIFO 顺序排队，一次只弹一个窗。弹窗前通过评估器重检查路径级规则，已授权的直接放行，避免重复确认。
 
 #### 动态 sideEffect
 
@@ -611,12 +626,13 @@ send_message({ to: "main", summary: "查询结果", message: "users 表有 3 个
 | **command** | `"command": {}` | Bash 命令执行（含危险命令黑名单 + 权限确认弹窗 + 可选 `timeout` 参数 + `BASH_DEFAULT_TIMEOUT_MS`/`BASH_MAX_TIMEOUT_MS` 环境变量配置） |
 | **memory** | `"memory": {}` | 文件化记忆系统：MEMORY.md 索引 + topic 文件，onSystemPrompt 注入行为规则和索引，save_memory/recall_memory 工具，~/.nano-code/AGENT.md 用户全局偏好 |
 | **skills** | 系统白名单自动启用 | 14 个内置 TypeScript 技能 + 文件系统 SKILL.md 技能，`skill`/`skills_list`/`skill_view`/`run_agent` 工具 |
-| **store** | 内建默认 `InMemoryStore` | 插件间共享状态通道，`IStore` 接口可替换实现 |
+| **permission** | 系统白名单自动启用 | 8 阶段权限评估管道（deny → allow → 路径检查 → ask → safety → 默认），RuleStore 规则存储与通配匹配，PathValidator 符号链解析，`permission:evaluator` store 回调与 agent.ts 集成，弹窗队列优先于 ask_question |
 | **model-registry** | `"model-registry": { settings: { models: [...] } }` | 声明多个 LLM 模型，`/model` 切换；支持 `$ENV_VAR` 语法隐藏密钥 |
 | **agent** | 自动发现 `~/.nano-code/agents/*.yaml` | `agent-<name>` 子 agent 调用工具；`agent_task_status` 查询后台任务；`send_message` agent 间通信 |
 | **task-plan** | 内建默认注册 | Plan Mode（`enter_plan_mode`/`exit_plan_mode`） + 任务系统（`task_create`/`task_list`/`task_update`/`task_stop`） |
 | **display** | 通过 `display.plugin` 配置 | 展示层插件，支持生命周期事件（独立于 PluginRegistry） |
 | **guidance** | 内建默认注册 | Claude Code 风格 system prompt 分段（`# System`、`# Doing tasks` 等行为约束），`onBeforeRequest` 注入 `AGENT.md` 项目指令上下文 |
+| **store** | 内建默认 `InMemoryStore` | 插件间共享状态通道，`IStore` 接口可替换实现 |
 
 ### 可选插件
 
@@ -900,7 +916,7 @@ return { status: 'success', data: `[交互式提问] ...` };
 ## 测试
 
 ```bash
-npm test         # 单元测试（1001 项）
+npm test         # 单元测试（1242 项）
 npm run test:e2e # E2E 测试（11 场景，覆盖 ReAct 全链路 + 并发执行 + 混合工具）
 npm run test:all # 全部测试
 ```
