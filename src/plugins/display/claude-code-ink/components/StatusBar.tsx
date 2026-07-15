@@ -16,7 +16,7 @@ interface StatusBarProps {
 }
 
 /** Starburst 动画帧序列（CC 兼容） */
-const SPINNER_FRAMES = ['·', '✢', '✳', '✶', '✻', '✽', '✻', '✶', '✳', '✢'];
+const SPINNER_FRAMES = ['·', '✢', '✲', '✶', '✻', '✽', '✻', '✶', '✲', '✢'];
 
 /** 格式化耗时：Xs / Xm Ys / Xh Ym Zs */
 function formatElapsed(startTime: number): string {
@@ -41,20 +41,24 @@ function formatTokens(n: number): string {
  * 拆分到独立组件以隔离 hooks 调用。
  */
 function LlmSpinner({ startTime, tokens }: { startTime: number; tokens: number }): React.ReactElement {
-  const [spinnerRef, animTime] = useAnimationFrame(120);
+  const [spinnerRef, animTime] = useAnimationFrame(50);
   const frameIdx = Math.floor(animTime / 120) % SPINNER_FRAMES.length;
   const elapsedStr = formatElapsed(startTime);
   const tokenStr = formatTokens(tokens);
   const spinnerChar = SPINNER_FRAMES[frameIdx];
 
+  // 固定宽度 — timer 3 列 (0s-59s), tokens 12 列 (足以容纳 " 999 tokens")
+  const paddedTimer = elapsedStr.padEnd(3, ' ');
+  const paddedToken = ` ${tokenStr}`.padEnd(13, ' ');
+
   return React.createElement(
     React.Fragment,
     null,
-    React.createElement(Box, { key: 'spinner', ref: spinnerRef, minWidth: 2 },
-      React.createElement(Text, { color: '#ff6b35' }, spinnerChar),
+    React.createElement(Box, { key: 'spinner', ref: spinnerRef, width: 2, flexShrink: 0 },
+      React.createElement(Text, { color: '#ff6b35' }, spinnerChar + ' '),
     ),
-    React.createElement(Text, { key: 'time', dimColor: true }, elapsedStr),
-    React.createElement(Text, { key: 'tokens', dimColor: true }, ` ${tokenStr}`),
+    React.createElement(Text, { key: 'elapsed', dimColor: true }, paddedTimer),
+    React.createElement(Text, { key: 'tokens', dimColor: true }, paddedToken),
   );
 }
 
@@ -156,18 +160,17 @@ export function StatusBar({ segments, notification, llmStatus, llmStartTime, tur
       flexShrink: 0,
       paddingLeft: 1,
       paddingRight: 1,
+      flexDirection: 'row',
+      position: 'relative',
     },
     // 左侧 — 模式 + 固定状态段落
     leftChildren.length > 0
       ? React.createElement(Box, { key: 'left', flexGrow: 0, flexShrink: 0 }, ...leftChildren)
       : null,
-    // 弹性 spacer — 将右侧推到最右
+    // 右侧 — 绝对定位到右端。计时和 token 文本已固定宽度，
+    // 整个右区内容宽度恒定 18 列，Box 不发生尺寸变化，位置彻底稳定。
     hasRightContent
-      ? React.createElement(Box, { key: 'spacer', flexGrow: 1 })
-      : null,
-    // 右侧 — LLM 状态 / 通知
-    hasRightContent
-      ? React.createElement(Box, { key: 'right', flexGrow: 0, flexShrink: 0, marginLeft: 1, alignItems: 'center' }, ...rightChildren)
+      ? React.createElement(Box, { key: 'right', position: 'absolute', right: 1, flexGrow: 0, flexShrink: 0, alignItems: 'center' }, ...rightChildren)
       : null,
   );
 }

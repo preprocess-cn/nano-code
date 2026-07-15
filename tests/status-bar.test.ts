@@ -110,17 +110,17 @@ describe('StatusBar', () => {
       assert.equal(children[0].props.flexShrink, 0);
     });
 
-    it('renders spacer and right Box when notification present', () => {
+    it('renders right Box with absolute positioning when notification present', () => {
       const tree = StatusBar({
         notification: { source: 'test', message: 'hello' },
       })!;
       const children: any[] = getChildren(tree);
-      assert.equal(children.length, 2, 'should have 2 children (spacer + right)');
-      assert.equal(children[0].key, 'spacer');
-      assert.equal(children[0].props.flexGrow, 1);
-      assert.equal(children[1].key, 'right');
-      assert.equal(children[1].props.flexGrow, 0);
-      assert.equal(children[1].props.flexShrink, 0);
+      // With absolute positioning, right Box is the only child when no left content
+      const rightBox = children.find((c: any) => c.key === 'right');
+      assert.ok(rightBox, 'should have right Box');
+      assert.equal(rightBox.props.position, 'absolute');
+      assert.equal(rightBox.props.flexGrow, 0);
+      assert.equal(rightBox.props.flexShrink, 0);
     });
 
     it('renders only left Box when mode=plan with no notification (hint in left)', () => {
@@ -130,13 +130,14 @@ describe('StatusBar', () => {
       assert.equal(children[0].key, 'left');
     });
 
-    it('right Box has marginLeft=1', () => {
+    it('right Box uses absolute positioning at right edge', () => {
       const tree = StatusBar({
         notification: { source: 'test', message: 'x' },
       })!;
       const children: any[] = getChildren(tree);
       const rightBox = children.find((c: any) => c.key === 'right');
-      assert.equal(rightBox.props.marginLeft, 1);
+      assert.equal(rightBox.props.position, 'absolute');
+      assert.equal(rightBox.props.right, 1);
     });
 
     it('notification text is inside right Box, not left Box', () => {
