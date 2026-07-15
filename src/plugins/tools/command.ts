@@ -3,6 +3,7 @@ import { confirm } from '@clack/prompts';
 import { NanoPlugin } from '#src/core/plugin.js';
 import { ToolDefinition, ToolResponse, ToolContext } from '#src/core/contract.js';
 import { isReadOnlyCommand } from './command-readonly.js';
+import { interpretCommandResult } from './command-semantics.js';
 
 /**
  * [LOCK] 危险命令黑名单模式列表
@@ -179,15 +180,21 @@ export const commandPlugin: NanoPlugin = {
                 combinedLog = `${head}\n\n... [...中间日志过长 (${combinedLog.length} 字符)，系统已自动截断以节省 Context...] ...\n\n${tail}`;
               }
 
-              if (code !== 0) {
+              // 语义层解释退出码（grep 1 = 未匹配非错误，diff 1 = 有差异非错误等）
+              const semantic = interpretCommandResult(trimmedCmd, code ?? 0);
+              if (semantic.isError && code !== 0) {
                 resolve({
                   status: 'error',
                   message: `Command failed with exit code ${code}.\n${combinedLog}`
                 });
               } else {
+                // 非零但语义正常的退出码：将退出码信息追加到输出中
+                const output = code !== 0 && semantic.message
+                  ? `Exit code ${code}: ${semantic.message}\n${combinedLog}`
+                  : combinedLog;
                 resolve({
                   status: 'success',
-                  data: combinedLog
+                  data: output
                 });
               }
             });

@@ -74,7 +74,8 @@
 | ✅ | **maxTurns 非空校验** | `!= null` 替代 falsy 检查，`maxTurns: 0` 正确停止（零轮次），YAML 传入非数字时静默类型转换问题 |
 | ✅ | **工具 sideEffect 修正** | `task_create`/`task_update`/`task_stop`/`save_memory`/`skill`/`exit_plan_mode` 改为 `sideEffect: false`，内建读操作无需审批 |
 | ✅ | **动态 sideEffect** | `sideEffect` 支持 `boolean | ((args) => boolean)`，工具根据参数动态判断是否只读；移除 `toolSideEffects` 静态 Map，每次从插件 `getTools()` 动态获取 |
-| ✅ | **Bash 命令只读检测** | `command-readonly.ts` — 四层过滤算法（Shell 操作符 → 环境变量剥离 → 特殊命令 find/git/sed/awk → 安全命令白名单），70+ 只读命令自动放行 |
+| ✅ | **Bash 命令只读检测** | `command-readonly.ts` — 四层过滤算法（Shell 操作符 → 环境变量剥离 → 特殊命令 find/git/sed/awk → 安全命令白名单），70+ 只读命令自动放行；**git 全局选项跳过**（`-c key=val`、`--no-pager`、`--git-dir=path` 等）；branch/tag 列表模式（`git branch` 裸用、`--merged`、`--contains` 等） |
+| ✅ | **Bash 退出码语义解释** | `command-semantics.ts` — 参照 Claude Code 的 per-command 语义层：grep/find/diff/test 的 exit 1 为正常语义（未匹配/不可访问/有差异/条件假），非 error；其他非零仍为 error；非错误退出码输出时附带语义消息（`Exit code 1: No matches found.`） |
 | ✅ | 多轮摘要记忆 | 自动压缩默认启用（`autoCompactEnabled: true`），触发策略改为基于当前消息大小 + slide window 多次压缩，压缩前全量备份至 `.nano-code-session.pre-compact.json` |
 | ✅ | 角色模式 & 斜杠命令 | profiles/ 通过 `--profile` 启动时加载，主 agent 可通过斜杠 `/` 切换 agent；profile 运行时切换暂不支持 |
 | ✅ | 内置 Skill 系统 | 14 个对齐 Claude Code 的内置技能：review/code-review/simplify/verify/batch/debug/lorem-ipsum/update-config/remember/stuck/skillify/keybindings/commit/commit-pr |

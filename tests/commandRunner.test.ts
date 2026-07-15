@@ -80,4 +80,24 @@ describe('Command Runner 环境与执行测试', () => {
     assert.strictEqual(response.status, 'error');
     assert.match(response.message || '', /timed out/);
   });
+
+  // ── 退出码语义解释（exit 1 不总是错误） ──
+
+  test('grep 未匹配 exit=1 返回 success', async () => {
+    const response = await commandPlugin.execute('run_bash_command', { command: 'grep "__NO_MATCH_12345__" /dev/null' }, NO_CONFIRM);
+    assert.strictEqual(response.status, 'success');
+    assert.match(response.data || '', /Exit code 1: No matches found/);
+  });
+
+  test('grep 正常匹配 exit=0 返回 success', async () => {
+    const response = await commandPlugin.execute('run_bash_command', { command: 'echo "hello" | grep "hello"' }, NO_CONFIRM);
+    assert.strictEqual(response.status, 'success');
+    assert.match(response.data || '', /hello/);
+  });
+
+  test('grep 严重错误 exit=2 仍视为 error', async () => {
+    const response = await commandPlugin.execute('run_bash_command', { command: 'grep pattern /nonexistent_file_xyz_123' }, NO_CONFIRM);
+    assert.strictEqual(response.status, 'error');
+    assert.match(response.message || '', /Command failed with exit code/);
+  });
 });
