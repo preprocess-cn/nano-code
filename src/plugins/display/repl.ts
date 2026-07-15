@@ -103,12 +103,27 @@ export const replDisplay: DisplayPlugin = {
           const evalFn = registry.store?.get<any>('permission:evaluator');
           if (evalFn) {
             const req = entry.data;
-            const fakeArgs = req.filePath ? { path: req.filePath } : {};
-            const decision = await evalFn(entry.toolName, fakeArgs, false);
+            let fakeArgs: any = {};
+            if (req.filePath) {
+              fakeArgs = { path: req.filePath };
+            } else if (req.details) {
+              try {
+                const parsed = JSON.parse(req.details);
+                if (parsed?.path) fakeArgs = { path: parsed.path };
+              } catch {}
+            }
+            const sideEffect = entry.toolName
+              ? registry?.getToolSideEffect?.(entry.toolName, fakeArgs) ?? true
+              : true;
+            const decision = await evalFn(entry.toolName, fakeArgs, sideEffect);
             if (decision.behavior !== 'ask') {
-              entry.resolve(decision.behavior === 'allow' ? true : 'always_allow');
               modalQueue.shift();
               showingModal = false;
+              if (decision.behavior === 'deny') {
+                entry.resolve(false);
+              } else {
+                entry.resolve(true);
+              }
               processQueue();
               return;
             }
@@ -125,7 +140,10 @@ export const replDisplay: DisplayPlugin = {
           entry.resolve({ status: 'success', data: JSON.stringify({ questions, answers }) });
         }
       } finally {
-        modalQueue.shift();
+        // 正常路径（非重检查跳过）才需要 shift 和 unlock
+        if (modalQueue.length > 0 && modalQueue[0] === entry) {
+          modalQueue.shift();
+        }
         showingModal = false;
         processQueue();
       }

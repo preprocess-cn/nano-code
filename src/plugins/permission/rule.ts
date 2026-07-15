@@ -83,10 +83,12 @@ export function matchPathPattern(pattern: string, targetPath: string): boolean {
  * * 匹配任意字符（包括 /）
  */
 function matchGlobPattern(pattern: string, target: string): boolean {
+  const GLOBSTAR_PLACEHOLDER = '\x00__GLOBSTAR__\x00';
   const regexStr = pattern
-    .replace(/[.+^${}()|[\]\\]/g, '\\$&') // 转义正则特殊字符
-    .replace(/\*/g, '[^/]*')               // * 匹配段内任意字符
-    .replace(/\*\*/g, '.*');               // ** 匹配任意字符（跨段）
+    .replace(/\*\*/g, GLOBSTAR_PLACEHOLDER)  // 保护 ** 不被 * 替换误伤
+    .replace(/[.+^${}()|[\]\\]/g, '\\$&')    // 转义正则特殊字符
+    .replace(/\*/g, '[^/]*')                  // * 匹配段内任意字符
+    .replace(new RegExp(GLOBSTAR_PLACEHOLDER.replace(/\x00/g, '\\x00'), 'g'), '.*'); // ** 匹配任意字符（跨段）
 
   try {
     return new RegExp(`^${regexStr}$`).test(target);

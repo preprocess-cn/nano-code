@@ -293,52 +293,57 @@ export class NanoCodeAgent {
 
     if (permEval) {
       // ── 权限插件模式 ──
-      const decision = await permEval(toolName, toolArgs, sideEffect);
+      // 先检查 --skip-permission 标志
+      if (this.registry.isSkipPermissionScope()) {
+        agentConfirmed = true;
+      } else {
+        const decision = await permEval(toolName, toolArgs, sideEffect);
 
-      switch (decision.behavior) {
-        case 'deny': {
-          this.display?.onToolResult?.({
-            id: toolCall.id, status: 'rejected_by_user',
-            message: decision.message ?? '权限拒绝', agentName: this.name,
-          });
-          toolMessages.push({
-            role: 'tool', tool_call_id: toolCall.id, name: toolName,
-            content: JSON.stringify({ status: 'rejected_by_user', message: decision.message ?? '权限拒绝' }),
-          });
-          return { status: 'rejected', toolMessages };
-        }
-
-        case 'ask': {
-          const confirmCb = this.registry.getConfirmCallback();
-          if (confirmCb) {
-            const displayName = getToolDisplayName(toolName, this.registry.getAllSchemas());
-            const response = await confirmCb({
-              toolName,
-              displayName,
-              message: decision.message ?? `${displayName} 需要您的批准`,
-              details: JSON.stringify(toolArgs, null, 2).slice(0, 1000),
-              filePath: typeof toolArgs?.path === 'string' ? toolArgs.path : undefined,
+        switch (decision.behavior) {
+          case 'deny': {
+            this.display?.onToolResult?.({
+              id: toolCall.id, status: 'rejected_by_user',
+              message: decision.message ?? '权限拒绝', agentName: this.name,
             });
-            if (response === 'always_allow') {
-              this.registry.allowTool(toolName);
-              agentConfirmed = true;
-            } else if (response) {
-              agentConfirmed = true;
-            } else {
-              this.display?.onToolResult?.({ id: toolCall.id, status: 'rejected_by_user', message: '用户拒绝', agentName: this.name });
-              toolMessages.push({
-                role: 'tool', tool_call_id: toolCall.id, name: toolName,
-                content: JSON.stringify({ status: 'rejected_by_user', message: '用户拒绝工具调用' }),
-              });
-              return { status: 'rejected', toolMessages };
-            }
+            toolMessages.push({
+              role: 'tool', tool_call_id: toolCall.id, name: toolName,
+              content: JSON.stringify({ status: 'rejected_by_user', message: decision.message ?? '权限拒绝' }),
+            });
+            return { status: 'rejected', toolMessages };
           }
-          break;
-        }
 
-        case 'allow': {
-          agentConfirmed = decision.skipPermission !== false;
-          break;
+          case 'ask': {
+            const confirmCb = this.registry.getConfirmCallback();
+            if (confirmCb) {
+              const displayName = getToolDisplayName(toolName, this.registry.getAllSchemas());
+              const response = await confirmCb({
+                toolName,
+                displayName,
+                message: decision.message ?? `${displayName} 需要您的批准`,
+                details: JSON.stringify(toolArgs, null, 2).slice(0, 1000),
+                filePath: typeof toolArgs?.path === 'string' ? toolArgs.path : undefined,
+              });
+              if (response === 'always_allow') {
+                this.registry.allowTool(toolName);
+                agentConfirmed = true;
+              } else if (response) {
+                agentConfirmed = true;
+              } else {
+                this.display?.onToolResult?.({ id: toolCall.id, status: 'rejected_by_user', message: '用户拒绝', agentName: this.name });
+                toolMessages.push({
+                  role: 'tool', tool_call_id: toolCall.id, name: toolName,
+                  content: JSON.stringify({ status: 'rejected_by_user', message: '用户拒绝工具调用' }),
+                });
+                return { status: 'rejected', toolMessages };
+              }
+            }
+            break;
+          }
+
+          case 'allow': {
+            agentConfirmed = true;
+            break;
+          }
         }
       }
     } else {
@@ -380,7 +385,8 @@ export class NanoCodeAgent {
     let toolResult: ToolResponse;
     try {
       const execCtx: Partial<ToolContext> = {};
-      if (agentConfirmed) execCtx.skipPermission = true;
+      // 只读工具不设 skipPermission（保持 fs.ts 文件读取缓存正常）
+      if (agentConfirmed && sideEffect) execCtx.skipPermission = true;
       toolResult = await this.registry.execute(toolName, toolArgs, execCtx);
     } catch (err: any) {
       toolResult = { status: 'error', message: `工具 "${toolName}" 执行失败：${err.message}` };

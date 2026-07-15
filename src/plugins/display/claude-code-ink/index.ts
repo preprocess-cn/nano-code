@@ -134,7 +134,11 @@ function createPlugin(): DisplayPlugin {
         if (decision.behavior !== 'ask') {
           showingModal = false;
           modalQueue.shift();
-          entry.resolve(decision.behavior === 'allow' ? true : 'always_allow');
+          if (decision.behavior === 'deny') {
+            entry.resolve(false);
+          } else {
+            entry.resolve(decision.behavior === 'allow' ? true : 'always_allow');
+          }
           processQueue();
           return;
         }
