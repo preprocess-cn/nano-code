@@ -7,6 +7,7 @@ import { ColorDiff } from '#src/plugins/display/claude-code-ink/color-diff.js';
 import { Markdown, StreamingMarkdown } from '#src/plugins/display/claude-code-ink/components/Markdown.js';
 import { BackgroundTaskBar } from '#src/plugins/display/claude-code-ink/components/BackgroundTaskBar.js';
 import { AgentTrackerBar } from '#src/plugins/display/claude-code-ink/components/AgentTrackerBar.js';
+import { SpinnerWithVerb } from '#src/plugins/display/claude-code-ink/SpinnerWithVerb.js';
 import type { DiffHunk, ContextAnalysis } from '#src/core/contract.js';
 import { QuestionsDialog } from './QuestionsDialog.js';
 import { StatusBar } from './components/StatusBar.js';
@@ -116,6 +117,8 @@ export interface InkAppProps {
   llmStartTime?: number;
   /** LLM 本轮累积 token */
   turnTokens?: number;
+  /** 最近一次 LLM 活动时间戳（流分片/工具调用），用于 stalled 检测 */
+  llmLastTokenTime?: number;
 
   /** agentName → 颜色映射 */
   agentColorMap?: Record<string, string>;
@@ -533,7 +536,7 @@ function offsetFromLineCol(lines: string[], lineIdx: number, col: number): numbe
 }
 
 function AppContent(props: InkAppProps): React.ReactElement {
-  const { messages, onInputSubmit, onExit, greeting, pendingPermission, onPermissionResponse, pendingQuestions, onQuestionsResponse, activeAgentName, viewAgent, onViewAgentClear, onViewAgentChange, mode, agentColorMap, agentStates } = props;
+  const { messages, onInputSubmit, onExit, greeting, pendingPermission, onPermissionResponse, pendingQuestions, onQuestionsResponse, activeAgentName, viewAgent, onViewAgentClear, onViewAgentChange, mode, agentColorMap, agentStates, llmStatus, llmStartTime, turnTokens, llmLastTokenTime } = props;
   const { setRawMode } = useStdin();
   const [input, setInput] = useState('');
   const [cursorPos, setCursorPos] = useState(0);
@@ -1146,6 +1149,14 @@ function AppContent(props: InkAppProps): React.ReactElement {
         ...messages.map((msg, i) =>
           React.createElement(MessageItem, { key: i, msg, agentColorMap }),
         ),
+        llmStatus === 'running' && llmStartTime && llmStartTime > 0
+          ? React.createElement(SpinnerWithVerb, {
+              key: '__spinner__',
+              startTime: llmStartTime,
+              tokens: turnTokens ?? 0,
+              lastTokenTime: llmLastTokenTime ?? llmStartTime,
+            })
+          : null,
         pendingPermission && onPermissionResponse
           ? React.createElement(PermissionDialog, {
               ...pendingPermission,

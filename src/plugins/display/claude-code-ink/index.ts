@@ -196,6 +196,8 @@ function createPlugin(): DisplayPlugin {
   let llmTurnStartTime: number = 0;
   let llmPrevTokens: number = 0;
   let llmTurnTokens: number = 0;
+  /** 最近一次 LLM 活动时间戳，用于 stalled 检测 */
+  let llmLastTokenTime: number = 0;
   let sessionDateShown: string = ''; // 已显示完整日期的日期（YYYY-MM-DD），首个对话用
 
   function cancelExecution(): void {
@@ -391,6 +393,7 @@ function createPlugin(): DisplayPlugin {
           llmStatus,
           llmStartTime: llmTurnStartTime,
           turnTokens: llmTurnTokens,
+          llmLastTokenTime,
           agentColorMap: agentColors,
           agentStates: Array.from(agentStates.values()),
         }),
@@ -531,6 +534,7 @@ function createPlugin(): DisplayPlugin {
           llmStatus,
           llmStartTime: llmTurnStartTime,
           turnTokens: llmTurnTokens,
+          llmLastTokenTime,
           agentColorMap: {},
           agentStates: [],
         }),
@@ -582,6 +586,7 @@ function createPlugin(): DisplayPlugin {
       lastStreamTarget = null;
       lastThinkTarget = null;
       thinkingStatusMsg = null;
+      llmLastTokenTime = 0;
       // 新对话开始，清除所有子 agent 状态（含因异常未触发 onAgentTurnEnd 的残留）
       stopAgentTimer();
       agentStates.clear();
@@ -698,6 +703,7 @@ function createPlugin(): DisplayPlugin {
           lastStreamTarget = messages[messages.length - 1];
         }
       }
+      llmLastTokenTime = Date.now();
       render();
     },
 
@@ -742,6 +748,7 @@ function createPlugin(): DisplayPlugin {
         kind: 'toolCall',
         toolStatus: 'running',
       });
+      llmLastTokenTime = Date.now();
       render();
     },
 
@@ -827,6 +834,7 @@ function createPlugin(): DisplayPlugin {
       if (llmStatus === 'running') return;
       llmStatus = 'running';
       llmTurnStartTime = Date.now();
+      llmLastTokenTime = Date.now();
       // 记录当前累积 token 作为基线
       if (registry) {
         const getUsage = registry.store.get<() => { inputTokens: number; outputTokens: number; totalTokens: number }>(SK.TokenBudgetGetApiUsage);

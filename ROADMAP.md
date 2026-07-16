@@ -189,6 +189,7 @@
 | **Plan Mode 状态指示器**（底栏 plan badge + 任务数量） | ✅ 已实现 |
 | **Display 事件携带 tool_call_id**（onToolCall/onToolResult 含 id 字段，便于前后端事件关联） | ✅ 已实现 |
 | **ESC 不退出主视图**（类似 vim，ESC 仅退出编辑模式） | ✅ 已实现 |
+| **Spinner 动画 + stalled 检测**（Braille 盲文点旋转 + starburst 帧 + 3s 超时变红） | ✅ 已实现 |
 | **工具调用显示美化**（displayName + 统一 formatToolCall） | ✅ 已实现 |
 | **多行输入支持**（Shift+Enter / `\`+Enter 换行） | ✅ 已实现 |
 | **多行光标导航**（↑/↓ 在输入行间移动，到首/末行进历史，列位置保持） | ✅ 已实现 |
