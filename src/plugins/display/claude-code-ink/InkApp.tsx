@@ -555,6 +555,7 @@ function AppContent(props: InkAppProps): React.ReactElement {
   const [trackerIndex, setTrackerIndex] = useState(0);
   const draftRef = useRef('');
   const desiredColumnRef = useRef<number | null>(null);
+  const lastKeyEventRef = useRef(0);
   const [, setScrollTick] = useState(0);
   const scrollRef = useRef<ScrollBoxHandle>(null);
   const [suggestionFiltered, setSuggestionFiltered] = useState<CommandSuggestion[]>([]);
@@ -776,6 +777,13 @@ function AppContent(props: InkAppProps): React.ReactElement {
       return;
     }
 
+    // Arrow key debounce — terminal emulator 可能多发箭头事件
+    if (key.upArrow || key.downArrow) {
+      const now = Date.now();
+      if (now - lastKeyEventRef.current < 50) return;
+      lastKeyEventRef.current = now;
+    }
+
     const sb = scrollRef.current;
 
     // Page Up / Wheel Up: scroll back in history
@@ -918,15 +926,6 @@ function AppContent(props: InkAppProps): React.ReactElement {
 
     // Up arrow: multi-line line-up, then input history
     if (key.upArrow) {
-      if (viewAgent) {
-        // Agent 视图中上箭头切换到前一个 agent
-        const agents = props.viewAgents ?? [];
-        const currentIdx = agents.findIndex(a => a.name === viewAgent);
-        if (currentIdx > 0) {
-          onViewAgentChange?.(agents[currentIdx - 1].name);
-        }
-        return;
-      }
       // 多行输入：先尝试在行间移动
       const lines = input.split('\n');
       if (lines.length > 1 && cursorLine > 0) {
@@ -958,15 +957,6 @@ function AppContent(props: InkAppProps): React.ReactElement {
 
     // Down arrow: multi-line line-down, then input history
     if (key.downArrow) {
-      if (viewAgent) {
-        // Agent 视图中下箭头切换到后一个 agent
-        const agents = props.viewAgents ?? [];
-        const currentIdx = agents.findIndex(a => a.name === viewAgent);
-        if (currentIdx < agents.length - 1) {
-          onViewAgentChange?.(agents[currentIdx + 1].name);
-        }
-        return;
-      }
       // 多行输入：先尝试在行间移动
       const lines = input.split('\n');
       if (lines.length > 1 && cursorLine < lines.length - 1) {

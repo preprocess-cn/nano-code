@@ -27,19 +27,23 @@ export function AgentTrackerBar({
 
   const isInFocus = focusMode === 'agent-list';
   const isMainSelected = isInFocus && selectedIndex === 0;
+  const BASE_COLOR = '#06b6d4';
+  const isViewingMain = !currentView;
 
   return React.createElement(
     Box,
     { flexDirection: 'column', paddingLeft: 1, paddingBottom: 1 },
-    // Main 行（selectedIndex=0）
+    // Main 行 — 与子 agent 相同结构
     React.createElement(
       Box,
       { height: 1 },
       React.createElement(Text, null,
         isMainSelected
-          ? React.createElement(Text, { color: '#64748b', bold: true }, '❯ ')
+          ? React.createElement(Text, { color: BASE_COLOR, bold: true }, '❯ ')
           : React.createElement(Text, null, '  '),
-        React.createElement(Text, { dimColor: !isMainSelected }, '○ main'),
+        React.createElement(Text, { color: isViewingMain ? BASE_COLOR : undefined, dimColor: !isViewingMain },
+          `${isViewingMain ? '●' : '○'} `),
+        React.createElement(Text, { color: BASE_COLOR, bold: isMainSelected || isViewingMain }, 'main'),
       ),
     ),
     // 子 agent 行（selectedIndex=1+）
