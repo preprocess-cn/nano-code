@@ -60,7 +60,7 @@ export class MessageBus {
     if (!targetTaskId) {
       return {
         status: 'error',
-        message: `接收方 "${to}" 未找到或已结束。可用 agent_task_status 查看运行中的 agent。`,
+        message: `接收方 "${to}" 未找到或已结束。可用 agent-<name>({ query }) 工具创建新 agent。`,
       };
     }
     if (!this.mailboxes.has(targetTaskId)) {

@@ -107,7 +107,23 @@ export class PermissionManager {
       };
     }
 
-    // ── Step 3: 路径级检查 ──
+    // ── Step 3: allow 规则（在路径检查之前，用户显式授权覆盖路径边界） ──
+
+    // 工具级 allow
+    const toolAllow = this.ruleStore.matchToolAllow(toolName);
+    if (toolAllow) {
+      return { behavior: 'allow', reason: 'tool-allow' };
+    }
+
+    // 内容级 allow（含路径级 Read(/tmp/**) 模式）
+    if (matchText) {
+      const contentAllow = this.ruleStore.matchContentAllow(toolName, matchText);
+      if (contentAllow) {
+        return { behavior: 'allow', reason: 'content-allow' };
+      }
+    }
+
+    // ── Step 4: 路径级检查 ──
 
     if (content.path) {
       const isWrite = ['write_file_content', 'patch_file'].includes(toolName);
@@ -119,7 +135,7 @@ export class PermissionManager {
       }
     }
 
-    // ── Step 4: 内容级 ask 规则 ──
+    // ── Step 5: 内容级 ask 规则 ──
 
     if (matchText) {
       const contentAsk = this.ruleStore.matchContentAsk(toolName, matchText);
@@ -131,7 +147,7 @@ export class PermissionManager {
       }
     }
 
-    // ── Step 5: 安全检查 — 危险命令 ──
+    // ── Step 6: 安全检查 — 危险命令 ──
 
     if (content.command) {
       const isDangerous = DANGEROUS_COMMAND_PATTERNS.some(re => re.test(content.command!));
@@ -144,26 +160,10 @@ export class PermissionManager {
       }
     }
 
-    // ── Step 6: bypassPermissions 模式 ──
+    // ── Step 7: bypassPermissions 模式 ──
 
     if (this.mode === 'bypassPermissions') {
       return { behavior: 'allow', skipPermission: true };
-    }
-
-    // ── Step 7: allow 规则 ──
-
-    // 工具级 allow
-    const toolAllow = this.ruleStore.matchToolAllow(toolName);
-    if (toolAllow) {
-      return { behavior: 'allow', reason: 'tool-allow' };
-    }
-
-    // 内容级 allow
-    if (matchText) {
-      const contentAllow = this.ruleStore.matchContentAllow(toolName, matchText);
-      if (contentAllow) {
-        return { behavior: 'allow', reason: 'content-allow' };
-      }
     }
 
     // ── Step 8: 默认行为 ──

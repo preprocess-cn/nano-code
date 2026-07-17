@@ -103,24 +103,6 @@ export function createSkillsPlugin(
         });
       }
 
-      // run_agent — 供 simplify/batch 等技能使用子 agent
-      tools.push({
-        type: 'function',
-        function: {
-          name: 'run_agent',
-          description: '启动一个独立的子 agent 执行指定任务并返回结果。用于并行分析、代码审查等工作。',
-          parameters: {
-            type: 'object',
-            properties: {
-              query: { type: 'string', description: '子 agent 的任务描述' },
-              role: { type: 'string', description: '子 agent 的角色描述', default: '助手' },
-            },
-            required: ['query'],
-          },
-          sideEffect: false,
-        },
-      });
-
       return tools;
     },
 
@@ -132,8 +114,6 @@ export function createSkillsPlugin(
           return handleSkillView(args, disabled);
         case 'skill':
           return handleSkillExecute(args, llmClient, display, disabled, agentManager);
-        case 'run_agent':
-          return handleRunAgent(args, llmClient, display, agentManager);
         default:
           return { status: 'error', message: `Unknown tool: ${name}` };
       }
@@ -324,46 +304,6 @@ async function executeForkedSkill(
     };
   } catch (err: any) {
     return { status: 'error', message: `技能执行失败: ${err.message}` };
-  } finally {
-    if (agentManager) agentManager.removeAgent(subAgent.getName());
-  }
-}
-
-async function handleRunAgent(
-  args: any,
-  llmClient?: LLMClient,
-  display?: AgentDisplay,
-  agentManager?: AgentManager,
-): Promise<ToolResponse> {
-  const query = args?.query?.trim();
-  if (!query) return { status: 'error', message: '参数 query 不能为空' };
-  if (!llmClient) return { status: 'error', message: '子 agent 不可用：无 LLM 客户端' };
-
-  const role = args?.role?.trim() || '助手';
-
-  const subRegistry = new PluginRegistry({ store: agentManager?.getStore() });
-  subRegistry.setAgentName('run_agent');
-  subRegistry.setDefaultContext({ skipPermission: true, defaultTimeout: 120000 });
-
-  const { registerBuiltinPlugin } = await import('#src/bootstrap/plugin-loader.js');
-  await registerBuiltinPlugin(subRegistry, 'fs');
-  await registerBuiltinPlugin(subRegistry, 'command');
-  await registerBuiltinPlugin(subRegistry, 'memory');
-  await registerBuiltinPlugin(subRegistry, 'token-budget');
-  await registerBuiltinPlugin(subRegistry, 'file-search');
-
-  const subAgent = agentManager
-    ? agentManager.createAgent({ registry: subRegistry, agentRole: role, name: 'run_agent', display })
-    : new NanoCodeAgent({ registry: subRegistry, llmClient, agentRole: role, name: 'run_agent', display });
-
-  try {
-    const result = await subAgent.runTask(query);
-    return {
-      status: 'success',
-      data: result || '(子 agent 未返回内容)',
-    };
-  } catch (err: any) {
-    return { status: 'error', message: `子 agent 执行失败: ${err.message}` };
   } finally {
     if (agentManager) agentManager.removeAgent(subAgent.getName());
   }

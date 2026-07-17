@@ -57,11 +57,14 @@
 | ✅ | **权限系统（CC 对齐）** | 8 阶段权限评估管道（deny → allow → 路径检查 → ask → safety → 默认），RuleStore 路径通配 + 命令匹配，PathValidator 符号链解析，`permission:evaluator` store 回调与 agent.ts 集成，路径级授权（点「始终允许」创建 `Read(/tmp/**)` 目录规则），FIFO 弹窗队列（permission 优先于 ask_question），重检查跳过已授权路径，`/permissions` 查看/管理已允许工具 |
 | ✅ | **交互式 `/plugin` 命令** | 会话中通过 `/plugin list/enable/disable/manage` 管理插件；Ink 下进入全屏交互式插件管理器，`↑↓`/`Enter`/`/` 搜索/Esc 退出；REPL 回退文本列表 |
 | ✅ | **子 Agent 内联跟踪** | Ink 消息流中显示 agent 实时进度（树形字符 + 工具计数 + 耗时 + 每秒刷新），底部 Agent 列表支持焦点环导航（↓ 进入、↑↓ 选择、Enter 查看详情、Esc 返回），agent 完成自动回退主视图 |
+| ☐ | **Agent 定义透传 description 到 Display 层** | 所有 Agent 类型插件（内置 explore + YAML 定义）需将 `description`/`role` 传递到 Display 层，让 AgentTrackerBar 可展示 agent 描述文案（如 `explore: 快速搜索和探索代码库`） |
+| ✅ | **会话恢复 tool 状态修复** | `-c` 恢复会话时解析 content JSON 中的真实状态（rejected_by_user / error / success），替代全部硬编码 success |
+| 🐛 | **已知 bug：后台 agent 无独立 transcript** | 后台 agent 本质是独立 agent，但当前机制下其 stream/tool 消息写入 `messages[]` 后按 `agentName` 过滤，主视图看不到。但 `onAgentTurnStart` 创建的内联消息（`├─ explore · 搜索中...`）以 `agentName: 'main'` 写入，在主视图可见，与 CC 行为不一致。root cause：后台 agent 的 display 事件流与主 agent 共用同一个 `messages[]`，缺乏独立的消息存储空间 |
 | ✅ | **Model Registry 插件** | 声明多个 LLM 模型，`/model` 命令 + Ink 交互式选择器 + `--model` CLI 启动切换，`$ENV_VAR` 加密钥隐藏 |
 | ☐ | 插件热加载 | 运行时开关插件无需重启 |
 | ✅ | 上下文裁剪与压缩 | `/compact` 内建命令 + 基于 LLM 摘要的智能压缩，保留最近对话、移植 Claude Code 9 段总结模板 |
-| ✅ | 后台 agent 执行 | `agent-<name>({ query, run_in_background: true })` 异步执行，主 agent 立即返回 `taskId`，完成后自动注入结果；可同时启动多个后台 agent |
-| ✅ | Agent 任务状态查询 | `agent_task_status({ task_id? })` 工具查询单个或全部后台任务状态 |
+| ➖ | 后台 agent 执行 | 已移除。所有 agent 统一同步执行，不再区分前台/后台 |
+| ➖ | Agent 任务状态查询 | 已移除。`agent_task_status` 工具随后台执行删除 |
 | ✅ | Agent 间通信 | `send_message({ to, summary, message })` 工具，基于 `MessageBus` 单例的信箱模式，支持 agent 名称或 taskId 寻址 |
 | ✅ | Agent Coordinator 协调层 | 统一管理所有 agent 工具的注册、后台执行生命周期和 agent 间消息传递，替代逐一手动注册 |
 | ✅ | Ink 后台任务指示器 | `BackgroundTaskBar` 底栏组件，实时展示运行/完成/失败状态，5 秒自动清理 |
@@ -118,7 +121,7 @@
 | ✅ | `/diff` / `/status` 命令 | 查看 git diff 和变更状态，支持 `--staged`、`--stat` 等原生 git 参数 |
 | ~~✅ Monitor 工具~~ | ~~实时监控进程输出/日志文件事件流，覆盖「等 build 完成」「监视错误日志」场景~~ |
 | ✅ | 插件生命周期钩子增强 | `onAgentExit` 子 agent 退出清理钩子 + `setStatusBar` 状态栏段落机制 + `AgentExitContext` |
-| ☐ | Agent 工具增强 | run_agent 升级为一级工具，支持 structured_output schema、isolation 隔离模式、丰富 prompt 描述 |
+| ☐ | **Agent 工具增强** | `agent-<name>` 支持 structured_output schema、isolation 隔离模式、丰富 prompt 描述 |
 | ☐ | **Plan Mode 多 Agent 并发** | Plan mode 内自动启动多个 Explore Agent 并行扫描代码库、多个 Plan Agent 并发设计方案，类似 Claude Code 的 5 阶段工作流 |
 | ➖ | **Cron + Loop（后端）** | 旧 `node-cron` 实现已移除，迁移至 Agent 框架内置的 `CronCreate`/`CronDelete` 工具（由主循环调度，不依赖 `node-cron` 包） |
 | ➖ | **Cron + Loop（Display 适配）** | 旧 cron 已移除，新定时任务由 Agent 框架的 `onStatus({ level: 'info' })` 统一处理 |

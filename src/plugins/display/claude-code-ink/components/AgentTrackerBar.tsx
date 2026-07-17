@@ -10,71 +10,62 @@ interface AgentTrackerBarProps {
   focusMode: 'input' | 'agent-list';
 }
 
-function formatDuration(elapsedMs: number): string {
-  const totalSec = Math.round(elapsedMs / 1000);
-  if (totalSec > 60) return `${Math.floor(totalSec / 60)}m ${totalSec % 60}s`;
-  return `${totalSec}s`;
-}
-
 /**
- * AgentTrackerBar — 可聚焦的子 Agent 列表。
- * 键盘交互由 AppContent 统一管理，通过 focusMode + selectedIndex 驱动。
+ * AgentTrackerBar — 底部 Agent 任务面板。
+ * 有 running 子 agent 时显示，全部完成后自动隐藏。
  */
-export function AgentTrackerBar({ states, agentColorMap, selectedIndex, currentView, focusMode }: AgentTrackerBarProps): React.ReactElement | null {
-  const displayStates = states.filter(s => s.type && s.fullName && s.fullName !== 'main' && s.status === 'running');
-  if (displayStates.length === 0) return null;
+export function AgentTrackerBar({
+  states,
+  agentColorMap,
+  selectedIndex,
+  currentView,
+  focusMode,
+}: AgentTrackerBarProps): React.ReactElement | null {
+  const subAgents = states.filter(s => s.type && s.fullName && s.fullName !== 'main');
+  const running = subAgents.filter(s => s.status === 'running');
+  if (running.length === 0) return null;
 
-  const safeIndex = Math.min(selectedIndex, displayStates.length - 1);
   const isInFocus = focusMode === 'agent-list';
+  const isMainSelected = isInFocus && selectedIndex === 0;
 
   return React.createElement(
     Box,
     { flexDirection: 'column', paddingLeft: 1, paddingBottom: 1 },
-    React.createElement(Text, { dimColor: true }, '── Agent ─────────────────────────────'),
-    ...displayStates.map((s, i) => {
-      const isSelected = i === safeIndex;
+    // Main 行（selectedIndex=0）
+    React.createElement(
+      Box,
+      { height: 1 },
+      React.createElement(Text, null,
+        isMainSelected
+          ? React.createElement(Text, { color: '#64748b', bold: true }, '❯ ')
+          : React.createElement(Text, null, '  '),
+        React.createElement(Text, { dimColor: !isMainSelected }, '○ main'),
+      ),
+    ),
+    // 子 agent 行（selectedIndex=1+）
+    ...running.map((s, i) => {
+      const isSelected = isInFocus && selectedIndex > 0 && i === selectedIndex - 1;
       const isViewing = currentView === s.fullName;
-      const isLast = i === displayStates.length - 1;
       const agentColor = agentColorMap?.[s.fullName] || '#06b6d4';
-
-      const treeChar = isLast ? '└─ ' : '├─ ';
-
-      const elapsedMs = s.status === 'running'
-        ? Date.now() - s.startTime
-        : (s.endTime ? s.endTime - s.startTime : 0);
-      const timeStr = formatDuration(elapsedMs);
-
-      // Build line: treeChar [type]  status · N工具 · Xs
-      let statusDisplay: string;
-      if (s.status === 'running') {
-        statusDisplay = `运行中 · ${s.toolUseCount}工具 · ${timeStr}`;
-      } else if (s.status === 'completed') {
-        statusDisplay = `完成 · ${s.toolUseCount}工具 · ${timeStr}`;
-      } else {
-        statusDisplay = '错误';
-      }
+      const bullet = isViewing ? '●' : '○';
 
       return React.createElement(
         Box,
-        { key: s.fullName, height: 1 },
-        React.createElement(
-          Text,
-          null,
-          // Selection pointer (only in focus mode)
-          isInFocus && isSelected
-            ? React.createElement(Text, { color: agentColor }, '▸ ')
+        { key: s.fullName, height: 1, flexDirection: 'row' },
+        React.createElement(Text, null,
+          isSelected
+            ? React.createElement(Text, { color: agentColor, bold: true }, '❯ ')
             : React.createElement(Text, null, '  '),
-          // Tree char
-          React.createElement(Text, { dimColor: true, color: isViewing ? agentColor : undefined }, treeChar),
-          // Agent type
+          React.createElement(Text, { color: isViewing ? agentColor : undefined, dimColor: !isViewing }, `${bullet} `),
           React.createElement(Text, { color: agentColor, bold: isSelected || isViewing }, s.type),
-          // Status
-          React.createElement(Text, { dimColor: !isSelected && !isViewing, bold: isViewing }, `  ${statusDisplay}`),
+          s.query
+            ? React.createElement(Text, { dimColor: true }, ` · ${s.query}`)
+            : null,
         ),
       );
     }),
     isInFocus
-      ? React.createElement(Text, { dimColor: true }, '↑↓ 选择 · Enter 查看 · Esc 返回输入')
-      : React.createElement(Text, { dimColor: true }, '↓ 切换到 Agent 列表'),
+      ? React.createElement(Text, { dimColor: true }, '↑↓ 选择 · Enter 查看 · Tab/Esc 返回')
+      : React.createElement(Text, { dimColor: true }, 'Tab 切换 Agent 列表'),
   );
 }

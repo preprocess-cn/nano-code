@@ -4,7 +4,6 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { createAgentCoordinatorPlugin } from '../src/plugins/coordinator/coordinator.js';
-import { BackgroundTaskManager } from '../src/plugins/coordinator/task-manager.js';
 import { MessageBus } from '../src/plugins/coordinator/message-bus.js';
 import { PluginRegistry } from '../src/core/plugin.js';
 import { LLMClient, ChatMessage } from '../src/core/llm.js';
@@ -35,60 +34,8 @@ describe('AgentCoordinator', () => {
   });
 
   afterEach(() => {
-    BackgroundTaskManager.resetInstance();
     MessageBus.resetInstance();
     try { fs.rmSync(agentDir, { recursive: true, force: true }); } catch {}
-  });
-
-  it('provides agent_task_status tool', () => {
-    const plugin = createAgentCoordinatorPlugin(mockLLMClient());
-    const tools = plugin.getTools();
-    assert.ok(tools.length >= 1);
-    const statusTool = tools.find((t) => t.function.name === 'agent_task_status');
-    assert.ok(statusTool, 'should have agent_task_status tool');
-    assert.equal(statusTool?.function.sideEffect, false);
-  });
-
-  it('agent_task_status returns empty list when no tasks exist', async () => {
-    const plugin = createAgentCoordinatorPlugin(mockLLMClient());
-    const result = await plugin.execute('agent_task_status', {}, {
-      skipPermission: true,
-      cwd: process.cwd(),
-      defaultTimeout: 30000,
-      sideEffect: false,
-    });
-    assert.equal(result.status, 'success');
-    const data = JSON.parse(result.data!);
-    assert.ok(Array.isArray(data));
-    assert.equal(data.length, 0);
-  });
-
-  it('agent_task_status returns specific task', async () => {
-    const mgr = BackgroundTaskManager.getInstance();
-    const id = mgr.startTask('test', 'query', async () => 'result');
-
-    const plugin = createAgentCoordinatorPlugin(mockLLMClient());
-    const result = await plugin.execute('agent_task_status', { task_id: id }, {
-      skipPermission: true,
-      cwd: process.cwd(),
-      defaultTimeout: 30000,
-      sideEffect: false,
-    });
-    assert.equal(result.status, 'success');
-    const task = JSON.parse(result.data!);
-    assert.equal(task.agentName, 'test');
-    assert.equal(task.query, 'query');
-  });
-
-  it('agent_task_status returns error for unknown task', async () => {
-    const plugin = createAgentCoordinatorPlugin(mockLLMClient());
-    const result = await plugin.execute('agent_task_status', { task_id: 'nonexistent' }, {
-      skipPermission: true,
-      cwd: process.cwd(),
-      defaultTimeout: 30000,
-      sideEffect: false,
-    });
-    assert.equal(result.status, 'error');
   });
 
   it('onSystemPrompt adds agent section when no header exists', () => {
@@ -96,22 +43,6 @@ describe('AgentCoordinator', () => {
     const result = plugin.onSystemPrompt!('You are a helpful assistant.');
     assert.ok(result.includes('## Specialist Agents'));
     assert.ok(result.includes('agent-'));
-  });
-
-  it('onSystemPrompt with running tasks includes running section', () => {
-    const mgr = BackgroundTaskManager.getInstance();
-    mgr.startTask('dba', 'analyze schema', () => new Promise(() => {}));
-
-    const plugin = createAgentCoordinatorPlugin(mockLLMClient());
-    const result = plugin.onSystemPrompt!('Base prompt.');
-    assert.ok(result.includes('Running Background Tasks'));
-    assert.ok(result.includes('dba'));
-  });
-
-  it('onSystemPrompt without running tasks omits running section', () => {
-    const plugin = createAgentCoordinatorPlugin(mockLLMClient());
-    const result = plugin.onSystemPrompt!('Base prompt.');
-    assert.ok(!result.includes('Running Background Tasks'));
   });
 
   it('onSystemPrompt does not produce duplicate headers on multiple calls', () => {
@@ -123,27 +54,12 @@ describe('AgentCoordinator', () => {
     assert.equal(count, 1, 'should have exactly one Specialist Agents header');
   });
 
-  it('onSystemPrompt with running tasks renders multiple tasks', () => {
-    const mgr = BackgroundTaskManager.getInstance();
-    const id1 = mgr.startTask('agent-a', 'task one', () => new Promise(() => {}));
-    const id2 = mgr.startTask('agent-b', 'task two', () => new Promise(() => {}));
-
-    const plugin = createAgentCoordinatorPlugin(mockLLMClient());
-    const result = plugin.onSystemPrompt!('Base prompt.');
-    assert.ok(result.includes('Running Background Tasks'));
-    assert.ok(result.includes('agent-a'));
-    assert.ok(result.includes('agent-b'));
-    assert.ok(result.includes(id1));
-    assert.ok(result.includes(id2));
-  });
-
-  it('onSystemPrompt includes all subsections when agents exist', () => {
+  it('onSystemPrompt includes usage subsections when agents exist', () => {
     const plugin = createAgentCoordinatorPlugin(mockLLMClient(), undefined, undefined, agentDir);
     const result = plugin.onSystemPrompt!('Base prompt.');
 
     if (result.includes('## Specialist Agents')) {
-      assert.ok(result.includes('同步 vs 后台'), 'should have sync vs background section');
-      assert.ok(result.includes('并发'), 'should have concurrency section');
+      assert.ok(result.includes('使用方式'), 'should have usage section');
       assert.ok(result.includes('Agent 间通信'), 'should have inter-agent communication section');
       assert.ok(result.includes('send_message'), 'should mention send_message');
     }
@@ -158,23 +74,7 @@ describe('AgentCoordinator', () => {
     assert.ok(result.length >= input.length);
   });
 
-  it('onBeforeRequest injects completed task notification', async () => {
-    const mgr = BackgroundTaskManager.getInstance();
-    mgr.startTask('test-agent', 'test query', async () => 'done!');
-    await new Promise((r) => setTimeout(r, 10));
-
-    const plugin = createAgentCoordinatorPlugin(mockLLMClient());
-    const messages: ChatMessage[] = [
-      { role: 'system', content: 'system prompt' },
-      { role: 'user', content: 'hello' },
-    ];
-    const result = plugin.onBeforeRequest!(messages);
-    assert.equal(result.length, 3); // system + notification + original user
-    assert.ok(result[1].content!.includes('已完成的后台任务'));
-    assert.ok(result[1].content!.includes('done!'));
-  });
-
-  it('onBeforeRequest is no-op when no completed tasks', () => {
+  it('onBeforeRequest is no-op when no pending messages', () => {
     const plugin = createAgentCoordinatorPlugin(mockLLMClient());
     const messages: ChatMessage[] = [
       { role: 'system', content: 'system prompt' },
@@ -183,23 +83,6 @@ describe('AgentCoordinator', () => {
     const result = plugin.onBeforeRequest!(messages);
     assert.equal(result, messages);
     assert.equal(result.length, 2);
-  });
-
-  it('onBeforeRequest injects error notification', async () => {
-    const mgr = BackgroundTaskManager.getInstance();
-    mgr.startTask('test-agent', 'risky query', async () => {
-      throw new Error('fail');
-    });
-    await new Promise((r) => setTimeout(r, 10));
-
-    const plugin = createAgentCoordinatorPlugin(mockLLMClient());
-    const messages: ChatMessage[] = [
-      { role: 'system', content: 'system prompt' },
-      { role: 'user', content: 'hi' },
-    ];
-    const result = plugin.onBeforeRequest!(messages);
-    assert.ok(result[1].content!.includes('❌'));
-    assert.ok(result[1].content!.includes('fail'));
   });
 
   it('onInit does not throw when no agent definitions', async () => {

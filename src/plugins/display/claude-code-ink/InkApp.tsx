@@ -28,6 +28,7 @@ export interface UIMessage {
   toolStatus?: 'running' | 'success' | 'error';
 }
 
+
 /**
  * Ink 插件内部用于追踪子 Agent 运行状态的接口。
  * 定义在此处而非 contract.ts，因为它是 Ink display 私有的 UI 数据类型。
@@ -42,19 +43,30 @@ export interface AgentRuntimeState {
   endTime?: number;
   toolUseCount: number;
   lastToolName?: string;
+  /** 任务描述（用户输入的 query） */
+  query?: string;
 }
 
-/** 8 色调色板，按 agent type 哈希映射（参考 CC 的 _FOR_SUBAGENTS_ONLY 颜色集） */
-export const AGENT_COLORS = ['#06b6d4', '#f97316', '#8b5cf6', '#22c55e', '#eab308', '#ef4444', '#ec4899', '#3b82f6'];
+/** CC 兼容的 8 色调色板（agent type 名 → 颜色） */
+export const AGENT_COLORS: Record<string, string> = {
+  red: '#ef4444',
+  blue: '#3b82f6',
+  green: '#22c55e',
+  yellow: '#eab308',
+  purple: '#8b5cf6',
+  orange: '#f97316',
+  pink: '#ec4899',
+  cyan: '#06b6d4',
+};
 
-/** 根据 agent type 名分配稳定颜色 */
+/** 内置 agent 的预分配颜色（CC 风格：相同 type 的所有实例颜色一致） */
+const BUILTIN_AGENT_COLORS: Record<string, string> = {
+  explore: AGENT_COLORS.cyan,
+};
+
+/** 根据 agent type 名分配稳定颜色，默认 cyan（CC 的 DEFAULT_AGENT_THEME_COLOR） */
 export function getAgentColor(type: string): string {
-  let hash = 0;
-  for (let i = 0; i < type.length; i++) {
-    hash = ((hash << 5) - hash) + type.charCodeAt(i);
-    hash |= 0;
-  }
-  return AGENT_COLORS[Math.abs(hash) % AGENT_COLORS.length];
+  return BUILTIN_AGENT_COLORS[type] || AGENT_COLORS.cyan;
 }
 
 export interface PermissionPrompt {
@@ -136,24 +148,22 @@ function AgentLabel({ agentName, color }: { agentName: string; color?: string })
   );
 }
 
-/** 工具调用状态指示器 — 参考 CC 的 ToolUseLoader */
+/** 工具调用状态指示器 — CC black-circle 风格 */
 function ToolCallIndicator({ status }: { status: 'running' | 'success' | 'error' }): React.ReactElement {
-  const [ref, time] = useAnimationFrame(status === 'running' ? 600 : null);
-  const isBlinking = status === 'running' && Math.floor(time / 600) % 2 === 0;
+  const [ref, time] = useAnimationFrame(status === 'running' ? 300 : null);
+  const isBlinking = status === 'running' && Math.floor(time / 300) % 2 === 0;
 
   if (status === 'running') {
-    const show = isBlinking;
     return React.createElement(
       Box,
       { ref, minWidth: 2 },
-      React.createElement(Text, { color: '#e0e0e0' }, show ? '●' : ' '),
+      React.createElement(Text, null, isBlinking ? '●' : ' '),
     );
   }
-  const color = status === 'success' ? '#22c55e' : '#ef4444';
   return React.createElement(
     Box,
     { minWidth: 2 },
-    React.createElement(Text, { color }, '●'),
+    React.createElement(Text, { color: status === 'success' ? '#22c55e' : '#ef4444' }, '●'),
   );
 }
 
@@ -745,7 +755,19 @@ function AppContent(props: InkAppProps): React.ReactElement {
     // When permission dialog is active, suppress normal input handling
     // (PermissionDialog has its own useInput for Allow/Deny)
     if (pendingPermission && onPermissionResponse) {
-      if (key.pageUp || key.pageDown || key.wheelUp || key.wheelDown) return; // allow scroll
+      if (key.pageUp || key.wheelUp) {
+        scrollRef.current?.scrollTo(Math.max(0, (scrollRef.current.getScrollTop() ?? 0) - 6));
+        return;
+      }
+      if (key.pageDown || key.wheelDown) {
+        const sbr = scrollRef.current;
+        if (sbr) {
+          const st = sbr.getScrollTop() + 6;
+          const maxScroll = Math.max(0, sbr.getScrollHeight() - sbr.getViewportHeight());
+          sbr.scrollTo(Math.min(st, maxScroll));
+        }
+        return;
+      }
       return; // suppress all other input
     }
     // When questions dialog is active, suppress normal input
@@ -840,8 +862,23 @@ function AppContent(props: InkAppProps): React.ReactElement {
       }
     }
 
+    // Tab 切换焦点：输入 ↔ Agent 列表（CC 兼容）
+    if (key.tab && !key.shift) {
+      if (focusMode === 'agent-list') {
+        setFocusMode('input');
+        return;
+      }
+      // 仅在 suggestion 弹窗关闭且有 running agent 时切换焦点
+      if (!isSuggestionOpen && agentStates && agentStates.some(s => s.type && s.fullName !== 'main' && s.status === 'running')) {
+        setFocusMode('agent-list');
+        setTrackerIndex(0);
+        return;
+      }
+    }
+
     // ── Agent 列表焦点模式键盘导航 ──
-    const trackerStates = (agentStates ?? []).filter(s => s.type && s.fullName !== 'main');
+    const trackerStates = (agentStates ?? [])
+      .filter(s => s.type && s.fullName !== 'main' && s.status === 'running');
     if (focusMode === 'agent-list') {
       if (key.escape) {
         setFocusMode('input');
@@ -849,23 +886,34 @@ function AppContent(props: InkAppProps): React.ReactElement {
         return;
       }
       if (key.upArrow) {
-        setTrackerIndex(i => i <= 0 ? trackerStates.length - 1 : i - 1);
+        setTrackerIndex(i => i <= 0 ? trackerStates.length : i - 1);
         return;
       }
       if (key.downArrow) {
-        setTrackerIndex(i => i >= trackerStates.length - 1 ? 0 : i + 1);
+        setTrackerIndex(i => i >= trackerStates.length ? 0 : i + 1);
         return;
       }
       if (key.return) {
-        const safeIdx = Math.min(trackerIndex, trackerStates.length - 1);
-        const target = trackerStates[safeIdx];
+        if (trackerIndex === 0) {
+          // Main 行选中：回到主视图
+          if (viewAgent) onViewAgentClear?.();
+          setFocusMode('input');
+          return;
+        }
+        const target = trackerStates[trackerIndex - 1];
         if (target && onViewAgentChange) {
           onViewAgentChange(target.fullName);
         }
         setFocusMode('input');
         return;
       }
-      return; // 焦点在 agent 列表时屏蔽其他输入
+      // Type-to-exit: 可打印字符回到输入模式（CC 兼容）
+      if (_input && !key.ctrl && !key.meta) {
+        setFocusMode('input');
+        // 不 return，让字符落到输入处理逻辑，直接插入输入框
+      } else {
+        return; // 焦点在 agent 列表时屏蔽其他非打印按键
+      }
     }
 
     // Up arrow: multi-line line-up, then input history
@@ -917,12 +965,6 @@ function AppContent(props: InkAppProps): React.ReactElement {
         if (currentIdx < agents.length - 1) {
           onViewAgentChange?.(agents[currentIdx + 1].name);
         }
-        return;
-      }
-      // 输入模式且有 agent 列表 → 下箭头切换到 agent 列表
-      if (!input && trackerStates.length > 0) {
-        setFocusMode('agent-list');
-        setTrackerIndex(0);
         return;
       }
       // 多行输入：先尝试在行间移动
@@ -1133,7 +1175,7 @@ function AppContent(props: InkAppProps): React.ReactElement {
 
   // Normal conversation view
   // Two-sibling layout (ref: Claude Code FullscreenLayout):
-  // - Scroll container: flexGrow=1 — ScrollBox wraps messages + PermissionDialog (unified scroll)
+  // - Scroll container: flexGrow=1 — ScrollBox wraps messages
   // - Bottom area: flexShrink=0 — always visible, never compressed
   return React.createElement(
     AlternateScreen,
@@ -1157,18 +1199,6 @@ function AppContent(props: InkAppProps): React.ReactElement {
               lastTokenTime: llmLastTokenTime ?? llmStartTime,
             })
           : null,
-        pendingPermission && onPermissionResponse
-          ? React.createElement(PermissionDialog, {
-              ...pendingPermission,
-              onResponse: onPermissionResponse,
-            })
-          : null,
-        pendingQuestions && onQuestionsResponse
-          ? React.createElement(QuestionsDialog, {
-              questions: pendingQuestions.questions,
-              onResponse: onQuestionsResponse,
-            })
-          : null,
       ),
     ),
     // Agent header — shown when user has switched to an agent
@@ -1185,14 +1215,7 @@ function AppContent(props: InkAppProps): React.ReactElement {
       { flexDirection: 'column', flexShrink: 0, paddingLeft: 1, paddingRight: 1, paddingBottom: 1, marginTop: 1 },
       // Mode indicator bar — now part of StatusBar
       React.createElement(BackgroundTaskBar, { tasks: props.backgroundTasks ?? [] }),
-      // Agent 列表（可聚焦选择）
-      React.createElement(AgentTrackerBar, {
-        states: props.agentStates ?? [],
-        agentColorMap: props.agentColorMap,
-        selectedIndex: trackerIndex,
-        currentView: viewAgent,
-        focusMode,
-      }),
+      // Prompt input
       React.createElement(
         Box,
         {
@@ -1237,6 +1260,27 @@ function AppContent(props: InkAppProps): React.ReactElement {
             'Agent 视图 · ↑↓ 切换Agent · Esc 返回',
           )
         : null,
+      // 权限/问题弹窗（固定在 bottom 区域，不随消息滚动）
+      pendingPermission && onPermissionResponse
+        ? React.createElement(PermissionDialog, {
+            ...pendingPermission,
+            onResponse: onPermissionResponse,
+          })
+        : null,
+      pendingQuestions && onQuestionsResponse
+        ? React.createElement(QuestionsDialog, {
+            questions: pendingQuestions.questions,
+            onResponse: onQuestionsResponse,
+          })
+        : null,
+      // Agent 任务面板（CoordinatorTaskPanel 等效，显示在 PromptInput 下方）
+      React.createElement(AgentTrackerBar, {
+        states: props.agentStates ?? [],
+        agentColorMap: props.agentColorMap,
+        selectedIndex: trackerIndex,
+        currentView: viewAgent,
+        focusMode,
+      }),
       React.createElement(StatusBar, {
         segments: props.statusSegments,
         notification: props.notification,

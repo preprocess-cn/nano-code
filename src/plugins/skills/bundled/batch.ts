@@ -31,7 +31,7 @@ ${args}
 3. **确定验证方案** — 定义如何端到端验证每个单元的结果
 
 ## Phase 2: 启动并行 Worker
-为每个工作单元调用 \`run_agent\` 并行执行。
+为每个工作单元调用 \`agent-general-purpose\` 并行执行。
 每个 worker 的 prompt 必须包含：
 - 整体项目上下文
 - 该单元的具体任务描述

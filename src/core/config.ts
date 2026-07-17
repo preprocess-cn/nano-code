@@ -82,6 +82,11 @@ export interface NanoConfig {
     /** 完全禁用 skill/skills_list/skill_view 工具（默认 false） */
     disableSkillTool?: boolean;
   };
+  /** 状态栏 shell 命令配置。输出按 KEY: VALUE 行解析并显示在 StatusBar。 */
+  statusLine?: {
+    /** Shell 命令，每 5s 执行一次，输出按行解析为 KEY: VALUE 对 */
+    command?: string;
+  };
 }
 
 /** A single validation warning about a config field. */

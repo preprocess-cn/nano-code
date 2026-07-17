@@ -31,7 +31,7 @@ Treat this diff as the review scope.
 
 ## Phase 1 — Find candidates (3 correctness angles + 3 cleanup angles + 1 altitude angle, up to 6 each)
 
-Run **7 independent finder angles** via the \`run_agent\` tool in a single message. Each surfaces **up to 6 candidate findings** with \`file\`, \`line\`, a one-line \`summary\`, and a concrete \`failure_scenario\`.
+Run **7 independent finder angles** via the \`agent-general-purpose\` tool in a single message. Each surfaces **up to 6 candidate findings** with \`file\`, \`line\`, a one-line \`summary\`, and a concrete \`failure_scenario\`.
 
 ### Angle A — line-by-line diff scan
 
@@ -67,7 +67,7 @@ Pass every candidate with a nameable failure scenario through — finders that s
 
 ## Phase 2 — Verify (1-vote, recall-biased)
 
-Dedup near-duplicates (same defect, same location, same reason → keep one). For each remaining candidate, run **one verifier** via the \`run_agent\` tool: give it the diff, the relevant file(s), and the candidate; it returns exactly one of **CONFIRMED / PLAUSIBLE / REFUTED**.
+Dedup near-duplicates (same defect, same location, same reason → keep one). For each remaining candidate, run **one verifier** via the \`agent-general-purpose\` tool: give it the diff, the relevant file(s), and the candidate; it returns exactly one of **CONFIRMED / PLAUSIBLE / REFUTED**.
 
 **PLAUSIBLE by default** — do not refute a candidate for being "speculative" or "depends on runtime state" when the state is realistic: concurrency races, nil/undefined on a rare-but-reachable path (error handler, cold cache, missing optional field), falsy-zero treated as missing, off-by-one on a boundary the code does not exclude, retry storms / partial failures, regex/allowlist that lost an anchor. These are PLAUSIBLE.
 

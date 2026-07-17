@@ -6,6 +6,7 @@ export type MessageLevel = 'status' | 'info' | 'warn' | 'error' | 'success';
 
 export interface AgentEvent {
   agentName: string;
+  query?: string;
 }
 
 export interface StatusEvent extends AgentEvent {

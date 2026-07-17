@@ -497,28 +497,9 @@ nano-code --list-plugins
 ```bash
 # 主 agent 自动调用 Explore 搜索代码
 agent-explore({ query: "搜索 src/ 下所有 .ts 文件中的 TODO 注释" })
-# 支持后台异步执行
-agent-explore({ query: "彻底分析项目架构", run_in_background: true })
+# 使用通用 agent 执行任务
+agent-general-purpose({ query: "为所有 API 端点添加请求日志" })
 ```
-
-### 后台执行
-
-子 agent 支持异步后台执行，适用于耗时任务：
-
-```bash
-# 调用子 agent 时设置 run_in_background=true
-# 主 agent 立即返回 taskId，无需等待子 agent 完成
-agent-dba({ query: "分析慢查询", run_in_background: true })
-# → { taskId: "task_1", agentName: "dba", status: "started" }
-```
-
-后台任务特性：
-- 主 agent 可同时启动多个后台 agent，各自独立执行
-- 后台 agent 完成后，结果自动注入到主 agent 的下一次 LLM 请求中
-- 通过 `agent_task_status({ task_id? })` 工具查询单个或全部任务状态
-- 后台任务状态在 `DisplayPlugin` 中以 `onBackgroundTask` 事件通知：
-  - **REPL 模式**：打印 `[后台] agent名（taskId）...` 消息
-  - **Ink 模式**：底栏显示 `BackgroundTaskBar`，实时展示运行/完成/失败状态，完成后 5 秒自动消失
 
 ### 自动后台（Auto-background）
 
@@ -625,10 +606,10 @@ send_message({ to: "main", summary: "查询结果", message: "users 表有 3 个
 | **file-search** | 系统白名单自动启用 | 文件搜索（glob）+ 内容搜索（grep），支持正则和 glob 限定范围 |
 | **command** | `"command": {}` | Bash 命令执行（含危险命令黑名单 + 权限确认弹窗 + 可选 `timeout` 参数 + `BASH_DEFAULT_TIMEOUT_MS`/`BASH_MAX_TIMEOUT_MS` 环境变量配置） |
 | **memory** | `"memory": {}` | 文件化记忆系统：MEMORY.md 索引 + topic 文件，onSystemPrompt 注入行为规则和索引，save_memory/recall_memory 工具，~/.nano-code/AGENT.md 用户全局偏好 |
-| **skills** | 系统白名单自动启用 | 14 个内置 TypeScript 技能 + 文件系统 SKILL.md 技能，`skill`/`skills_list`/`skill_view`/`run_agent` 工具 |
+| **skills** | 系统白名单自动启用 | 14 个内置 TypeScript 技能 + 文件系统 SKILL.md 技能，`skill`/`skills_list`/`skill_view` 工具 |
 | **permission** | 系统白名单自动启用 | 8 阶段权限评估管道（deny → allow → 路径检查 → ask → safety → 默认），RuleStore 规则存储与通配匹配，PathValidator 符号链解析，`permission:evaluator` store 回调与 agent.ts 集成，弹窗队列优先于 ask_question |
 | **model-registry** | `"model-registry": { settings: { models: [...] } }` | 声明多个 LLM 模型，`/model` 切换；支持 `$ENV_VAR` 语法隐藏密钥 |
-| **agent** | 自动发现 `~/.nano-code/agents/*.yaml` | `agent-<name>` 子 agent 调用工具；`agent_task_status` 查询后台任务；`send_message` agent 间通信 |
+| **agent** | 自动发现 `~/.nano-code/agents/*.yaml` | `agent-<name>` 子 agent 调用工具；`send_message` agent 间通信 |
 | **task-plan** | 内建默认注册 | Plan Mode（`enter_plan_mode`/`exit_plan_mode`） + 任务系统（`task_create`/`task_list`/`task_update`/`task_stop`） |
 | **display** | 通过 `display.plugin` 配置 | 展示层插件，支持生命周期事件（独立于 PluginRegistry） |
 | **guidance** | 内建默认注册 | Claude Code 风格 system prompt 分段（`# System`、`# Doing tasks` 等行为约束），`onBeforeRequest` 注入 `AGENT.md` 项目指令上下文 |

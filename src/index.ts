@@ -8,6 +8,7 @@ import { loadSession, saveSession } from '#src/bootstrap/session.js';
 import { handlePluginCommand, printPluginList } from '#src/plugin-cli.js';
 import { DisplayManager } from '#src/display.js';
 import { initDisplay } from '#src/plugins/display/init.js';
+import type { ToolStatus } from '#src/core/contract.js';
 import { AgentManager } from '#src/core/agent-manager.js';
 import { wait, enqueuePendingNotification } from '#src/core/message-queue.js';
 import { SK, agentCancelledKey, agentAbortKey } from '#src/store-keys.js';
@@ -76,6 +77,9 @@ async function initializePlugins(
   const tbSettings = config.plugins['token-budget']?.settings;
   registry.setPluginConfig('token-budget', { ...(tbSettings ?? {}), llmClient, displayMgr });
   registry.setPluginConfig('mcp-loader', { config, debug });
+
+  // 1.1 Pass statusLine config to display plugin
+  registry.setPluginConfig('claude-code-ink', { statusLineCommand: config.statusLine?.command });
 
   // 1.5 Pre-configure permission plugin settings from config.permissions before system plugins load
   if (config.permissions) {
@@ -180,7 +184,15 @@ async function restoreSession(
       }
     } else if (msg.role === 'tool') {
       const summary = (msg.content ?? '').slice(0, 200);
-      displayMgr.onToolResult({ id: msg.tool_call_id, status: 'success', message: summary, agentName: 'main' });
+      // Parse real status from content JSON (rejected_by_user / error / success)
+      let toolStatus: ToolStatus = 'success';
+      try {
+        const parsed = JSON.parse(msg.content ?? '{}');
+        if (parsed.status === 'rejected_by_user' || parsed.status === 'error') {
+          toolStatus = parsed.status;
+        }
+      } catch {}
+      displayMgr.onToolResult({ id: msg.tool_call_id, status: toolStatus, message: summary, agentName: 'main' });
     }
   }
   displayMgr.onStatus({ message: MSG_SESSION_RESTORED(session.messages.length, session.updatedAt), agentName: 'main', level: 'info' });

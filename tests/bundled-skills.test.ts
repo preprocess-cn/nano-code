@@ -401,19 +401,6 @@ FS version`, 'utf-8');
     assert.ok(!toolNames.includes('skill'));
     assert.ok(!toolNames.includes('skills_list'));
     assert.ok(!toolNames.includes('skill_view'));
-    // run_agent should still be available
-    assert.ok(toolNames.includes('run_agent'));
-  });
-
-  it('run_agent returns error when no LLMClient', async () => {
-    const result = await skillsPlugin.execute('run_agent', { query: 'test' }, {} as any);
-    assert.equal(result.status, 'error');
-    assert.ok(result.message?.includes('无 LLM 客户端'));
-  });
-
-  it('run_agent returns error for empty query', async () => {
-    const result = await skillsPlugin.execute('run_agent', { query: '' }, {} as any);
-    assert.equal(result.status, 'error');
   });
 
   it('onSystemPrompt adds skills section', () => {
@@ -431,10 +418,6 @@ FS version`, 'utf-8');
     assert.ok(toolNames.includes('skills_list'));
     assert.ok(toolNames.includes('skill_view'));
     assert.ok(toolNames.includes('skill'));
-    assert.ok(toolNames.includes('run_agent'));
-    const runAgentTool = tools.find((t: any) => t.function.name === 'run_agent');
-    assert.ok(runAgentTool, 'run_agent tool should be defined');
-    assert.equal(runAgentTool.function.sideEffect, false);
   });
 });
 

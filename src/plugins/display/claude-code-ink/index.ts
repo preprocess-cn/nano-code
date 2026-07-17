@@ -190,6 +190,7 @@ function createPlugin(): DisplayPlugin {
   let notification: { source: string; message: string } | null = null;
   let unsubMode: (() => void) | null = null;
   let restoreStderr: (() => void) | null = null;
+  let statusLineTimer: ReturnType<typeof setInterval> | null = null;
 
   // ── LLM 执行状态追踪 ──
   let llmStatus: 'idle' | 'running' = 'idle';
@@ -282,11 +283,12 @@ function createPlugin(): DisplayPlugin {
 
   /** 刷新所有运行中 agent 的进度消息文本（工具计数 + 耗时） */
   function updateAgentProgress(): void {
+    const now = Date.now();
     for (const [name, state] of agentStates) {
       if (state.status !== 'running') continue;
       const startMsg = agentStartMessages.get(name);
       if (!startMsg) continue;
-      const elapsed = formatDuration(Date.now() - state.startTime);
+      const elapsed = formatDuration(now - state.startTime);
       startMsg.text = `  ├─ ${state.type} · ${state.toolUseCount}工具 · ${elapsed}`;
     }
   }
@@ -485,6 +487,30 @@ function createPlugin(): DisplayPlugin {
       // 初始化斜杠命令建议（收集技能/命令/agent 列表供自动补全）
       const { initCommandSuggestions } = await import('#src/plugins/display/claude-code-ink/skills-bridge.js');
       initCommandSuggestions([]);
+
+      // StatusBar shell hook: 读取配置中的 statusLineCommand, 5s 轮询执行
+      const inkConfig = registry.getPluginConfig('claude-code-ink');
+      const statusLineCommand = inkConfig?.statusLineCommand as string | undefined;
+      if (statusLineCommand) {
+        const { exec } = await import('child_process');
+        const runStatusLine = (): void => {
+          exec(statusLineCommand, { timeout: 5000 }, (err, stdout) => {
+            if (err) return;
+            const lines = stdout.split('\n').filter(Boolean);
+            const parsed: Record<string, string> = {};
+            for (const line of lines) {
+              const sep = line.indexOf(':');
+              if (sep > 0) {
+                parsed[line.slice(0, sep).trim()] = line.slice(sep + 1).trim();
+              }
+            }
+            statusSegments = { ...statusSegments, ...parsed };
+            render();
+          });
+        };
+        runStatusLine();
+        statusLineTimer = setInterval(runStatusLine, 5000);
+      }
     },
 
     onStart(config: StartConfig): void {
@@ -549,6 +575,7 @@ function createPlugin(): DisplayPlugin {
     },
 
     onStop(message: string): void {
+      if (statusLineTimer) { clearInterval(statusLineTimer); statusLineTimer = null; }
       restoreStderr?.();
       restoreStderr = null;
       unsubMode?.();
@@ -811,17 +838,19 @@ function createPlugin(): DisplayPlugin {
         if (!agentColors[_event.agentName]) {
           agentColors[_event.agentName] = getAgentColor(type);
         }
+        const querySnippet = _event.query ? _event.query.slice(0, 60).replace(/\n/g, ' ') : '';
         agentStates.set(_event.agentName, {
           type,
           fullName: _event.agentName,
           status: 'running',
           startTime: Date.now(),
           toolUseCount: 0,
+          query: querySnippet,
         });
         // 在主视图中推送启动摘要 — CC 风格：树形字符 + type + 状态
         const statusMsg: UIMessage = {
           agentName: 'main',
-          text: `  ├─ ${type} · 搜索中...`,
+          text: `  ├─ ${type}${querySnippet ? ` · ${querySnippet}` : ''} · 搜索中...`,
           kind: 'info',
         };
         messages.push(statusMsg);

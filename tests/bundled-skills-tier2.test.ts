@@ -65,9 +65,9 @@ describe('Tier 2 — batch skill', () => {
     assert.ok(prompt.includes('Phase 3'));
   });
 
-  it('getPrompt references run_agent', async () => {
+  it('getPrompt references agent-general-purpose', async () => {
     const prompt = await skill.getPrompt('do something', { cwd: '/test' });
-    assert.ok(prompt.includes('run_agent'));
+    assert.ok(prompt.includes('agent-general-purpose'));
   });
 });
 

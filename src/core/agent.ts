@@ -87,7 +87,7 @@ export class NanoCodeAgent {
   }
 
   async runTask(userPrompt: string): Promise<string | undefined> {
-    this.display?.onAgentTurnStart?.({ agentName: this.name });
+    this.display?.onAgentTurnStart?.({ agentName: this.name, query: userPrompt });
 
     // 检查插件是否已执行自动压缩（如 token-budget），加载结果
     const compacted = this.registry.store.get<ChatMessage[]>(compactResultKey(this.name));

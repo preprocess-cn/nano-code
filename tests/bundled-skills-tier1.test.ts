@@ -73,9 +73,9 @@ describe('Tier 1 — code-review skill (7-angle deep review)', () => {
     assert.ok(prompt.includes('Phase 2'));
   });
 
-  it('getPrompt references run_agent and run_bash_command', async () => {
+  it('getPrompt references agent-general-purpose and run_bash_command', async () => {
     const prompt = await skill.getPrompt('', { cwd: '/test' });
-    assert.ok(prompt.includes('run_agent'));
+    assert.ok(prompt.includes('agent-general-purpose'));
     assert.ok(prompt.includes('run_bash_command'));
   });
 
