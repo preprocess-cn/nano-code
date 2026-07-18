@@ -183,6 +183,8 @@ function createPlugin(): DisplayPlugin {
   const agentColors: Record<string, string> = {};
   // 指向主视图中 agent 启动摘要消息，便于 onAgentTurnEnd 更新
   const agentStartMessages = new Map<string, UIMessage>();
+  /** 子 agent token 基线，用于计算每轮 token 消耗 */
+  const agentTokenBaselines = new Map<string, number>();
   // 定时更新 agent 进度消息的计时器（每秒刷新运行耗时）
   let agentProgressTimer: ReturnType<typeof setInterval> | null = null;
   // Status bar state — segments map for left side, notification for right side
@@ -589,6 +591,7 @@ function createPlugin(): DisplayPlugin {
       stopAgentTimer();
       agentStates.clear();
       agentStartMessages.clear();
+      agentTokenBaselines.clear();
       for (const key of Object.keys(agentColors)) delete agentColors[key];
       streamAccumulator = '';
       visibleAccumulator = '';
@@ -618,6 +621,7 @@ function createPlugin(): DisplayPlugin {
       stopAgentTimer();
       agentStates.clear();
       agentStartMessages.clear();
+      agentTokenBaselines.clear();
       for (const key of Object.keys(agentColors)) delete agentColors[key];
       // Show user's query in message list (separate kind for scroll indicator)
       messages.push({ agentName, text: input, kind: 'userInput' });
@@ -742,12 +746,21 @@ function createPlugin(): DisplayPlugin {
       lastThinkTarget = null;
       thinkingStatusMsg = null;
 
-      // 子 agent 工具调用：递增计数，同步更新主视图进度消息
+      // 子 agent 工具调用：递增计数 + 更新 token + 更新主视图进度
       if (event.agentName !== 'main') {
         const state = agentStates.get(event.agentName);
         if (state) {
           state.toolUseCount++;
           state.lastToolName = event.toolName;
+          // 更新 token 消耗（从当前累积减去基线）
+          if (registry) {
+            const getUsage = registry.store.get<() => { inputTokens: number; outputTokens: number; totalTokens: number }>(SK.TokenBudgetGetApiUsage);
+            if (getUsage) {
+              const usage = getUsage();
+              const baseline = agentTokenBaselines.get(event.agentName) ?? usage.outputTokens;
+              state.tokens = usage.outputTokens - baseline;
+            }
+          }
           // 更新主视图中的进度消息：工具计数 + 耗时
           const startMsg = agentStartMessages.get(event.agentName);
           if (startMsg) {
@@ -838,6 +851,16 @@ function createPlugin(): DisplayPlugin {
         if (!agentColors[_event.agentName]) {
           agentColors[_event.agentName] = getAgentColor(type);
         }
+        // 捕获 token 基线
+        let tokenBaseline = 0;
+        if (registry) {
+          const getUsage = registry.store.get<() => { inputTokens: number; outputTokens: number; totalTokens: number }>(SK.TokenBudgetGetApiUsage);
+          if (getUsage) {
+            const usage = getUsage();
+            tokenBaseline = usage.outputTokens;
+          }
+        }
+        agentTokenBaselines.set(_event.agentName, tokenBaseline);
         const querySnippet = _event.query ? _event.query.slice(0, 60).replace(/\n/g, ' ') : '';
         agentStates.set(_event.agentName, {
           type,
@@ -845,6 +868,7 @@ function createPlugin(): DisplayPlugin {
           status: 'running',
           startTime: Date.now(),
           toolUseCount: 0,
+          tokens: 0,
           query: querySnippet,
         });
         // 在主视图中推送启动摘要 — CC 风格：树形字符 + type + 状态
@@ -891,6 +915,16 @@ function createPlugin(): DisplayPlugin {
         if (state) {
           state.status = 'completed';
           state.endTime = now;
+          // 最终 token 计算
+          if (registry) {
+            const getUsage = registry.store.get<() => { inputTokens: number; outputTokens: number; totalTokens: number }>(SK.TokenBudgetGetApiUsage);
+            if (getUsage) {
+              const usage = getUsage();
+              const baseline = agentTokenBaselines.get(_event.agentName) ?? usage.outputTokens;
+              state.tokens = usage.outputTokens - baseline;
+            }
+          }
+          agentTokenBaselines.delete(_event.agentName);
         }
         // 更新主视图中的启动摘要为完成摘要 — CC 风格：└─ + 完成 + 工具计数 + 耗时
         const startMsg = agentStartMessages.get(_event.agentName);

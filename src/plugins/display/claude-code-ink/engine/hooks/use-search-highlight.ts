@@ -31,6 +31,7 @@ export function useSearchHighlight(): {
       positions: MatchPosition[]
       rowOffset: number
       currentIdx: number
+      colOffset?: number
     } | null,
   ) => void
 } {

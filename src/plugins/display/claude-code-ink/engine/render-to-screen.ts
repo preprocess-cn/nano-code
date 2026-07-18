@@ -202,20 +202,21 @@ export function scanPositions(screen: Screen, query: string): MatchPosition[] {
 }
 
 /** Write CURRENT (yellow+bold+underline) at positions[currentIdx] +
- *  rowOffset. OTHER positions are NOT styled here — the scan-highlight
- *  (applySearchHighlight with null hint) does inverse for all visible
- *  matches, including these. Two-layer: scan = 'you could go here',
- *  position = 'you ARE here'. Writing inverse again here would be a
- *  no-op (withInverse idempotent) but wasted work.
+ *  rowOffset + colOffset. OTHER positions are NOT styled here —
+ *  the scan-highlight (applySearchHighlight with null hint) does inverse
+ *  for all visible matches, including these. Two-layer: scan = 'you could
+ *  go here', position = 'you ARE here'.
  *
- *  Positions are message-relative (row 0 = message top). rowOffset =
- *  message's current screen-top (lo). Clips outside [0, height). */
+ *  Positions are element-relative (row 0 = element top). rowOffset =
+ *  element's screen-top (viewportTop + yogaTop - scrollTop).
+ *  colOffset = element's screen-left. Clips outside [0, width/height). */
 export function applyPositionedHighlight(
   screen: Screen,
   stylePool: StylePool,
   positions: MatchPosition[],
   rowOffset: number,
   currentIdx: number,
+  colOffset = 0,
 ): boolean {
   if (currentIdx < 0 || currentIdx >= positions.length) return false
   const p = positions[currentIdx]!
@@ -223,7 +224,8 @@ export function applyPositionedHighlight(
   if (row < 0 || row >= screen.height) return false
   const transform = (id: number) => stylePool.withCurrentMatch(id)
   const rowOff = row * screen.width
-  for (let col = p.col; col < p.col + p.len; col++) {
+  const startCol = p.col + colOffset
+  for (let col = startCol; col < startCol + p.len; col++) {
     if (col < 0 || col >= screen.width) continue
     const cell = cellAtIndex(screen, rowOff + col)
     setCellStyleId(screen, col, row, transform(cell.styleId))

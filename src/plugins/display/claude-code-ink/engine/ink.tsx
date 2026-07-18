@@ -135,6 +135,7 @@ export default class Ink {
     positions: MatchPosition[];
     rowOffset: number;
     currentIdx: number;
+    colOffset?: number;
   } | null = null;
   // React-land subscribers for selection state changes (useHasSelection).
   // Fired alongside the terminal repaint whenever the selection mutates
@@ -547,7 +548,7 @@ export default class Ink {
       // the message first mounted. Message-relative + rowOffset = screen.
       if (this.searchPositions) {
         const sp = this.searchPositions;
-        const posApplied = applyPositionedHighlight(frame.screen, this.stylePool, sp.positions, sp.rowOffset, sp.currentIdx);
+        const posApplied = applyPositionedHighlight(frame.screen, this.stylePool, sp.positions, sp.rowOffset, sp.currentIdx, sp.colOffset ?? 0);
         hlActive = hlActive || posApplied;
       }
     }
@@ -1110,6 +1111,7 @@ export default class Ink {
     positions: MatchPosition[];
     rowOffset: number;
     currentIdx: number;
+    colOffset?: number;
   } | null): void {
     this.searchPositions = state;
     this.scheduleRender();

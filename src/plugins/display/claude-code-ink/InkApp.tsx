@@ -11,6 +11,10 @@ import { SpinnerWithVerb } from '#src/plugins/display/claude-code-ink/SpinnerWit
 import type { DiffHunk, ContextAnalysis } from '#src/core/contract.js';
 import { QuestionsDialog } from './QuestionsDialog.js';
 import { StatusBar } from './components/StatusBar.js';
+import { SearchBox } from './SearchBox.js';
+import { useSearchHighlight } from '#src/plugins/display/claude-code-ink/engine/hooks/use-search-highlight.js';
+import type { DOMElement } from '#src/plugins/display/claude-code-ink/engine/dom.js';
+import type { MatchPosition } from '#src/plugins/display/claude-code-ink/engine/render-to-screen.js';
 
 export type PermissionResponse = 'allow_once' | 'always_allow' | 'deny';
 
@@ -42,6 +46,8 @@ export interface AgentRuntimeState {
   startTime: number;
   endTime?: number;
   toolUseCount: number;
+  /** 本轮 token 消耗 */
+  tokens: number;
   lastToolName?: string;
   /** 任务描述（用户输入的 query） */
   query?: string;
@@ -552,12 +558,28 @@ function AppContent(props: InkAppProps): React.ReactElement {
   const [cursorPos, setCursorPos] = useState(0);
   const [historyIdx, setHistoryIdx] = useState(-1);
   const [focusMode, setFocusMode] = useState<'input' | 'agent-list'>('input');
+  /** 搜索结果条目 — 平铺所有跨消息的匹配 */
+  interface SearchMatch {
+    msgIdx: number;
+    msgPositions: MatchPosition[];
+    posIdxWithinMsg: number;
+  }
+  const [searchMode, setSearchMode] = useState<'inactive' | 'active' | 'persistent'>('inactive');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchCursorPos, setSearchCursorPos] = useState(0);
+  const [searchResults, setSearchResults] = useState<SearchMatch[]>([]);
+  const [searchCurrentIdx, setSearchCurrentIdx] = useState(0);
+  const [transcriptMode, setTranscriptMode] = useState(false);
+  const transcriptModeRef = useRef(false);
+  const searchModeRef = useRef<'inactive' | 'active' | 'persistent'>('inactive');
   const [trackerIndex, setTrackerIndex] = useState(0);
   const draftRef = useRef('');
   const desiredColumnRef = useRef<number | null>(null);
   const lastKeyEventRef = useRef(0);
   const [, setScrollTick] = useState(0);
   const scrollRef = useRef<ScrollBoxHandle>(null);
+  const messageRefs = useRef<(DOMElement | null)[]>([]);
+  const searchHighlight = useSearchHighlight();
   const [suggestionFiltered, setSuggestionFiltered] = useState<CommandSuggestion[]>([]);
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(0);
   const [isSuggestionOpen, setIsSuggestionOpen] = useState(false);
@@ -632,12 +654,113 @@ function AppContent(props: InkAppProps): React.ReactElement {
     active: true,
   });
 
+  // Sync messageRefs array length to messages
+  useEffect(() => {
+    messageRefs.current.length = messages.length;
+  });
+
   // Subscribe to scroll position changes (for floating header)
   useEffect(() => {
     const h = scrollRef.current;
     if (!h) return;
     return h.subscribe(() => setScrollTick(n => n + 1));
   }, []);
+
+  // ── Search: setQuery → screen-buffer inverse highlight ──
+  useEffect(() => {
+    if (searchMode === 'inactive' || !searchQuery) {
+      searchHighlight.setQuery('');
+    } else {
+      searchHighlight.setQuery(searchQuery);
+    }
+  }, [searchQuery, searchMode, searchHighlight]);
+
+  const searchScannedRef = useRef(false);
+  const searchPrevQueryRef = useRef('');
+
+  // ── Search: scan messages and build results ──
+  useEffect(() => {
+    if (searchMode === 'inactive' || !searchQuery) {
+      setSearchResults([]);
+      setSearchCurrentIdx(0);
+      searchScannedRef.current = false;
+      return;
+    }
+    // Query changed → reset scan flag so we re-scan
+    if (searchQuery !== searchPrevQueryRef.current) {
+      searchScannedRef.current = false;
+      searchPrevQueryRef.current = searchQuery;
+    }
+    // Skip re-scan when entering persistent mode (same query, results cached)
+    if (searchScannedRef.current) return;
+    searchScannedRef.current = true;
+    const matches: SearchMatch[] = [];
+    const refs = messageRefs.current;
+    for (let i = 0; i < refs.length; i++) {
+      const el = refs[i];
+      if (!el) continue;
+      try {
+        const positions = searchHighlight.scanElement(el);
+        if (positions && positions.length > 0) {
+          for (let j = 0; j < positions.length; j++) {
+            matches.push({ msgIdx: i, msgPositions: positions, posIdxWithinMsg: j });
+          }
+        }
+      } catch {
+        // 单个消息扫描失败不阻塞整体
+      }
+    }
+    setSearchResults(matches);
+    setSearchCurrentIdx(0);
+  }, [searchQuery, searchMode, searchHighlight]);
+
+  // ── Search: sync current match position → yellow overlay ──
+  const prevSearchIdxRef = useRef(-1);
+  useEffect(() => {
+    if (searchMode === 'inactive' || searchResults.length === 0 || searchCurrentIdx >= searchResults.length) {
+      searchHighlight.setPositions(null);
+      prevSearchIdxRef.current = -1;
+      return;
+    }
+    const entry = searchResults[searchCurrentIdx];
+    const el = messageRefs.current[entry.msgIdx];
+    if (!el || !(el as any).yogaNode) {
+      searchHighlight.setPositions(null);
+      return;
+    }
+    const scrollTop = scrollRef.current?.getScrollTop() ?? 0;
+    const viewportTop = scrollRef.current?.getViewportTop() ?? 0;
+    const yogaTop = Math.ceil((el as any).yogaNode.getComputedTop());
+    const rowOffset = viewportTop + yogaTop - scrollTop;
+    // 列偏移：从元素向上遍历到 ScrollBox 内容区，累加 getComputedLeft
+    let colOffset = 0;
+    let node: any = el;
+    while (node) {
+      const yg = node.yogaNode;
+      if (yg) {
+        colOffset += Math.ceil(yg.getComputedLeft());
+      }
+      if (node.parentNode) { node = node.parentNode; } else { break; }
+    }
+    searchHighlight.setPositions({
+      positions: entry.msgPositions,
+      rowOffset,
+      colOffset,
+      currentIdx: entry.posIdxWithinMsg,
+    });
+  }, [searchCurrentIdx, searchResults, searchMode, searchHighlight, setScrollTick]);
+
+  // ── Search: scroll to current match ──
+  useEffect(() => {
+    if (searchMode === 'inactive' || searchResults.length === 0 || searchCurrentIdx >= searchResults.length) return;
+    const entry = searchResults[searchCurrentIdx];
+    const el = messageRefs.current[entry.msgIdx];
+    if (!el || !(el as any).yogaNode || !scrollRef.current) return;
+    const yogaTop = Math.ceil((el as any).yogaNode.getComputedTop());
+    const viewportH = scrollRef.current.getViewportHeight();
+    const targetScroll = Math.max(0, yogaTop - Math.floor(viewportH / 3));
+    scrollRef.current.scrollTo(targetScroll);
+  }, [searchCurrentIdx, searchResults, searchMode]);
 
   // 查看的 agent 执行完毕时自动回退到主视图（类似 CC 的 useTeammateViewAutoExit）
   useEffect(() => {
@@ -775,6 +898,128 @@ function AppContent(props: InkAppProps): React.ReactElement {
     // (QuestionsDialog has its own useInput)
     if (pendingQuestions && onQuestionsResponse) {
       return;
+    }
+
+    // ── Ctrl+O: toggle transcript mode ──
+    if (key.ctrl && _input === 'o') {
+      if (transcriptModeRef.current) {
+        // 退出 transcript 模式时清理搜索
+        searchHighlight.setQuery('');
+        searchHighlight.setPositions(null);
+        searchModeRef.current = 'inactive';
+        setSearchMode('inactive');
+        setSearchQuery('');
+        setSearchResults([]);
+        setSearchCurrentIdx(0);
+        transcriptModeRef.current = false;
+        setTranscriptMode(false);
+      } else {
+        transcriptModeRef.current = true;
+        setTranscriptMode(true);
+      }
+      return;
+    }
+
+    // ── Transcript mode: `/` opens search, `q`/Esc/Ctrl+O exits ──
+    if (transcriptModeRef.current) {
+      if (_input === '/' && searchModeRef.current === 'inactive') {
+        searchModeRef.current = 'active';
+        setSearchMode('active');
+        setSearchQuery('');
+        setSearchCursorPos(0);
+        setSearchResults([]);
+        setSearchCurrentIdx(0);
+        searchHighlight.setQuery('');
+        searchHighlight.setPositions(null);
+        return;
+      }
+      if (searchModeRef.current === 'inactive') {
+        if (_input === 'q' || key.escape) {
+          transcriptModeRef.current = false;
+          setTranscriptMode(false);
+          return;
+        }
+        // 非搜索态时屏蔽所有输入
+        if (_input) return;
+      }
+    }
+
+    // ── Search: active mode keyboard ──
+    if (searchModeRef.current === 'active') {
+      if (key.escape) {
+        searchHighlight.setQuery('');
+        searchHighlight.setPositions(null);
+        searchModeRef.current = 'inactive';
+        setSearchMode('inactive');
+        setSearchQuery('');
+        setSearchResults([]);
+        setSearchCurrentIdx(0);
+        return;
+      }
+      if (key.return) {
+        if (searchResults.length > 0) {
+          setSearchCurrentIdx(0);
+        }
+        searchModeRef.current = 'persistent';
+        setSearchMode('persistent');
+        return;
+      }
+      if (key.downArrow) {
+        if (searchResults.length > 0) {
+          setSearchCurrentIdx(i => i < searchResults.length - 1 ? i + 1 : 0);
+        }
+        return;
+      }
+      if (key.upArrow) {
+        if (searchResults.length > 0) {
+          setSearchCurrentIdx(i => i > 0 ? i - 1 : searchResults.length - 1);
+        }
+        return;
+      }
+      if (key.backspace) {
+        if (searchCursorPos > 0) {
+          setSearchQuery(prev => prev.slice(0, searchCursorPos - 1) + prev.slice(searchCursorPos));
+          setSearchCursorPos(p => p - 1);
+        }
+        return;
+      }
+      if (key.leftArrow) {
+        setSearchCursorPos(p => Math.max(0, p - 1));
+        return;
+      }
+      if (key.rightArrow) {
+        setSearchCursorPos(p => Math.min(searchQuery.length, p + 1));
+        return;
+      }
+      if (_input && !key.ctrl && !key.meta) {
+        setSearchQuery(prev => prev.slice(0, searchCursorPos) + _input + prev.slice(searchCursorPos));
+        setSearchCursorPos(p => p + _input.length);
+        return;
+      }
+      return; // suppress all other keys during search
+    }
+
+    // ── Search: persistent mode (transcript mode only: n/N/↑/↓ navigate) ──
+    if (transcriptModeRef.current && searchModeRef.current === 'persistent' && searchResults.length > 0) {
+      if (key.escape) {
+        searchHighlight.setQuery('');
+        searchHighlight.setPositions(null);
+        searchModeRef.current = 'inactive';
+        setSearchMode('inactive');
+        setSearchQuery('');
+        setSearchResults([]);
+        setSearchCurrentIdx(0);
+        return;
+      }
+      if (_input === 'n' || _input === 'N' || key.downArrow) {
+        setSearchCurrentIdx(i => i < searchResults.length - 1 ? i + 1 : 0);
+        return;
+      }
+      if (key.upArrow) {
+        setSearchCurrentIdx(i => i > 0 ? i - 1 : searchResults.length - 1);
+        return;
+      }
+      // Fall through to normal input for other keys
     }
 
     // Arrow key debounce — terminal emulator 可能多发箭头事件
@@ -1122,21 +1367,32 @@ function AppContent(props: InkAppProps): React.ReactElement {
               flexDirection: 'row',
               alignItems: 'flex-start',
               borderStyle: 'round',
-              borderColor: inputBorderColor,
+              borderColor: searchMode === 'active' ? '#7c3aed' : inputBorderColor,
               borderLeft: false, borderRight: false, borderBottom: true,
               width: '100%',
             },
-            React.createElement(Text, { bold: true, color: '#9ca3af' }, '> '),
-            React.createElement(
-              Box,
-              { ref: cursorRef, flexDirection: 'column', flexGrow: 1 },
-              ...renderedLines.map((line, i) =>
-                React.createElement(Text, { key: i }, line || ' '),
-              ),
-            ),
+            searchMode === 'active'
+              ? React.createElement(SearchBox, {
+                  query: searchQuery,
+                  cursorPos: searchCursorPos,
+                  matchCount: searchResults.length,
+                  currentMatch: searchCurrentIdx,
+                })
+              : transcriptMode
+                ? React.createElement(Text, { dimColor: true }, 'Transcript · / to search · q to exit')
+                : React.createElement(React.Fragment, null,
+                    React.createElement(Text, { bold: true, color: '#9ca3af' }, '> '),
+                    React.createElement(
+                      Box,
+                      { ref: cursorRef, flexDirection: 'column', flexGrow: 1 },
+                      ...renderedLines.map((line, i) =>
+                        React.createElement(Text, { key: i }, line || ' '),
+                      ),
+                    ),
+                  ),
           ),
-          // Suggestion popup
-          isSuggestionOpen && suggestionFiltered.length > 0
+          // Suggestion popup (hidden during search)
+          searchMode === 'inactive' && isSuggestionOpen && suggestionFiltered.length > 0
             ? React.createElement(
                 Box,
                 { flexDirection: 'column', paddingLeft: 2, paddingTop: 1 },
@@ -1179,7 +1435,12 @@ function AppContent(props: InkAppProps): React.ReactElement {
         ScrollBox,
         { ref: scrollRef, flexGrow: 1, stickyScroll: true, paddingTop: 1 },
         ...messages.map((msg, i) =>
-          React.createElement(MessageItem, { key: i, msg, agentColorMap }),
+          React.createElement(Box, {
+            key: i,
+            ref: (el: any) => { messageRefs.current[i] = el; },
+          },
+            React.createElement(MessageItem, { msg, agentColorMap }),
+          ),
         ),
         llmStatus === 'running' && llmStartTime && llmStartTime > 0
           ? React.createElement(SpinnerWithVerb, {
@@ -1205,28 +1466,39 @@ function AppContent(props: InkAppProps): React.ReactElement {
       { flexDirection: 'column', flexShrink: 0, paddingLeft: 1, paddingRight: 1, paddingBottom: 1, marginTop: 1 },
       // Mode indicator bar — now part of StatusBar
       React.createElement(BackgroundTaskBar, { tasks: props.backgroundTasks ?? [] }),
-      // Prompt input
+      // Prompt input (replaced by SearchBox during search)
       React.createElement(
         Box,
         {
           flexDirection: 'row',
           alignItems: 'flex-start',
           borderStyle: 'round',
-          borderColor: inputBorderColor,
+          borderColor: searchMode === 'active' ? '#7c3aed' : inputBorderColor,
           borderLeft: false, borderRight: false, borderBottom: true,
           width: '100%',
         },
-        React.createElement(Text, { bold: true, color: '#9ca3af' }, '> '),
-        React.createElement(
-          Box,
-          { ref: cursorRef, flexDirection: 'column', flexGrow: 1 },
-          ...renderedLines.map((line, i) =>
-            React.createElement(Text, { key: i }, line || ' '),
-          ),
-        ),
+        searchMode === 'active'
+          ? React.createElement(SearchBox, {
+              query: searchQuery,
+              cursorPos: searchCursorPos,
+              matchCount: searchResults.length,
+              currentMatch: searchCurrentIdx,
+            })
+          : transcriptMode
+            ? React.createElement(Text, { dimColor: true }, 'Transcript · / to search · q to exit')
+            : React.createElement(React.Fragment, null,
+                React.createElement(Text, { bold: true, color: '#9ca3af' }, '> '),
+                React.createElement(
+                  Box,
+                  { ref: cursorRef, flexDirection: 'column', flexGrow: 1 },
+                  ...renderedLines.map((line, i) =>
+                    React.createElement(Text, { key: i }, line || ' '),
+                  ),
+                ),
+              ),
       ),
-      // Suggestion popup
-      isSuggestionOpen && suggestionFiltered.length > 0
+      // Suggestion popup (hidden during search)
+      searchMode === 'inactive' && isSuggestionOpen && suggestionFiltered.length > 0
         ? React.createElement(
             Box,
             { flexDirection: 'column', paddingLeft: 2, paddingTop: 1 },
