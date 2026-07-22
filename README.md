@@ -324,6 +324,7 @@ TAVILY_API_KEY=tvly-xxx                    # Web 搜索功能（需要注册 Tav
 1. Shell 环境变量
 2. `$CWD/.env` — 项目级环境变量
 3. `~/.nano-code/.env` — 全局兜底
+4. Profile 配置文件中的 `env:` 段（仅 `--profile` 模式）
 
 ### agent 角色配置
 
@@ -368,10 +369,17 @@ skills:
   disabled:
     - debug
     - stuck
+  dirs:                       # 自定义技能多目录（可选），指定后不扫描 ~/.nano-code/skills
+    - /team/shared-skills
+    - /home/me/custom-skills
   # disableSkillTool: true   # 完全禁用 skill/skills_list/skill_view 工具
+
+agents:
+  dirs:                       # 自定义 agent 多目录（可选），指定后不扫描 ~/.nano-code/agents
+    - /team/shared-agents
 ```
 
-配置文件优先级高于 `.env` 文件。`apiKey` 和 `baseURL` 也可以在配置文件中指定，不配置时从 `.env` 或环境变量读取。`model`、`temperature` 等参数为可选项，不配置时使用默认值。`skills` 段在启动时检查，运行时修改需要重启生效。
+配置文件优先级高于 `.env` 文件。`apiKey` 和 `baseURL` 也可以在配置文件中指定，不配置时从 `.env` 或环境变量读取。`model`、`temperature` 等参数为可选项，不配置时使用默认值。`skills` 和 `agents` 段在启动时检查，运行时修改需要重启生效。
 
 ### 全局 YAML 配置（`~/.nano-code/config.yaml`）
 
@@ -411,7 +419,7 @@ system_prompt:
 nano-code --profile treehole
 ```
 
-Profile 文件查找顺序：项目目录 `.nano-code/profiles/<name>.json` → 全局 `~/.nano-code/profiles/<name>.json`，优先级最高的配置层可覆盖 agent 角色、插件启停和插件设置。
+Profile 文件查找顺序：项目目录 `.nano-code/profiles/<name>.json` → 全局 `~/.nano-code/profiles/<name>.json`。Profile 配置**完全独立**，不合并全局/项目 YAML，自包含 `core`、`plugins`、`skills`、`agents`、`env` 等所有配置段。未指定的字段使用内置默认值。
 
 示例（`~/.nano-code/profiles/treehole.json`）：
 ```json
@@ -425,12 +433,24 @@ Profile 文件查找顺序：项目目录 `.nano-code/profiles/<name>.json` → 
       "enabled": true,
       "settings": { "namespace": "treehole" }
     },
-    "command": { "enabled": false }
+    "command": { "enabled": false },
+    "fs": { "enabled": false }
   }
 }
 ```
 
-Profile 可以禁用不需要的默认插件（如树洞禁用 fs/command），使 nano-code 从"编程助手"变为任意角色。
+Profile 支持 `env:` 段定义环境变量（最低优先级，不覆盖 shell/`.env`）：
+
+```json
+{
+  "core": { "model": "deepseek-chat" },
+  "env": {
+    "OPENAI_API_KEY": "sk-xxx"
+  }
+}
+```
+
+Profile 可以设置独立的技能和 agent 目录，覆盖默认的 `~/.nano-code/skills` 和 `~/.nano-code/agents`，实现完全隔离的角色配置。
 
 ### Agent 工具子 agent
 
@@ -471,7 +491,8 @@ plugins:
 ```
 
 特性：
-- 自动发现 `~/.nano-code/agents/*.yaml`，注册为 `agent-<name>` 工具
+- 自动发现 `~/.nano-code/agents/*.yaml` 或 `agents.dirs` 配置的路径，注册为 `agent-<name>` 工具
+- 多目录支持：`agents.dirs` 可指定多个目录，同名 agent 按目录顺序优先
 - 子 agent 拥有独立 `PluginRegistry`，不共享主 agent 的插件
 - 输出带 `[name]` 前缀，区分各 agent 的日志
 - 递归防护：子 agent 内部不注册 agent 工具

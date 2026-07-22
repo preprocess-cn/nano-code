@@ -1,6 +1,9 @@
 import { describe, it } from 'node:test';
 import * as assert from 'node:assert/strict';
-import { _mergeConfigs, getPluginConfig, validateConfigObject } from '../src/bootstrap/config.js';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as os from 'os';
+import { _mergeConfigs, getPluginConfig, validateConfigObject, loadProfileAsConfig } from '../src/bootstrap/config.js';
 
 describe('Config — merge', () => {
 
@@ -102,6 +105,42 @@ describe('Config — merge', () => {
     // 未知 key 被忽略，已知字段保持不变
     assert.equal(typeof cfg.core, 'object');
     assert.equal(cfg.core.maxTokens, 128000);
+  });
+
+  it('merges skills config from global and project', () => {
+    const cfg = _mergeConfigs(
+      { skills: { disabled: ['skill-a'] } },
+      { skills: { dirs: ['/custom/skills'] } },
+    );
+    assert.deepEqual(cfg.skills?.disabled, ['skill-a']);
+    assert.deepEqual(cfg.skills?.dirs, ['/custom/skills']);
+  });
+
+  it('project skills overrides global skills shallowly', () => {
+    const cfg = _mergeConfigs(
+      { skills: { disabled: ['skill-a'], disableSkillTool: true } },
+      { skills: { disabled: ['skill-b'] } },
+    );
+    // project overrides disabled entirely (shallow merge)
+    assert.deepEqual(cfg.skills?.disabled, ['skill-b']);
+    // disableSkillTool from global survives (not in project)
+    assert.equal(cfg.skills?.disableSkillTool, true);
+  });
+
+  it('merges agents config from global and project', () => {
+    const cfg = _mergeConfigs(
+      null,
+      { agents: { dirs: ['/custom/agents'] } },
+    );
+    assert.deepEqual(cfg.agents?.dirs, ['/custom/agents']);
+  });
+
+  it('project agents overrides global agents shallowly', () => {
+    const cfg = _mergeConfigs(
+      { agents: { dirs: ['/global/agents'] } },
+      { agents: { dirs: ['/project/agents'] } },
+    );
+    assert.deepEqual(cfg.agents?.dirs, ['/project/agents']);
   });
 
 });
@@ -334,6 +373,72 @@ describe('Config — schema validation', () => {
     // Should catch: core.temprature (unknown), plugins.mcp1.command (missing),
     // plugins.fs.enabled (wrong type), plugins.fs.unknownField (unknown), agent.role (wrong type)
     assert.ok(warnings.length >= 4);
+  });
+
+});
+
+describe('Config — loadProfileAsConfig', () => {
+
+  it('builds config from profile file', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nc-profile-test-'));
+    try {
+      fs.writeFileSync(path.join(dir, 'test.json'), JSON.stringify({
+        core: { model: 'custom-model', temperature: 0.5 },
+        agent: { role: 'test role', greeting: 'hello' },
+        skills: { dirs: ['/custom/skills'] },
+        agents: { dirs: ['/custom/agents'] },
+      }), 'utf-8');
+      const cfg = loadProfileAsConfig(path.join(dir, 'test.json'));
+      assert.equal(cfg.core.model, 'custom-model');
+      assert.equal(cfg.core.temperature, 0.5);
+      // DEFAULT_CONFIG 的默认值仍在
+      assert.equal(cfg.core.maxTokens, 128000);
+      assert.equal(cfg.agent?.role, 'test role');
+      assert.equal(cfg.agent?.greeting, 'hello');
+      assert.deepEqual(cfg.skills?.dirs, ['/custom/skills']);
+      assert.deepEqual(cfg.agents?.dirs, ['/custom/agents']);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('profile env does not override existing env vars', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nc-profile-env-'));
+    try {
+      process.env['NANO_CODE_TEST_EXISTING'] = 'existing';
+      fs.writeFileSync(path.join(dir, 'env-test.json'), JSON.stringify({
+        core: { model: 'test' },
+        env: { NANO_CODE_TEST_EXISTING: 'should-not-override', NANO_CODE_TEST_NEW: 'new-value' },
+      }), 'utf-8');
+      const cfg = loadProfileAsConfig(path.join(dir, 'env-test.json'));
+      assert.equal(cfg.core.model, 'test');
+      assert.equal(process.env['NANO_CODE_TEST_EXISTING'], 'existing');
+      assert.equal(process.env['NANO_CODE_TEST_NEW'], 'new-value');
+    } finally {
+      delete process.env['NANO_CODE_TEST_EXISTING'];
+      delete process.env['NANO_CODE_TEST_NEW'];
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('does not merge global/project config', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nc-profile-isolation-'));
+    try {
+      fs.writeFileSync(path.join(dir, 'isolated.json'), JSON.stringify({
+        core: { model: 'profile-model' },
+        plugins: {
+          fs: { enabled: true },
+        },
+      }), 'utf-8');
+      const cfg = loadProfileAsConfig(path.join(dir, 'isolated.json'));
+      // Only what's in the profile should be present
+      assert.equal(cfg.core.model, 'profile-model');
+      assert.equal(cfg.plugins.fs?.enabled, true);
+      // agent should be undefined — not inherited from any global config
+      assert.equal(cfg.agent, undefined);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
   });
 
 });

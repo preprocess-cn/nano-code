@@ -7,7 +7,7 @@ import { DEFAULT_SYSTEM_PLUGINS } from '#src/bootstrap/plugin-loader.js';
 import { logManager } from '#src/utils/logger.js';
 import type { NanoConfig, AgentConfig, PluginConfigEntry, SystemPromptConfig, ConfigValidationWarning } from '#src/core/config.js';
 
-const CONFIG_TOP_KEYS = new Set(['core', 'plugins', 'agent', 'display', 'configVersion', 'mcp', 'skills']);
+const CONFIG_TOP_KEYS = new Set(['core', 'plugins', 'agent', 'display', 'configVersion', 'mcp', 'skills', 'agents']);
 
 // ── Defaults ──
 
@@ -196,6 +196,16 @@ function applyYAMLEnv(yamlData: Record<string, unknown> | null): void {
       process.env[key] = value;
     }
   }
+}
+
+/**
+ * 初始化环境：创建默认 YAML 配置 + 加载 .env 文件。
+ * 普通模式和 profile 模式共享此初始化步骤。
+ */
+export function initEnvironment(): void {
+  ensureDefaultYAML();
+  dotenv.config();                                                                   // $CWD/.env
+  dotenv.config({ path: path.join(os.homedir(), '.nano-code', '.env') });            // ~/.nano-code/.env 兜底
 }
 
 // ── Schema validation ──
@@ -504,6 +514,22 @@ function mergeConfigs(
         result.display = undefined;
       }
     }
+
+    // Merge skills (shallow — project overrides global)
+    if ('skills' in data) {
+      result.skills = {
+        ...result.skills,
+        ...(isNonEmptyObject(data.skills) ? data.skills : {}),
+      } as typeof result.skills;
+    }
+
+    // Merge agents (shallow — project overrides global)
+    if ('agents' in data) {
+      result.agents = {
+        ...result.agents,
+        ...(isNonEmptyObject(data.agents) ? data.agents : {}),
+      } as typeof result.agents;
+    }
   }
 
   return result;
@@ -544,16 +570,12 @@ function convertSystemPromptConfig(raw: unknown): SystemPromptConfig | undefined
 }
 
 export function loadConfig(): NanoConfig {
-  ensureDefaultYAML();
-
-  // 加载 .env 文件到 process.env，优先级：shell 环境变量 > .env > YAML env
-  dotenv.config();                                                                   // $CWD/.env
-  dotenv.config({ path: path.join(os.homedir(), '.nano-code', '.env') });            // ~/.nano-code/.env 兜底
+  // .env 和默认 YAML 已在 startCLI 中通过 initEnvironment() 完成
 
   const yamlData = loadYAMLConfig();
   if (yamlData) {
-    // system_plugins/system_prompt/env/skills 是 YAML 特有字段，validateConfigObject 不认识它们
-    const KNOWN_YAML_KEYS = new Set(['system_plugins', 'system_prompt', 'env', 'skills']);
+    // system_plugins/system_prompt/env/skills/agents 是 YAML 特有字段，validateConfigObject 不认识它们
+    const KNOWN_YAML_KEYS = new Set(['system_plugins', 'system_prompt', 'env', 'skills', 'agents']);
     const warnings = validateConfigObject(yamlData).filter(w => !KNOWN_YAML_KEYS.has(w.path));
     for (const w of warnings) {
       logManager.warn('config', `${getGlobalYAMLConfigPath()} — ${w.path}: ${w.message}`);
@@ -630,6 +652,79 @@ export function applyProfile(base: NanoConfig, profileName: string): NanoConfig 
   }
 
   return merged;
+}
+
+/**
+ * Load an agent profile as an independent configuration.
+ *
+ * Unlike `applyProfile()` which merges profile onto a base config,
+ * this function builds a standalone config starting from DEFAULT_CONFIG
+ * with only the profile's values — no global or project YAML leaks through.
+ *
+ * Falls back to `loadConfig()` if the profile file is not found.
+ */
+export function loadProfileAsConfig(name: string): NanoConfig {
+  const raw = loadProfileConfig(name);
+  if (!raw) {
+    logManager.warn('config', `agent profile "${name}" not found, falling back to default config.`);
+    return loadConfig();
+  }
+
+  const result: NanoConfig = {
+    configVersion: 1,
+    core: { ...DEFAULT_CONFIG.core },
+    plugins: {},
+  };
+
+  // Apply each section from profile data only
+  if (isNonEmptyObject(raw.core)) {
+    result.core = mergeCoreValues(result.core, raw.core);
+  }
+
+  if (isNonEmptyObject(raw.agent)) {
+    result.agent = mergeAgentConfig(undefined, raw.agent);
+  }
+
+  if (isNonEmptyObject(raw.plugins)) {
+    result.plugins = mergePluginEntries({}, raw.plugins);
+  }
+
+  if (isNonEmptyObject(raw.display)) {
+    result.display = { ...raw.display } as typeof result.display;
+  }
+
+  if (isNonEmptyObject(raw.skills)) {
+    result.skills = { ...raw.skills } as typeof result.skills;
+  }
+
+  if (isNonEmptyObject(raw.agents)) {
+    result.agents = { ...raw.agents } as typeof result.agents;
+  }
+
+  if (isNonEmptyObject(raw.mcp)) {
+    result.mcp = { ...raw.mcp } as typeof result.mcp;
+  }
+
+  if (isNonEmptyObject(raw.permissions)) {
+    result.permissions = { ...raw.permissions } as typeof result.permissions;
+  }
+
+  if (isNonEmptyObject(raw.statusLine)) {
+    result.statusLine = { ...raw.statusLine } as typeof result.statusLine;
+  }
+
+  if (raw.system_prompt) {
+    result.systemPrompt = convertSystemPromptConfig(raw.system_prompt);
+  }
+
+  if (Array.isArray(raw.system_plugins)) {
+    result.systemPlugins = raw.system_plugins.map(String);
+  }
+
+  // Profile env section — lowest priority, won't override shell/.env
+  applyYAMLEnv(raw);
+
+  return result;
 }
 
 /**

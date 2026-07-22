@@ -81,6 +81,13 @@ export interface NanoConfig {
     disabled?: string[];
     /** 完全禁用 skill/skills_list/skill_view 工具（默认 false） */
     disableSkillTool?: boolean;
+    /** 自定义技能目录路径列表（多目录）。指定后不扫描 ~/.nano-code/skills */
+    dirs?: string[];
+  };
+  /** Agent 定义文件目录配置。默认 ~/.nano-code/agents */
+  agents?: {
+    /** 自定义 agent 目录路径列表（多目录）。指定后不扫描 ~/.nano-code/agents */
+    dirs?: string[];
   };
   /** 状态栏 shell 命令配置。输出按 KEY: VALUE 行解析并显示在 StatusBar。 */
   statusLine?: {

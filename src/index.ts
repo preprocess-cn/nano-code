@@ -2,7 +2,7 @@ import * as path from 'path';
 import { NanoCodeAgent } from '#src/core/agent.js';
 import { PluginRegistry } from '#src/core/plugin.js';
 import { registerBuiltinPlugin, DEFAULT_SYSTEM_PLUGINS, DEFAULT_FEATURE_PLUGINS } from '#src/bootstrap/plugin-loader.js';
-import { loadConfig, applyProfile, getSystemWhitelist } from '#src/bootstrap/config.js';
+import { loadConfig, loadProfileAsConfig, initEnvironment, getSystemWhitelist } from '#src/bootstrap/config.js';
 import { LLMClient } from '#src/core/llm.js';
 import { loadSession, saveSession } from '#src/bootstrap/session.js';
 import { handlePluginCommand, printPluginList } from '#src/plugin-cli.js';
@@ -144,7 +144,10 @@ async function initializePlugins(
     if (['skills', 'coordinator', 'commands', 'skills-slash', 'bang', 'task-plan'].includes(name)) s.displayMgr = displayMgr;
     if (name === 'commands') s.config = config;
     if (name === 'guidance') Object.assign(s, config.plugins[name]?.settings ?? {});
-    if (name === 'skills') { s.disabled = config.skills?.disabled ?? []; s.disableSkillTool = config.skills?.disableSkillTool ?? false; }
+    if (name === 'skills') { s.disabled = config.skills?.disabled ?? []; s.disableSkillTool = config.skills?.disableSkillTool ?? false; s.skillsDirs = config.skills?.dirs; }
+    if (name === 'coordinator') { s.agentDirs = config.agents?.dirs; }
+    if (name === 'agent-slash') { s.agentDirs = config.agents?.dirs; }
+    if (name === 'skills-slash') { s.skillsDirs = config.skills?.dirs; }
     await registerBuiltinPlugin(registry, name, s);
   }
 
@@ -284,9 +287,12 @@ async function runMainLoop(
 
 async function startCLI(options: { debug?: boolean; think?: boolean; skipPermission?: boolean; listPlugins?: boolean; continue?: boolean; profile?: string; model?: string }) {
 
-  // ── Load configuration + optional agent profile ──
+  // ── Environment init (.env + default YAML) — shared by both paths ──
+  initEnvironment();
+
+  // ── Load configuration (profile = independent, no global/project merge) ──
   const config = options.profile
-    ? applyProfile(loadConfig(), options.profile)
+    ? loadProfileAsConfig(options.profile)
     : loadConfig();
 
   // Allow profiles to override the exit message
@@ -420,6 +426,7 @@ if (parsed.args[0] === 'plugin') {
 }
 
 if (parsed.args[0] === 'doctor') {
+  initEnvironment();
   const cfg = loadConfig();
   let doctorLlm: LLMClient | undefined;
   try {

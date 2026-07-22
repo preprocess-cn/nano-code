@@ -4,6 +4,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { createSkillsPlugin } from '../src/plugins/skills/index.js';
+import { getSkillDirs, loadAllSkills } from '../src/plugins/skills/loader.js';
 
 let tmpDir: string;
 let origEnv: string | undefined;
@@ -176,6 +177,70 @@ describe('Skills Plugin', () => {
       const plugin = createSkillsPlugin();
       const result = await plugin.execute('nonexistent_tool', {}, {} as any);
       assert.equal(result.status, 'error');
+    });
+  });
+
+  describe('multi-directory support', () => {
+    let dirA: string;
+    let dirB: string;
+
+    beforeEach(() => {
+      dirA = fs.mkdtempSync(path.join(os.tmpdir(), 'nano-skills-A-'));
+      dirB = fs.mkdtempSync(path.join(os.tmpdir(), 'nano-skills-B-'));
+    });
+
+    afterEach(() => {
+      fs.rmSync(dirA, { recursive: true, force: true });
+      fs.rmSync(dirB, { recursive: true, force: true });
+    });
+
+    function writeSkill(baseDir: string, name: string, description: string, body: string): void {
+      const skillDir = path.join(baseDir, name);
+      fs.mkdirSync(skillDir, { recursive: true });
+      fs.writeFileSync(path.join(skillDir, 'SKILL.md'), `---
+name: ${name}
+description: ${description}
+context: inline
+---
+${body}`, 'utf-8');
+    }
+
+    it('getSkillDirs returns custom dirs when provided', () => {
+      const result = getSkillDirs(['/custom/a', '/custom/b']);
+      assert.equal(result.length, 2);
+      assert.ok(result[0].endsWith('/custom/a'));
+      assert.ok(result[1].endsWith('/custom/b'));
+    });
+
+    it('getSkillDirs returns env var when no custom dirs', () => {
+      const result = getSkillDirs();
+      assert.equal(result.length, 1);
+      assert.equal(result[0], tmpDir);
+    });
+
+    it('getSkillDirs returns custom dirs over env var', () => {
+      const result = getSkillDirs(['/custom/dir']);
+      assert.equal(result.length, 1);
+      assert.ok(result[0].endsWith('/custom/dir'));
+    });
+
+    it('loadAllSkills loads from multiple dirs', () => {
+      writeSkill(dirA, 'skill-a', 'From A', 'body');
+      writeSkill(dirB, 'skill-b', 'From B', 'body');
+
+      const result = loadAllSkills([dirA, dirB]);
+      assert.equal(result.length, 2);
+      assert.ok(result.find(s => s.name === 'skill-a'));
+      assert.ok(result.find(s => s.name === 'skill-b'));
+    });
+
+    it('loadAllSkills dedup by name (first dir wins)', () => {
+      writeSkill(dirA, 'shared', 'From A', 'body from A');
+      writeSkill(dirB, 'shared', 'From B', 'body from B');
+
+      const result = loadAllSkills([dirA, dirB]);
+      assert.equal(result.length, 1);
+      assert.equal(result[0].description, 'From A');
     });
   });
 

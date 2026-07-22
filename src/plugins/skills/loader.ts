@@ -15,10 +15,19 @@ export interface SkillDefinition {
   body: string;
 }
 
-/** 获取技能根目录。优先使用 NANO_CODE_SKILLS_DIR 环境变量（测试用），否则默认 ~/.nano-code/skills */
-export function getSkillsDir(): string {
+/**
+ * 获取技能目录列表。
+ * - 传入 customDirs（非空）→ 使用自定义多目录
+ * - NANO_CODE_SKILLS_DIR 环境变量（测试用）
+ * - 默认 ~/.nano-code/skills
+ */
+export function getSkillDirs(customDirs?: string[]): string[] {
+  if (customDirs && customDirs.length > 0) {
+    return customDirs.map(d => path.resolve(d));
+  }
   const envDir = process.env['NANO_CODE_SKILLS_DIR'];
-  return envDir ? path.resolve(envDir) : path.join(os.homedir(), '.nano-code', 'skills');
+  if (envDir) return [path.resolve(envDir)];
+  return [path.join(os.homedir(), '.nano-code', 'skills')];
 }
 
 /** 解析 SKILL.md frontmatter */
@@ -48,35 +57,47 @@ function parseFrontmatter(content: string): { frontmatter: Record<string, unknow
   return { frontmatter, body };
 }
 
-/** 扫描技能目录，返回所有已加载的技能定义 */
-export function loadAllSkills(): SkillDefinition[] {
-  const dir = getSkillsDir();
-  if (!fs.existsSync(dir)) return [];
-
+/**
+ * 扫描技能目录，返回所有已加载的技能定义。
+ * @param skillDirs 可选的自定义目录列表。不传则使用 getSkillDirs() 的默认行为。
+ * 同名技能：按目录在列表中的顺序优先（先出现的生效）。
+ */
+export function loadAllSkills(skillDirs?: string[]): SkillDefinition[] {
+  const dirs = getSkillDirs(skillDirs);
+  const seen = new Set<string>();
   const results: SkillDefinition[] = [];
-  let entries: string[];
-  try {
-    entries = fs.readdirSync(dir);
-  } catch {
-    return [];
-  }
 
-  for (const entry of entries) {
-    const skillDir = path.join(dir, entry);
-    const skillFile = path.join(skillDir, 'SKILL.md');
-    if (!fs.statSync(skillDir).isDirectory()) continue;
-    if (!fs.existsSync(skillFile)) continue;
+  for (const dir of dirs) {
+    if (!fs.existsSync(dir)) continue;
 
+    let entries: string[];
     try {
-      const rawContent = fs.readFileSync(skillFile, 'utf-8');
-      const { frontmatter, body } = parseFrontmatter(rawContent);
-      const name = (frontmatter.name as string) || entry;
-      const description = (frontmatter.description as string) || '';
-      const context = (frontmatter.context as string) === 'fork' ? 'fork' : 'inline';
-
-      results.push({ name, description, context, dir: skillDir, rawContent, body });
+      entries = fs.readdirSync(dir);
     } catch {
       continue;
+    }
+
+    for (const entry of entries) {
+      const skillDir = path.join(dir, entry);
+      const skillFile = path.join(skillDir, 'SKILL.md');
+      if (!fs.statSync(skillDir).isDirectory()) continue;
+      if (!fs.existsSync(skillFile)) continue;
+
+      try {
+        const rawContent = fs.readFileSync(skillFile, 'utf-8');
+        const { frontmatter, body } = parseFrontmatter(rawContent);
+        const name = (frontmatter.name as string) || entry;
+
+        if (seen.has(name)) continue;
+
+        const description = (frontmatter.description as string) || '';
+        const context = (frontmatter.context as string) === 'fork' ? 'fork' : 'inline';
+
+        seen.add(name);
+        results.push({ name, description, context, dir: skillDir, rawContent, body });
+      } catch {
+        continue;
+      }
     }
   }
 
@@ -84,8 +105,8 @@ export function loadAllSkills(): SkillDefinition[] {
 }
 
 /** 按名称查找技能 */
-export function findSkill(name: string): SkillDefinition | undefined {
-  return loadAllSkills().find(s => s.name === name);
+export function findSkill(name: string, skillDirs?: string[]): SkillDefinition | undefined {
+  return loadAllSkills(skillDirs).find(s => s.name === name);
 }
 
 /** 查找技能的引用/模板/脚本文件 */

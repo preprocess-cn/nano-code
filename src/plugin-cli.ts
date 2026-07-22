@@ -4,7 +4,7 @@ import * as os from 'os';
 import * as yaml from 'js-yaml';
 import { execSync } from 'child_process';
 import { createRequire } from 'module';
-import { loadConfig, getSystemWhitelist } from '#src/bootstrap/config.js';
+import { loadConfig, initEnvironment, getSystemWhitelist } from '#src/bootstrap/config.js';
 import { loadAgentDefinitions } from '#src/plugins/coordinator/agent-loader.js';
 import {
   getProjectMcpJsonPath,
@@ -34,6 +34,7 @@ function pConfig(): string { return _testProjectConfig ?? PROJECT_CONFIG; }
 function gConfig(): string { return _testGlobalConfig ?? GLOBAL_CONFIG; }
 
 export async function handlePluginCommand(args: string[], _globalOptions: any): Promise<void> {
+  initEnvironment();
   const cmd = args[0];
   switch (cmd) {
     case 'install': return installPlugin(args.slice(1), _globalOptions);

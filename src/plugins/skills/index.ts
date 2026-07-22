@@ -4,7 +4,7 @@ import { LLMClient } from '#src/core/llm.js';
 import { NanoCodeAgent } from '#src/core/agent.js';
 import { AgentManager } from '#src/core/agent-manager.js';
 import type { AgentDisplay } from '#src/core/contract.js';
-import { loadAllSkills, findSkill, listSkillFiles, readSkillFile, getSkillsDir, substituteArgs, SkillDefinition } from '#src/plugins/skills/loader.js';
+import { loadAllSkills, findSkill, listSkillFiles, readSkillFile, getSkillDirs, substituteArgs, SkillDefinition } from '#src/plugins/skills/loader.js';
 import {
   findBundledSkill,
   getBundledSkills,
@@ -16,19 +16,20 @@ import {
 export interface SkillsPluginOptions {
   disabled?: string[];
   disableSkillTool?: boolean;
+  skillsDirs?: string[];
 }
 
 /**
  * 构建内置 + 文件系统统一的技能列表。
  * 排除用户禁用的技能名。
  */
-function buildSkillList(disabled?: string[]): Array<{ name: string; description: string; context: string }> {
+function buildSkillList(disabled?: string[], skillDirs?: string[]): Array<{ name: string; description: string; context: string }> {
   const bundled = getBundledSkills()
     .filter(s => !s.disableModelInvocation)
     .filter(s => !disabled?.includes(s.name))
     .map(s => ({ name: s.name, description: s.description, context: s.context || 'inline' }));
 
-  const fsSkills = loadAllSkills()
+  const fsSkills = loadAllSkills(skillDirs)
     .filter(s => !disabled?.includes(s.name))
     .map(s => ({ name: s.name, description: s.description, context: s.context }));
   return [...bundled, ...fsSkills].sort((a, b) => a.name.localeCompare(b.name));
@@ -48,6 +49,7 @@ export function createSkillsPlugin(
   options?: SkillsPluginOptions,
 ): NanoPlugin {
   const disabled = options?.disabled ?? [];
+  const skillDirs = options?.skillsDirs;
 
   return {
     name: 'skills',
@@ -109,11 +111,11 @@ export function createSkillsPlugin(
     async execute(name: string, args: any, ctx: ToolContext): Promise<ToolResponse> {
       switch (name) {
         case 'skills_list':
-          return handleSkillsList(disabled);
+          return handleSkillsList(disabled, skillDirs);
         case 'skill_view':
-          return handleSkillView(args, disabled);
+          return handleSkillView(args, disabled, skillDirs);
         case 'skill':
-          return handleSkillExecute(args, llmClient, display, disabled, agentManager);
+          return handleSkillExecute(args, llmClient, display, disabled, agentManager, skillDirs);
         default:
           return { status: 'error', message: `Unknown tool: ${name}` };
       }
@@ -136,14 +138,15 @@ export function createSkillsPlugin(
 
 // ── Handler implementations ──
 
-function handleSkillsList(disabled?: string[]): ToolResponse {
-  const skills = buildSkillList(disabled);
+function handleSkillsList(disabled?: string[], skillDirs?: string[]): ToolResponse {
+  const skills = buildSkillList(disabled, skillDirs);
   if (skills.length === 0) {
+    const dirs = getSkillDirs(skillDirs);
     return {
       status: 'success',
       data: JSON.stringify({
         skills: [],
-        message: `无可用技能。技能目录: ${getSkillsDir()}。在此目录下创建 <name>/SKILL.md 来添加技能。`,
+        message: `无可用技能。技能目录: ${dirs.join(', ')}。在此目录下创建 <name>/SKILL.md 来添加技能。`,
       }),
     };
   }
@@ -157,12 +160,12 @@ function handleSkillsList(disabled?: string[]): ToolResponse {
   };
 }
 
-function handleSkillView(args: any, disabled?: string[]): ToolResponse {
+function handleSkillView(args: any, disabled?: string[], skillDirs?: string[]): ToolResponse {
   const name = args?.name?.trim();
   if (!name) return { status: 'error', message: '参数 name 不能为空' };
 
   // 先查文件系统技能
-  const fsSkill = findSkill(name);
+  const fsSkill = findSkill(name, skillDirs);
   if (fsSkill) {
     if (args?.file_path) {
       const content = readSkillFile(fsSkill.dir, args.file_path);
@@ -207,7 +210,7 @@ function handleSkillView(args: any, disabled?: string[]): ToolResponse {
     };
   }
 
-  const available = buildSkillList(disabled).map(s => s.name);
+  const available = buildSkillList(disabled, skillDirs).map(s => s.name);
   return { status: 'error', message: `技能 "${name}" 未找到。可用技能: ${available.join(', ') || '(无)'}` };
 }
 
@@ -217,6 +220,7 @@ async function handleSkillExecute(
   display?: AgentDisplay,
   disabled?: string[],
   agentManager?: AgentManager,
+  skillDirs?: string[],
 ): Promise<ToolResponse> {
   const skillName = args?.skill?.trim();
   if (!skillName) return { status: 'error', message: '参数 skill 不能为空' };
@@ -226,7 +230,7 @@ async function handleSkillExecute(
   }
 
   // 先查文件系统技能
-  const fsSkill = findSkill(skillName);
+  const fsSkill = findSkill(skillName, skillDirs);
   if (fsSkill) {
     const argsStr = typeof args?.args === 'string' ? args.args : '';
     const mode = fsSkill.context;
@@ -257,7 +261,7 @@ async function handleSkillExecute(
     };
   }
 
-  const available = buildSkillList(disabled).map(s => s.name);
+  const available = buildSkillList(disabled, skillDirs).map(s => s.name);
   return { status: 'error', message: `技能 "${skillName}" 未找到。可用技能: ${available.join(', ') || '(无)'}` };
 }
 

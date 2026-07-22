@@ -33,9 +33,9 @@
 | # | 功能 | 说明 |
 |---|------|------|
 | ✅ | LLM 失败重试 | 3 次指数退避（1s, 2s, 4s） |
-| ✅ | 工具型子 agent 系统 | `~/.nano-code/agents/*.yaml` 自动注册为 `agent-<name>` 工具 |
+| ✅ | **工具型子 agent 系统** | `~/.nano-code/agents/*.yaml` 自动注册为 `agent-<name>` 工具；多目录支持（`agents.dirs`） |
 | ✅ | Agent Plugin 架构 | 子 agent 持有独立 `NanoCodeAgent` + 独立插件集合 |
-| ✅ | Profile Plugin 架构 | 角色型 profile 注册机制，`--profile` 加载 |
+| ✅ | **Profile Plugin 架构** | 角色型 profile 注册机制，`--profile` 加载；profile 配置独立于全局/项目配置不 merge，自带 env/skills/agents 定义 |
 | ✅ | 展示层插件系统 | `DisplayPlugin` 接口 + `DisplayManager` 多插件管理器 |
 | ✅ | 插件间共享状态（Store） | `IStore` 接口 + 默认 `InMemoryStore`，可替换实现 |
 | ✅ | 额外参数注入（extraParams） | `onExtraParams` 钩子透传 LLM API 请求参数 |
@@ -84,7 +84,7 @@
 | ✅ | 内置 Skill 系统 | 14 个对齐 Claude Code 的内置技能：review/code-review/simplify/verify/batch/debug/lorem-ipsum/update-config/remember/stuck/skillify/keybindings/commit/commit-pr |
 | ☐ | ToolUseContext | 工具执行的共享运行时上下文（模型覆盖、effort、权限绑定等），贯穿 ReAct 循环 |
 | ☐ | contextModifier | 工具可通过 ToolResponse 返回上下文修改器，作用于后续工具调用的执行环境 |
-| ✅ | Skill 系统 | 14 个内置 TypeScript 技能（bundled），skills_list / skill_view / skill 工具，inline（newMessages 注入）+ fork（子 agent）双模式，skills 配置禁用开关 |
+| ✅ | **Skill 系统** | 14 个内置 TypeScript 技能（bundled），skills_list / skill_view / skill 工具，inline（newMessages 注入）+ fork（子 agent）双模式，skills 配置禁用开关 + 多目录支持（`skills.dirs`） |
 | ✅ | **InteractiveHandler** | PluginRegistry 原生 `registerInteractiveHandler`/`getInteractiveHandler` 替代 store callback，工具插件与 display 通过 registry 桥接，无 handler 自动降级为文本 |
 
 ## P0 — 搜索与审查

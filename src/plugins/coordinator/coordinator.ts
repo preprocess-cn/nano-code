@@ -14,9 +14,9 @@ export function createAgentCoordinatorPlugin(
   llmClient: LLMClient,
   displayMgr?: AgentDisplay,
   agentManager?: AgentManager,
-  agentDir?: string,
+  agentDirs?: string[],
 ): NanoPlugin {
-  const yamlDefs = loadAgentDefinitions(agentDir).filter((d) => d.enabled !== false);
+  const yamlDefs = loadAgentDefinitions(agentDirs).filter((d) => d.enabled !== false);
 
   // Merge built-in agents (Explore) with YAML-defined agents.
   // Built-in agents are always available even when ~/.nano-code/agents/ is empty.

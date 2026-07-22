@@ -9,14 +9,14 @@ import { SK, type AgentModeInfo } from '#src/store-keys.js';
 let _agent: NanoCodeAgent | null = null;
 let _display: DisplayOutput | null = null;
 let _registry: PluginRegistry | null = null;
-let _agentDir: string | undefined;
+let _agentDirs: string[] | undefined;
 
 /** 测试用：重置模块级状态 */
 export function _resetState(): void {
   _agent = null;
   _display = null;
   _registry = null;
-  _agentDir = undefined;
+  _agentDirs = undefined;
 }
 
 export function createAgentSlashPlugin(): NanoPlugin {
@@ -30,7 +30,7 @@ export function createAgentSlashPlugin(): NanoPlugin {
     onInit(registry: PluginRegistry): Promise<void> {
       _registry = registry;
       const cfg = registry.getPluginConfig('agent-slash');
-      if (cfg?.agentDir) _agentDir = cfg.agentDir;
+      if (cfg?.agentDirs) _agentDirs = cfg.agentDirs;
       return Promise.resolve();
     },
 
@@ -55,7 +55,7 @@ export function createAgentSlashPlugin(): NanoPlugin {
         return { handled: true, skipAgent: true };
       }
 
-      const agents = loadAgentDefinitions(_agentDir);
+      const agents = loadAgentDefinitions(_agentDirs);
       const def = agents.find(a => a.name === cmdName);
       if (!def) return null; // fall through to skills-slash / commands
 

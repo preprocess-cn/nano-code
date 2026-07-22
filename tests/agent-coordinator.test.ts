@@ -39,14 +39,14 @@ describe('AgentCoordinator', () => {
   });
 
   it('onSystemPrompt adds agent section when no header exists', () => {
-    const plugin = createAgentCoordinatorPlugin(mockLLMClient(), undefined, undefined, agentDir);
+    const plugin = createAgentCoordinatorPlugin(mockLLMClient(), undefined, undefined, [agentDir]);
     const result = plugin.onSystemPrompt!('You are a helpful assistant.');
     assert.ok(result.includes('## Specialist Agents'));
     assert.ok(result.includes('agent-'));
   });
 
   it('onSystemPrompt does not produce duplicate headers on multiple calls', () => {
-    const plugin = createAgentCoordinatorPlugin(mockLLMClient(), undefined, undefined, agentDir);
+    const plugin = createAgentCoordinatorPlugin(mockLLMClient(), undefined, undefined, [agentDir]);
     // Each call is independent — no accumulation across calls
     const first = plugin.onSystemPrompt!('Base prompt.');
     const second = plugin.onSystemPrompt!('Base prompt.');
@@ -55,7 +55,7 @@ describe('AgentCoordinator', () => {
   });
 
   it('onSystemPrompt includes usage subsections when agents exist', () => {
-    const plugin = createAgentCoordinatorPlugin(mockLLMClient(), undefined, undefined, agentDir);
+    const plugin = createAgentCoordinatorPlugin(mockLLMClient(), undefined, undefined, [agentDir]);
     const result = plugin.onSystemPrompt!('Base prompt.');
 
     if (result.includes('## Specialist Agents')) {

@@ -8,6 +8,7 @@ import { findSkill, substituteArgs } from '#src/plugins/skills/loader.js';
 import { findBundledSkill } from '#src/plugins/skills/bundled/index.js';
 
 let _registry: PluginRegistry | undefined;
+let _skillsDirs: string[] | undefined;
 
 export function createSkillsSlashPlugin(llmClient?: LLMClient, display?: DisplayOutput & AgentDisplay, agentManager?: AgentManager): NanoPlugin {
   return {
@@ -19,6 +20,8 @@ export function createSkillsSlashPlugin(llmClient?: LLMClient, display?: Display
 
     onInit(registry: PluginRegistry): Promise<void> {
       _registry = registry;
+      const cfg = registry.getPluginConfig('skills-slash');
+      if (cfg?.skillsDirs) _skillsDirs = cfg.skillsDirs;
       return Promise.resolve();
     },
 
@@ -31,7 +34,7 @@ export function createSkillsSlashPlugin(llmClient?: LLMClient, display?: Display
       const argsStr = spaceIdx === -1 ? '' : name.slice(spaceIdx + 1).trim();
 
       // Try file-based skill first
-      const fsSkill = findSkill(skillName);
+      const fsSkill = findSkill(skillName, _skillsDirs);
       if (fsSkill) {
         return handleFsSkill(fsSkill, skillName, argsStr, llmClient, display, agentManager);
       }
