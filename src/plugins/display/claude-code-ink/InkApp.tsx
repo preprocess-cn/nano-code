@@ -576,7 +576,6 @@ function AppContent(props: InkAppProps): React.ReactElement {
   const draftRef = useRef('');
   const desiredColumnRef = useRef<number | null>(null);
   const lastKeyEventRef = useRef(0);
-  const [scrollTick, setScrollTick] = useState(0);
   const scrollRef = useRef<ScrollBoxHandle>(null);
   const messageRefs = useRef<(DOMElement | null)[]>([]);
   const searchHighlight = useSearchHighlight();
@@ -659,13 +658,6 @@ function AppContent(props: InkAppProps): React.ReactElement {
     messageRefs.current.length = messages.length;
   });
 
-  // Subscribe to scroll position changes (for floating header)
-  useEffect(() => {
-    const h = scrollRef.current;
-    if (!h) return;
-    return h.subscribe(() => setScrollTick(n => n + 1));
-  }, []);
-
   // ── Search: setQuery → screen-buffer inverse highlight ──
   useEffect(() => {
     if (searchMode === 'inactive' || !searchQuery) {
@@ -715,38 +707,45 @@ function AppContent(props: InkAppProps): React.ReactElement {
   }, [searchQuery, searchMode, searchHighlight]);
 
   // ── Search: sync current match position → yellow overlay ──
+  // 直接订阅滚动事件，不经过 React state，避免 Ink 渲染早于 useEffect 的一帧延迟
   useEffect(() => {
     if (searchMode === 'inactive' || searchResults.length === 0 || searchCurrentIdx >= searchResults.length) {
       searchHighlight.setPositions(null);
       return;
     }
-    const entry = searchResults[searchCurrentIdx];
-    const el = messageRefs.current[entry.msgIdx];
-    if (!el || !(el as any).yogaNode) {
-      searchHighlight.setPositions(null);
-      return;
-    }
-    const scrollTop = scrollRef.current?.getScrollTop() ?? 0;
-    const viewportTop = scrollRef.current?.getViewportTop() ?? 0;
-    const yogaTop = Math.ceil((el as any).yogaNode.getComputedTop());
-    const rowOffset = viewportTop + yogaTop - scrollTop;
-    // 列偏移：从元素向上遍历到 ScrollBox 内容区，累加 getComputedLeft
-    let colOffset = 0;
-    let node: any = el;
-    while (node) {
-      const yg = node.yogaNode;
-      if (yg) {
-        colOffset += Math.ceil(yg.getComputedLeft());
+    const h = scrollRef.current;
+    if (!h) return;
+
+    const updatePosition = () => {
+      const entry = searchResults[searchCurrentIdx];
+      const el = messageRefs.current[entry.msgIdx];
+      if (!el || !(el as any).yogaNode) {
+        searchHighlight.setPositions(null);
+        return;
       }
-      if (node.parentNode) { node = node.parentNode; } else { break; }
-    }
-    searchHighlight.setPositions({
-      positions: entry.msgPositions,
-      rowOffset,
-      colOffset,
-      currentIdx: entry.posIdxWithinMsg,
-    });
-  }, [searchCurrentIdx, searchResults, searchMode, searchHighlight, scrollTick]);
+      const scrollTop = h.getScrollTop();
+      const viewportTop = h.getViewportTop();
+      const yogaTop = Math.ceil((el as any).yogaNode.getComputedTop());
+      const rowOffset = viewportTop + yogaTop - scrollTop;
+      // 列偏移：从元素向上遍历到 ScrollBox 内容区，累加 getComputedLeft
+      let colOffset = 0;
+      let node: any = el;
+      while (node) {
+        const yg = node.yogaNode;
+        if (yg) colOffset += Math.ceil(yg.getComputedLeft());
+        if (node.parentNode) node = node.parentNode; else break;
+      }
+      searchHighlight.setPositions({
+        positions: entry.msgPositions,
+        rowOffset,
+        colOffset,
+        currentIdx: entry.posIdxWithinMsg,
+      });
+    };
+
+    updatePosition(); // 立即计算当前偏移
+    return h.subscribe(updatePosition); // 每次滚动直接更新，不经 React state 异步周期
+  }, [searchCurrentIdx, searchResults, searchMode, searchHighlight]);
 
   // ── Search: scroll to current match ──
   useEffect(() => {
