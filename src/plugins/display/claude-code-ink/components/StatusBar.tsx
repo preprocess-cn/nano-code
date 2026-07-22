@@ -6,13 +6,6 @@ interface StatusBarProps {
   segments?: Record<string, string>;
   /** 状态栏右侧通知消息 */
   notification?: { source: string; message: string } | null;
-
-  /** LLM 执行状态 */
-  llmStatus?: 'idle' | 'running';
-  /** LLM 本轮开始时间戳 */
-  llmStartTime?: number;
-  /** LLM 本轮累积 token */
-  turnTokens?: number;
 }
 
 /**

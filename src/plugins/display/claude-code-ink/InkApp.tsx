@@ -576,7 +576,7 @@ function AppContent(props: InkAppProps): React.ReactElement {
   const draftRef = useRef('');
   const desiredColumnRef = useRef<number | null>(null);
   const lastKeyEventRef = useRef(0);
-  const [, setScrollTick] = useState(0);
+  const [scrollTick, setScrollTick] = useState(0);
   const scrollRef = useRef<ScrollBoxHandle>(null);
   const messageRefs = useRef<(DOMElement | null)[]>([]);
   const searchHighlight = useSearchHighlight();
@@ -715,11 +715,9 @@ function AppContent(props: InkAppProps): React.ReactElement {
   }, [searchQuery, searchMode, searchHighlight]);
 
   // ── Search: sync current match position → yellow overlay ──
-  const prevSearchIdxRef = useRef(-1);
   useEffect(() => {
     if (searchMode === 'inactive' || searchResults.length === 0 || searchCurrentIdx >= searchResults.length) {
       searchHighlight.setPositions(null);
-      prevSearchIdxRef.current = -1;
       return;
     }
     const entry = searchResults[searchCurrentIdx];
@@ -748,7 +746,7 @@ function AppContent(props: InkAppProps): React.ReactElement {
       colOffset,
       currentIdx: entry.posIdxWithinMsg,
     });
-  }, [searchCurrentIdx, searchResults, searchMode, searchHighlight, setScrollTick]);
+  }, [searchCurrentIdx, searchResults, searchMode, searchHighlight, scrollTick]);
 
   // ── Search: scroll to current match ──
   useEffect(() => {
@@ -1410,9 +1408,6 @@ function AppContent(props: InkAppProps): React.ReactElement {
           React.createElement(StatusBar, {
             segments: props.statusSegments,
             notification: props.notification,
-            llmStatus: props.llmStatus,
-            llmStartTime: props.llmStartTime,
-            turnTokens: props.turnTokens,
           }),
         ),
       ),
@@ -1546,9 +1541,6 @@ function AppContent(props: InkAppProps): React.ReactElement {
       React.createElement(StatusBar, {
         segments: props.statusSegments,
         notification: props.notification,
-        llmStatus: props.llmStatus,
-        llmStartTime: props.llmStartTime,
-        turnTokens: props.turnTokens,
       }),
     ),
   );
