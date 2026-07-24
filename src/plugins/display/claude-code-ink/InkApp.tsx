@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
-import { Box, Text, useInput, useStdin, ThemeProvider, stringWidth, RawAnsi, useAnimationFrame } from '#src/plugins/display/claude-code-ink/ink.js';
+import { Box, Text, useInput, useStdin, ThemeProvider, stringWidth, RawAnsi, useBlink } from '#src/plugins/display/claude-code-ink/ink.js';
 import { AlternateScreen } from '#src/plugins/display/claude-code-ink/engine/components/AlternateScreen.js';
 import ScrollBox, { type ScrollBoxHandle } from '#src/plugins/display/claude-code-ink/engine/components/ScrollBox.js';
 import { useDeclaredCursor } from '#src/plugins/display/claude-code-ink/engine/hooks/use-declared-cursor.js';
@@ -154,23 +154,67 @@ function AgentLabel({ agentName, color }: { agentName: string; color?: string })
   );
 }
 
-/** 工具调用状态指示器 — CC black-circle 风格 */
+/** 工具调用状态指示器 — CC ToolUseLoader 风格 */
 function ToolCallIndicator({ status }: { status: 'running' | 'success' | 'error' }): React.ReactElement {
-  const [ref, time] = useAnimationFrame(status === 'running' ? 300 : null);
-  const isBlinking = status === 'running' && Math.floor(time / 300) % 2 === 0;
+  const isUnresolved = status === 'running';
+  const isError = status === 'error';
+  const [ref, isBlinking] = useBlink(isUnresolved, 300);
 
-  if (status === 'running') {
-    return React.createElement(
-      Box,
-      { ref, minWidth: 2 },
-      React.createElement(Text, null, isBlinking ? '●' : ' '),
-    );
-  }
+  // CC 风格：unresolved → 闪烁 ●（交替显示空格），error → 红 ●，success → 绿 ●
+  const color = isUnresolved ? undefined : isError ? '#ef4444' : '#22c55e';
+  const show = !isUnresolved || isBlinking ? '●' : ' ';
+
   return React.createElement(
     Box,
-    { minWidth: 2 },
-    React.createElement(Text, { color: status === 'success' ? '#22c55e' : '#ef4444' }, '●'),
+    { ref, minWidth: 2 },
+    React.createElement(Text, { color, dimColor: false }, show),
   );
+}
+
+// ── 消息折叠帮助函数 ──
+
+/** 从 msg.text 中提取工具名称，格式为 "read_file(/path)" 或 "search(query)" */
+function extractToolName(text: string): string {
+  const paren = text.indexOf('(');
+  if (paren > 0) return text.slice(0, paren).trim();
+  const colon = text.indexOf(':');
+  return colon > 0 ? text.slice(0, colon).trim() : text.split(' ')[0] || text;
+}
+
+interface FoldGroup {
+  type: 'group';
+  id: string;
+  toolName: string;
+  items: UIMessage[];
+  indices: number[];
+}
+
+/** 将连续的同类 toolCall 合并为折叠组 */
+function groupMessages(messages: UIMessage[]): Array<UIMessage | FoldGroup> {
+  const result: Array<UIMessage | FoldGroup> = [];
+  let i = 0;
+  while (i < messages.length) {
+    if (messages[i].kind === 'toolCall') {
+      const toolName = extractToolName(messages[i].text);
+      const group: UIMessage[] = [messages[i]];
+      const indices: number[] = [i];
+      let j = i + 1;
+      while (j < messages.length && messages[j].kind === 'toolCall') {
+        if (extractToolName(messages[j].text) !== toolName) break;
+        group.push(messages[j]);
+        indices.push(j);
+        j++;
+      }
+      if (group.length > 1) {
+        result.push({ type: 'group', id: `fold-${i}`, toolName, items: group, indices });
+        i = j;
+        continue;
+      }
+    }
+    result.push(messages[i]);
+    i++;
+  }
+  return result;
 }
 
 const DIM_COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#8b5cf6', '#06b6d4', '#f97316', '#ef4444'];
@@ -558,6 +602,8 @@ function AppContent(props: InkAppProps): React.ReactElement {
   const [cursorPos, setCursorPos] = useState(0);
   const [historyIdx, setHistoryIdx] = useState(-1);
   const [focusMode, setFocusMode] = useState<'input' | 'agent-list'>('input');
+  // 折叠组由 transcriptMode 全局控制：收起态为 dim 摘要，Ctrl+O 展开所有
+  const groupedMessages = useMemo(() => groupMessages(messages), [messages]);
   /** 搜索结果条目 — 平铺所有跨消息的匹配 */
   interface SearchMatch {
     msgIdx: number;
@@ -1428,14 +1474,40 @@ function AppContent(props: InkAppProps): React.ReactElement {
       React.createElement(
         ScrollBox,
         { ref: scrollRef, flexGrow: 1, stickyScroll: true, paddingTop: 1 },
-        ...messages.map((msg, i) =>
-          React.createElement(Box, {
-            key: i,
-            ref: (el: any) => { messageRefs.current[i] = el; },
+        ...groupedMessages.map((item: UIMessage | FoldGroup) => {
+          if ((item as FoldGroup).type === 'group') {
+            const g = item as FoldGroup;
+            if (!transcriptMode) {
+              // 收起态：一行 dim 摘要 + (ctrl+o to expand)，CC 风格
+              return React.createElement(Text, { dimColor: true },
+                ` ${g.toolName} × ${g.items.length} (ctrl+o to expand)`,
+              );
+            }
+            // 展开态（transcriptMode）：完整显示所有子消息
+            return React.createElement(Box, {
+              key: g.id,
+              flexDirection: 'column',
+            },
+              ...g.items.map((msg, j) =>
+                React.createElement(Box, {
+                  key: g.indices[j],
+                  ref: (el: any) => { messageRefs.current[g.indices[j]] = el; },
+                },
+                  React.createElement(MessageItem, { msg, agentColorMap }),
+                ),
+              ),
+            );
+          }
+          // Plain message (not folded)
+          const msg = item as UIMessage;
+          const idx = messages.indexOf(msg);
+          return React.createElement(Box, {
+            key: idx,
+            ref: (el: any) => { messageRefs.current[idx] = el; },
           },
             React.createElement(MessageItem, { msg, agentColorMap }),
-          ),
-        ),
+          );
+        }),
         llmStatus === 'running' && llmStartTime && llmStartTime > 0
           ? React.createElement(SpinnerWithVerb, {
               key: '__spinner__',
