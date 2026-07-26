@@ -59,7 +59,7 @@
 | ✅ | **子 Agent 内联跟踪** | Ink 消息流中显示 agent 实时进度（树形字符 + 工具计数 + 耗时 + 每秒刷新），底部 Agent 列表支持焦点环导航（↓ 进入、↑↓ 选择、Enter 查看详情、Esc 返回），agent 完成自动回退主视图 |
 | ✅ | **Agent 定义透传 description 到 Display 层** | 所有 Agent 类型插件（内置 explore + YAML 定义）需将 `description`/`role` 传递到 Display 层，让 AgentTrackerBar 可展示 agent 描述文案（如 `explore: 快速搜索和探索代码库`） |
 | ✅ | **会话恢复 tool 状态修复** | `-c` 恢复会话时解析 content JSON 中的真实状态（rejected_by_user / error / success），替代全部硬编码 success |
-| 🐛 | **已知 bug：后台 agent 无独立 transcript** | 后台 agent 本质是独立 agent，但当前机制下其 stream/tool 消息写入 `messages[]` 后按 `agentName` 过滤，主视图看不到。但 `onAgentTurnStart` 创建的内联消息（`├─ explore · 搜索中...`）以 `agentName: 'main'` 写入，在主视图可见，与 CC 行为不一致。root cause：后台 agent 的 display 事件流与主 agent 共用同一个 `messages[]`，缺乏独立的消息存储空间 |
+| ✅ | **后台 agent 独立 transcript** | 将 Ink display 的单一 `messages[]` 替换为 `Map<string, UIMessage[]>`，每个 agent 拥有独立消息存储。`onAgentTurnStart` 双写：agent 自身 transcript + 主视图摘要。agent 视图（`@agentName`）展示完整 transcript（含开始/结束摘要），与 CC 行为一致。(2026-07-26) |
 | ✅ | **Model Registry 插件** | 声明多个 LLM 模型，`/model` 命令 + Ink 交互式选择器 + `--model` CLI 启动切换，`$ENV_VAR` 加密钥隐藏 |
 | ☐ | 插件热加载 | 运行时开关插件无需重启 |
 | ✅ | 上下文裁剪与压缩 | `/compact` 内建命令 + 基于 LLM 摘要的智能压缩，保留最近对话、移植 Claude Code 9 段总结模板 |
@@ -229,6 +229,7 @@ Ink 展示层（`claude-code-ink`）基于 React + 自研 Ink 引擎（fork 自 
 - **Escape 关闭 suggestion 弹窗未清空 `suggestionFiltered`** — Ink 输入框中 Esc 关闭建议弹窗时只调用了 `setIsSuggestionOpen(false)`，未调用 `setSuggestionFiltered([])`。虽然 `visibleSuggestions` 正确为空所以无渲染影响，但 `suggestionFiltered` 状态不变，存在状态不一致。
 - **FIXED：Ink 渲染错误导致 alt-screen 崩溃** — 添加 `InkErrorBoundary` React class 组件包裹 `AppContent`，任何子组件渲染异常被边界捕获后显示降级提示，防止 `<AlternateScreen>` 卸载导致终端弹出 alt-screen 模式。(2026-07-26)
 - **FIXED：退出时逃逸序列参数泄漏 `;5;99`** — Ink 引擎 `unmount()` 中 `writeDiffToTerminal`（`process.stdout.write`，libuv async）与 `writeSync`（同步 fd write）混合写入同一 fd 导致乱序，残留在主屏的部分逃逸序列参数被终端误输出为可见字符。移除冗余的 `writeDiffToTerminal` 调用。(2026-07-26)
+- **FIXED：index.ts 瘦身** — `index.ts` 从 1150 行减至 471 行（-59%）。提取 `display-state.ts`（消息存储 + handler 逻辑）、`agent-tracker.ts`（agent 运行时追踪 + 计时器）、`modal-queue.ts`（权限/问题弹窗 FIFO 队列）三个独立模块，`index.ts` 转为编排器。参考 CC 的「一个关注点 = 一个文件」原则。(2026-07-26)
 
 ## Agent 架构
 
