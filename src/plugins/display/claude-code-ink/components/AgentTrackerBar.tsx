@@ -84,6 +84,9 @@ export function AgentTrackerBar({
           s.query
             ? React.createElement(Text, { dimColor: true }, ` · ${s.query}`)
             : null,
+          s.description
+            ? React.createElement(Text, { dimColor: true }, ` · ${s.description}`)
+            : null,
           React.createElement(Text, { dimColor: true }, `  ${durationStr} · ${tokensStr}`),
         ),
       );

@@ -72,6 +72,7 @@ export class AgentManager {
       registry: opts.registry,
       llmClient: this.llmClient,
       agentRole: opts.agentRole,
+      description: opts.description,
       promptConfig: opts.promptConfig,
       name: uniqueName,
       display: opts.display,

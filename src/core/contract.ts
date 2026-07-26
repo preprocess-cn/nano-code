@@ -7,6 +7,7 @@ export type MessageLevel = 'status' | 'info' | 'warn' | 'error' | 'success';
 export interface AgentEvent {
   agentName: string;
   query?: string;
+  description?: string;
 }
 
 export interface StatusEvent extends AgentEvent {
@@ -198,6 +199,7 @@ export interface CreateAgentOptions {
   name: string;
   registry: import('#src/core/plugin.js').PluginRegistry;
   agentRole?: string;
+  description?: string;
   promptConfig?: import('#src/core/config.js').SystemPromptConfig;
   display?: AgentDisplay;
   abortController?: AbortController;

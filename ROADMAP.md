@@ -57,7 +57,7 @@
 | ✅ | **权限系统（CC 对齐）** | 8 阶段权限评估管道（deny → allow → 路径检查 → ask → safety → 默认），RuleStore 路径通配 + 命令匹配，PathValidator 符号链解析，`permission:evaluator` store 回调与 agent.ts 集成，路径级授权（点「始终允许」创建 `Read(/tmp/**)` 目录规则），FIFO 弹窗队列（permission 优先于 ask_question），重检查跳过已授权路径，`/permissions` 查看/管理已允许工具 |
 | ✅ | **交互式 `/plugin` 命令** | 会话中通过 `/plugin list/enable/disable/manage` 管理插件；Ink 下进入全屏交互式插件管理器，`↑↓`/`Enter`/`/` 搜索/Esc 退出；REPL 回退文本列表 |
 | ✅ | **子 Agent 内联跟踪** | Ink 消息流中显示 agent 实时进度（树形字符 + 工具计数 + 耗时 + 每秒刷新），底部 Agent 列表支持焦点环导航（↓ 进入、↑↓ 选择、Enter 查看详情、Esc 返回），agent 完成自动回退主视图 |
-| ☐ | **Agent 定义透传 description 到 Display 层** | 所有 Agent 类型插件（内置 explore + YAML 定义）需将 `description`/`role` 传递到 Display 层，让 AgentTrackerBar 可展示 agent 描述文案（如 `explore: 快速搜索和探索代码库`） |
+| ✅ | **Agent 定义透传 description 到 Display 层** | 所有 Agent 类型插件（内置 explore + YAML 定义）需将 `description`/`role` 传递到 Display 层，让 AgentTrackerBar 可展示 agent 描述文案（如 `explore: 快速搜索和探索代码库`） |
 | ✅ | **会话恢复 tool 状态修复** | `-c` 恢复会话时解析 content JSON 中的真实状态（rejected_by_user / error / success），替代全部硬编码 success |
 | 🐛 | **已知 bug：后台 agent 无独立 transcript** | 后台 agent 本质是独立 agent，但当前机制下其 stream/tool 消息写入 `messages[]` 后按 `agentName` 过滤，主视图看不到。但 `onAgentTurnStart` 创建的内联消息（`├─ explore · 搜索中...`）以 `agentName: 'main'` 写入，在主视图可见，与 CC 行为不一致。root cause：后台 agent 的 display 事件流与主 agent 共用同一个 `messages[]`，缺乏独立的消息存储空间 |
 | ✅ | **Model Registry 插件** | 声明多个 LLM 模型，`/model` 命令 + Ink 交互式选择器 + `--model` CLI 启动切换，`$ENV_VAR` 加密钥隐藏 |
@@ -215,15 +215,17 @@ Ink 展示层（`claude-code-ink`）基于 React + 自研 Ink 引擎（fork 自 
 - **FIXED：`--think` 多段思考文本 dim 样式仅作用首行** — `render-node-to-output.ts` 非换行路径（`needsWrapping === false` 且 `segments.length === 1`）整段多行文本用单一 `\x1b[2m...\x1b[22m` 包裹，`output.ts` 的 `split('\n')` 把 ANSI 闭码分割到单独行导致仅首行 dim。修复：先按行分割再逐行应用样式。
 - **FIXED：Ink 未实现 onAgentTurnStart/onAgentTurnEnd** — 子 agent 并行执行时无 lifecycle 显示，用户无法感知各 agent 处于什么阶段。已在 Ink 插件中实现 agent 状态追踪（`AgentRuntimeState`）、消息流内联进度（树形字符 + 工具计数 + 耗时 + 每秒定时刷新）、底部 Agent 列表焦点导航（↓ 进入、↑↓ 选择、Enter 查看详情、Esc 返回）、agent 完成自动回退主视图。
 - **FIXED：状态栏计时器跳变** — `sleep` 等静默命令执行期间，状态栏右侧 LLM 计时器数值跳变（如 14s→31s→76s）。根因：(1) `emoji-regex` 将 spinner 字符 `✳` (U+2733) 误判为 emoji 导致 `stringWidth` 返回 2（宽字符），spinner Box 宽度抖动挤占 timer 位置；(2) Box `width: 2` 仅含 1 字符导致第二列为空 cell，diff 引擎对空 cell 输出空 stdout 使 VirtualScreen 与终端光标不同步；(3) flexbox spacer 吸收左区宽度变化导致右区位置漂移。修复：`✳`→`✲`（非 emoji）、`spinnerChar + ' '` 填满 width=2、右区 `position: absolute` + `padEnd` 固定文本宽度。
-- **REGRESSION：`--think` 模式下计时器显示异常** — 偶发，运行 1 分钟后出现。之前已修复的计时器相关问题（跳变/消失）在 `--think` 模式下有复现。需要更多调试信息来追踪根因，目前难以稳定复现。
+- **FIXED：`--think` 模式下计时器显示异常** — 状态栏 LLM 计时器已整体移除，该 regression 自然消失，无需单独修复。
 
 ### 待修复
 
-- **SearchMatch msgIdx 数据完整性** — `handleSearchMatchesChange` 使用 `Array.from({length: count})` 创建伪条目，`msgIdx` 设为数组下标而非真实消息索引。当前仅 `searchResults.length` 被消费（SearchBox 徽标计数），无运行时影响。修复：将 `searchResults` 状态改为纯计数标量，或传入真实消息索引。
-- **`messageRefs` 死 prop** — VirtualMessageList 声明并解构 `messageRefs` prop 但从未填充，所有 DOM 引用通过 `useVirtualScroll` 的 `itemRefs` Map 管理。移除该 prop 需同步清理 InkApp.tsx 的 `messageRefs` 创建与传递。
-- **`/` 搜索键防御性回退重复代码** — `InkApp.tsx` 中 `/` 按键处理有两条完全相同的搜索初始化路径（正常分支 + return 后防御性回退）。无功能性差异，但增加维护负担。
-- **StickyPromptHeader 死组件** — 组件文件返回 null 并附注释表示该模式不合理。实际渲染由 `StickyPromptHeaderRow` 直接完成。清理或按 CC 的 `FullscreenLayout` 模式重写。
-- **Dialog/Input 区域代码重复** — 欢迎页与正常视图的 PermissionDialog/QuestionsDialog 渲染 JSX 和提示输入区域（~50 行）完全重复。提取公共子组件。
+- **FIXED：SearchMatch msgIdx 数据完整性** — `searchResults` 数组状态（`SearchMatch[]`）改为纯计数标量 `searchMatchCount: number`，删除 `SearchMatch` 接口，消除伪条目。(2026-07-26)
+- **FIXED：`messageRefs` 死 prop** — VirtualMessageList 的 `messageRefs` prop 及其在 InkApp.tsx 中的创建与传递完全移除。(2026-07-26)
+- **FIXED：`/` 搜索键防御性回退重复代码** — `InkApp.tsx` 中 `/` 按键的 if/else 双路径合并为单一路径。(2026-07-26)
+- **FIXED：StickyPromptHeader 死组件** — 删除返回 null 的 `StickyPromptHeader` 组件及未使用的 `ScrollChromeContext` 导入。(2026-07-26)
+- **FIXED：Dialog/Input 区域代码重复** — 欢迎页与正常视图的 prompt 输入区域和 suggestion 弹出列表（~38 行）提取为公共 `InputArea` 组件。新建 `InputArea.tsx`，InkApp.tsx 中两处重复 JSX 替换为 `<InputArea>` 调用。(2026-07-26)
+- **子 agent 400 错误后 AgentTracker 未正常退出** — 子 agent 超长导致 LLM API 返回 400 错误时，AgentTrackerBar 状态未正确清理，子 agent 卡在「执行中」状态不消失。需在 agent 异常退出路径中补充 display 事件通知。
+- **Escape 关闭 suggestion 弹窗未清空 `suggestionFiltered`** — Ink 输入框中 Esc 关闭建议弹窗时只调用了 `setIsSuggestionOpen(false)`，未调用 `setSuggestionFiltered([])`。虽然 `visibleSuggestions` 正确为空所以无渲染影响，但 `suggestionFiltered` 状态不变，存在状态不一致。
 
 ## Agent 架构
 

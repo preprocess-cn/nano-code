@@ -83,8 +83,8 @@ export function createAgentToolPlugin(
 
       const agentName = `${def.name}_sync_${controllerId.slice(0, 8)}`;
       const subAgent = agentManager
-        ? agentManager.createAgent({ registry: subRegistry, agentRole: def.role, promptConfig: def.systemPrompt, name: agentName, display, abortController: lifecycle.createTaskController(controllerId), maxTurns: def.maxTurns })
-        : new NanoCodeAgent({ registry: subRegistry, llmClient, agentRole: def.role, promptConfig: def.systemPrompt, name: def.name, display, abortController: lifecycle.createTaskController(controllerId), maxTurns: def.maxTurns });
+        ? agentManager.createAgent({ registry: subRegistry, agentRole: def.role, description: def.description, promptConfig: def.systemPrompt, name: agentName, display, abortController: lifecycle.createTaskController(controllerId), maxTurns: def.maxTurns })
+        : new NanoCodeAgent({ registry: subRegistry, llmClient, agentRole: def.role, description: def.description, promptConfig: def.systemPrompt, name: def.name, display, abortController: lifecycle.createTaskController(controllerId), maxTurns: def.maxTurns });
 
       try {
         const result = await subAgent.runTask(query);

@@ -11,13 +11,11 @@ import { SpinnerWithVerb } from '#src/plugins/display/claude-code-ink/SpinnerWit
 import type { DiffHunk, ContextAnalysis } from '#src/core/contract.js';
 import { QuestionsDialog } from './QuestionsDialog.js';
 import { StatusBar } from './components/StatusBar.js';
-import { SearchBox } from './SearchBox.js';
 import { useSearchHighlight } from '#src/plugins/display/claude-code-ink/engine/hooks/use-search-highlight.js';
-import type { DOMElement } from '#src/plugins/display/claude-code-ink/engine/dom.js';
-import type { MatchPosition } from '#src/plugins/display/claude-code-ink/engine/render-to-screen.js';
 import { VirtualMessageList, type JumpHandle, type MessageActionsNav } from './components/VirtualMessageList.js';
 import { ScrollChromeContext, type StickyPrompt } from './components/ScrollChromeContext.js';
 import { StickyPromptHeaderRow } from './components/StickyPromptHeader.js';
+import { InputArea } from './components/InputArea.js';
 import { debugLog } from '#src/plugins/display/claude-code-ink/utils/debugLog.js';
 
 export type PermissionResponse = 'allow_once' | 'always_allow' | 'deny';
@@ -55,6 +53,8 @@ export interface AgentRuntimeState {
   lastToolName?: string;
   /** 任务描述（用户输入的 query） */
   query?: string;
+  /** Agent 角色描述（来自 AgentDefinition.description） */
+  description?: string;
 }
 
 /** CC 兼容的 8 色调色板（agent type 名 → 颜色） */
@@ -608,16 +608,10 @@ function AppContent(props: InkAppProps): React.ReactElement {
   const [focusMode, setFocusMode] = useState<'input' | 'agent-list'>('input');
   // 折叠组由 transcriptMode 全局控制：收起态为 dim 摘要，Ctrl+O 展开所有
   const groupedMessages = useMemo(() => groupMessages(messages), [messages]);
-  /** 搜索结果条目 — 平铺所有跨消息的匹配 */
-  interface SearchMatch {
-    msgIdx: number;
-    msgPositions: MatchPosition[];
-    posIdxWithinMsg: number;
-  }
   const [searchMode, setSearchMode] = useState<'inactive' | 'active' | 'persistent'>('inactive');
   const [searchQuery, setSearchQuery] = useState('');
   const [searchCursorPos, setSearchCursorPos] = useState(0);
-  const [searchResults, setSearchResults] = useState<SearchMatch[]>([]);
+  const [searchMatchCount, setSearchMatchCount] = useState(0);
   const [searchCurrentIdx, setSearchCurrentIdx] = useState(0);
   const [transcriptMode, setTranscriptMode] = useState(false);
   const transcriptModeRef = useRef(false);
@@ -628,18 +622,13 @@ function AppContent(props: InkAppProps): React.ReactElement {
   const desiredColumnRef = useRef<number | null>(null);
   const lastKeyEventRef = useRef(0);
   const scrollRef = useRef<ScrollBoxHandle>(null);
-  const messageRefs = useRef<(DOMElement | null)[]>([]);
   const searchHighlight = useSearchHighlight();
   const [stickyPrompt, setStickyPrompt] = useState<StickyPrompt | null>(null);
   const jumpRef = useRef<JumpHandle>(null);
   const cursorNavRef = useRef<MessageActionsNav>(null);
   const handleSearchMatchesChange = useCallback((count: number, current: number) => {
     debugLog(`handleSearchMatchesChange: count=${count} current=${current}`);
-    setSearchResults(Array.from({ length: count }, (_, i) => ({
-      msgIdx: i,
-      msgPositions: [] as MatchPosition[],
-      posIdxWithinMsg: 0,
-    })));
+    setSearchMatchCount(count);
     setSearchCurrentIdx(current > 0 ? current - 1 : 0);
   }, []);
 
@@ -917,7 +906,7 @@ function AppContent(props: InkAppProps): React.ReactElement {
         searchModeRef.current = 'inactive';
         setSearchMode('inactive');
         setSearchQuery('');
-        setSearchResults([]);
+        setSearchMatchCount(0);
         setSearchCurrentIdx(0);
         transcriptModeRef.current = false;
         setTranscriptMode(false);
@@ -936,28 +925,14 @@ function AppContent(props: InkAppProps): React.ReactElement {
     if (transcriptModeRef.current) {
       if (_input === '/') {
         debugLog(`/ pressed in transcript: searchModeRef=${searchModeRef.current}`);
-        if (searchModeRef.current === 'inactive') {
-          searchModeRef.current = 'active';
-          setSearchMode('active');
-          debugLog('search mode set to active');
-          setSearchQuery('');
-          setSearchCursorPos(0);
-          setSearchResults([]);
-          setSearchCurrentIdx(0);
-          searchHighlight.setQuery('');
-          searchHighlight.setPositions(null);
-          return;
-        }
-        // 防御：searchModeRef 已处于非 inactive 状态，直接强制进入搜索
         searchModeRef.current = 'active';
         setSearchMode('active');
         setSearchQuery('');
         setSearchCursorPos(0);
-        setSearchResults([]);
+        setSearchMatchCount(0);
         setSearchCurrentIdx(0);
         searchHighlight.setQuery('');
         searchHighlight.setPositions(null);
-        debugLog(`/ fallback: searchModeRef=${searchModeRef.current}`);
         return;
       }
       if (searchModeRef.current === 'inactive') {
@@ -979,12 +954,12 @@ function AppContent(props: InkAppProps): React.ReactElement {
         searchModeRef.current = 'inactive';
         setSearchMode('inactive');
         setSearchQuery('');
-        setSearchResults([]);
+        setSearchMatchCount(0);
         setSearchCurrentIdx(0);
         return;
       }
       if (key.return) {
-        if (searchResults.length > 0) {
+        if (searchMatchCount > 0) {
           setSearchCurrentIdx(0);
         }
         searchModeRef.current = 'persistent';
@@ -1023,8 +998,8 @@ function AppContent(props: InkAppProps): React.ReactElement {
     }
 
     // ── Search: persistent mode (transcript mode only: n/N/↑/↓ navigate) ──
-    debugLog(`persistent-gate: transcriptMode=${transcriptModeRef.current} searchMode=${searchModeRef.current} searchResults=[${searchResults.length}] current=${searchCurrentIdx} jumpRef=${jumpRef.current ? 'set' : 'NULL'} key="${_input}" esc=${key.escape} up=${key.upArrow} down=${key.downArrow}`);
-    if (transcriptModeRef.current && searchModeRef.current === 'persistent' && searchResults.length > 0) {
+    debugLog(`persistent-gate: transcriptMode=${transcriptModeRef.current} searchMode=${searchModeRef.current} searchResults=[${searchMatchCount}] current=${searchCurrentIdx} jumpRef=${jumpRef.current ? 'set' : 'NULL'} key="${_input}" esc=${key.escape} up=${key.upArrow} down=${key.downArrow}`);
+    if (transcriptModeRef.current && searchModeRef.current === 'persistent' && searchMatchCount > 0) {
       if (key.escape) {
         debugLog("persistent: escape -> clear search");
         searchHighlight.setQuery('');
@@ -1032,7 +1007,7 @@ function AppContent(props: InkAppProps): React.ReactElement {
         searchModeRef.current = 'inactive';
         setSearchMode('inactive');
         setSearchQuery('');
-        setSearchResults([]);
+        setSearchMatchCount(0);
         setSearchCurrentIdx(0);
         return;
       }
@@ -1040,17 +1015,17 @@ function AppContent(props: InkAppProps): React.ReactElement {
         // n/downArrow = nextMatch, N/shift+n = prevMatch (vim convention)
         const isPrev = _input === 'N' || key.shift;
         if (isPrev) {
-          debugLog(`persistent: N/shift+n -> prevMatch() searchResults=[${searchResults.length}] current=${searchCurrentIdx}`);
+          debugLog(`persistent: N/shift+n -> prevMatch() searchResults=[${searchMatchCount}] current=${searchCurrentIdx}`);
           jumpRef.current?.prevMatch();
         } else {
-          debugLog(`persistent: n/down -> nextMatch() searchResults=[${searchResults.length}] current=${searchCurrentIdx}`);
+          debugLog(`persistent: n/down -> nextMatch() searchResults=[${searchMatchCount}] current=${searchCurrentIdx}`);
           jumpRef.current?.nextMatch();
         }
         debugLog(`persistent: nav done`);
         return;
       }
       if (key.upArrow) {
-        debugLog(`persistent: up -> prevMatch() searchResults=[${searchResults.length}] searchCurrentIdx=${searchCurrentIdx}`);
+        debugLog(`persistent: up -> prevMatch() searchResults=[${searchMatchCount}] searchCurrentIdx=${searchCurrentIdx}`);
         jumpRef.current?.prevMatch();
         debugLog(`persistent: prevMatch() done`);
         return;
@@ -1397,52 +1372,21 @@ function AppContent(props: InkAppProps): React.ReactElement {
         React.createElement(
           Box,
           { flexDirection: 'column', flexShrink: 0, paddingLeft: 1, paddingRight: 1, paddingBottom: 1 },
-          React.createElement(
-            Box,
-            {
-              flexDirection: 'row',
-              alignItems: 'flex-start',
-              borderStyle: 'round',
-              borderColor: searchMode === 'active' ? '#7c3aed' : inputBorderColor,
-              borderLeft: false, borderRight: false, borderBottom: true,
-              width: '100%',
-            },
-            searchMode === 'active'
-              ? React.createElement(SearchBox, {
-                  query: searchQuery,
-                  cursorPos: searchCursorPos,
-                  matchCount: searchResults.length,
-                  currentMatch: searchCurrentIdx,
-                })
-              : transcriptMode
-                ? React.createElement(Text, { dimColor: true }, 'Transcript · / to search · q to exit')
-                : React.createElement(React.Fragment, null,
-                    React.createElement(Text, { bold: true, color: '#9ca3af' }, '> '),
-                    React.createElement(
-                      Box,
-                      { ref: cursorRef, flexDirection: 'column', flexGrow: 1 },
-                      ...renderedLines.map((line, i) =>
-                        React.createElement(Text, { key: i }, line || ' '),
-                      ),
-                    ),
-                  ),
-          ),
-          // Suggestion popup (hidden during search)
-          searchMode === 'inactive' && isSuggestionOpen && suggestionFiltered.length > 0
-            ? React.createElement(
-                Box,
-                { flexDirection: 'column', paddingLeft: 2, paddingTop: 1 },
-                ...visibleSuggestions.map((s, i) => {
-                  const actualIndex = suggestionWindowStart + i;
-                  const isFocused = actualIndex === selectedSuggestionIndex;
-                  return React.createElement(Text, {
-                    key: s.name,
-                    color: isFocused ? '#7c3aed' : s.type === 'agent' ? '#06b6d4' : undefined,
-                    dimColor: !isFocused,
-                  }, `${isFocused ? '● ' : '○ '}${isAtPrefix ? '@' : '/'}${s.name}  ${s.type === 'agent' ? '[agent] ' : ''}${s.description}`);
-                }),
-              )
-            : null,
+          React.createElement(InputArea, {
+            searchMode,
+            searchQuery,
+            searchCursorPos,
+            searchMatchCount,
+            searchCurrentIdx,
+            transcriptMode,
+            cursorRef,
+            renderedLines,
+            inputBorderColor,
+visibleSuggestions,
+            selectedSuggestionIndex,
+            isAtPrefix,
+            suggestionWindowStart,
+          }),
           React.createElement(StatusBar, {
             segments: props.statusSegments,
             notification: props.notification,
@@ -1485,7 +1429,6 @@ function AppContent(props: InkAppProps): React.ReactElement {
             itemKey: (msg: UIMessage, i: number) => `${msg.kind}-${i}`,
             renderItem,
             isItemExpanded: () => false,
-            messageRefs,
             trackStickyPrompt: true,
             cursorNavRef,
             jumpRef,
@@ -1518,54 +1461,21 @@ function AppContent(props: InkAppProps): React.ReactElement {
       { flexDirection: 'column', flexShrink: 0, paddingLeft: 1, paddingRight: 1, paddingBottom: 1, marginTop: 1 },
       // Mode indicator bar — now part of StatusBar
       React.createElement(BackgroundTaskBar, { tasks: props.backgroundTasks ?? [] }),
-      // Prompt input (replaced by SearchBox during search)
-      React.createElement(
-        Box,
-        {
-          flexDirection: 'row',
-          alignItems: 'flex-start',
-          borderStyle: 'round',
-          borderColor: searchMode === 'active' ? '#7c3aed' : inputBorderColor,
-          borderLeft: false, borderRight: false, borderBottom: true,
-          width: '100%',
-        },
-        searchMode === 'active'
-          ? React.createElement(SearchBox, {
-              query: searchQuery,
-              cursorPos: searchCursorPos,
-              matchCount: searchResults.length,
-              currentMatch: searchCurrentIdx,
-            })
-          : transcriptMode
-            ? React.createElement(Text, { dimColor: true }, 'Transcript · / to search · q to exit')
-            : React.createElement(React.Fragment, null,
-                React.createElement(Text, { bold: true, color: '#9ca3af' }, '> '),
-                React.createElement(
-                  Box,
-                  { ref: cursorRef, flexDirection: 'column', flexGrow: 1 },
-                  ...renderedLines.map((line, i) =>
-                    React.createElement(Text, { key: i }, line || ' '),
-                  ),
-                ),
-              ),
-      ),
-      // Suggestion popup (hidden during search)
-      searchMode === 'inactive' && isSuggestionOpen && suggestionFiltered.length > 0
-        ? React.createElement(
-            Box,
-            { flexDirection: 'column', paddingLeft: 2, paddingTop: 1 },
-            ...visibleSuggestions.map((s, i) => {
-              const actualIndex = suggestionWindowStart + i;
-              const isFocused = actualIndex === selectedSuggestionIndex;
-              const suggestionPrefix = isAtPrefix ? '@' : '/';
-              return React.createElement(Text, {
-                key: s.name,
-                color: isFocused ? '#7c3aed' : s.type === 'agent' ? '#06b6d4' : undefined,
-                dimColor: !isFocused,
-              }, `${isFocused ? '● ' : '○ '}${suggestionPrefix}${s.name}  ${s.type === 'agent' ? '[agent] ' : ''}${s.description}`);
-            }),
-          )
-        : null,
+      React.createElement(InputArea, {
+        searchMode,
+        searchQuery,
+        searchCursorPos,
+        searchMatchCount,
+        searchCurrentIdx,
+        transcriptMode,
+        cursorRef,
+        renderedLines,
+        inputBorderColor,
+        visibleSuggestions,
+        selectedSuggestionIndex,
+        isAtPrefix,
+        suggestionWindowStart,
+      }),
       // Agent 视图提示
       viewAgent
         ? React.createElement(

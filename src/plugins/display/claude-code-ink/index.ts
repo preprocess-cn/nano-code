@@ -870,6 +870,7 @@ function createPlugin(): DisplayPlugin {
           toolUseCount: 0,
           tokens: 0,
           query: querySnippet,
+          description: _event.description,
         });
         // 在主视图中推送启动摘要 — CC 风格：树形字符 + type + 状态
         const statusMsg: UIMessage = {

@@ -86,8 +86,6 @@ type Props = {
   onSearchMatchesChange?: (count: number, current: number) => void;
   scanElement?: (el: DOMElement) => MatchPosition[];
   setPositions?: (state: { positions: MatchPosition[]; rowOffset: number; currentIdx: number; colOffset?: number } | null) => void;
-  /** Ref map for DOM elements keyed by message index (for scrollToElement) */
-  messageRefs?: React.MutableRefObject<(DOMElement | null)[]>;
 };
 
 type VirtualItemProps = {
@@ -166,7 +164,6 @@ export function VirtualMessageList({
   onSearchMatchesChange,
   scanElement,
   setPositions,
-  messageRefs,
 }: Props): React.ReactElement {
   const keysRef = useRef<string[]>([]);
   const prevMessagesRef = useRef<typeof messages>(messages);

@@ -10,6 +10,7 @@ export interface NanoCodeAgentOptions {
   registry: PluginRegistry;
   llmClient?: LLMClient;
   agentRole?: string;
+  description?: string;
   promptConfig?: SystemPromptConfig;
   name?: string;
   display?: AgentDisplay;
@@ -24,6 +25,7 @@ export class NanoCodeAgent {
   private messageHistory: ChatMessage[] = [];
   private registry: PluginRegistry;
   private agentRole?: string;
+  private description?: string;
   private promptConfig?: SystemPromptConfig;
   private name: string;
   private display?: AgentDisplay;
@@ -34,6 +36,7 @@ export class NanoCodeAgent {
     this.llmClient = options.llmClient || new LLMClient();
     this.registry = options.registry;
     this.agentRole = options.agentRole;
+    this.description = options.description;
     this.promptConfig = options.promptConfig;
     this.name = options.name ?? 'main';
     this.display = options.display;
@@ -87,7 +90,7 @@ export class NanoCodeAgent {
   }
 
   async runTask(userPrompt: string): Promise<string | undefined> {
-    this.display?.onAgentTurnStart?.({ agentName: this.name, query: userPrompt });
+    this.display?.onAgentTurnStart?.({ agentName: this.name, query: userPrompt, description: this.description });
 
     // 检查插件是否已执行自动压缩（如 token-budget），加载结果
     const compacted = this.registry.store.get<ChatMessage[]>(compactResultKey(this.name));
