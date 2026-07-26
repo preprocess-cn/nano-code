@@ -36,9 +36,10 @@
     "start": "node dist/index.js",
     "dev": "tsc --watch & node --watch dist/index.js",
     "debug": "node dist/index.js --debug",
-    "test": "tsc --noEmit -p tsconfig.test.json && node --import tsx --test tests/*.test.ts",
-    "test:e2e": "node --import tsx --test tests/e2e/e2e.test.ts",
-    "test:all": "node --import tsx --test tests/*.test.ts tests/e2e/e2e.test.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "vitest run tests/e2e/",
+    "test:typecheck": "tsc --noEmit -p tsconfig.test.json",
     "install:minimal": "npm install --omit=dev --no-optional",
     "install:default": "npm install --omit=dev",
     "install:full": "npm install"
@@ -97,6 +98,7 @@
     "@types/turndown": "^5.0.6",
     "tsc-alias": "^1.8.17",
     "tsx": "^4.22.4",
-    "typescript": "^5.3.3"
+    "typescript": "^5.3.3",
+    "vitest": "^4.1.10"
   }
 }

@@ -1,4 +1,4 @@
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import * as assert from 'node:assert/strict';
 import { PluginRegistry, NanoPlugin } from '../src/core/plugin.js';
 import { ToolResponse, ToolDefinition, ToolCall, LLMResponse, CommandOutputHandler } from '../src/core/contract.js';

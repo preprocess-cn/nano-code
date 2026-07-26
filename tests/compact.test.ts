@@ -1,4 +1,4 @@
-import { describe, it, mock } from 'node:test';
+import { describe, it, vi, expect } from 'vitest';
 import assert from 'node:assert/strict';
 import { extractSummary, formatCompactSummaryMessage, buildCompactUserPrompt, COMPACT_SYSTEM_PROMPT } from '../src/plugins/compact/prompt.js';
 import { CompactService } from '../src/plugins/compact/service.js';
@@ -188,7 +188,7 @@ describe('CompactService - buildBoundaryMarker', () => {
 describe('CompactService - generateSummary with mock LLM', () => {
   it('extracts summary from mock LLM response', async () => {
     const mockLLM = {
-      sendSystemMessage: mock.fn(async () => ({
+      sendSystemMessage: vi.fn(async () => ({
         text: '<analysis>scratch</analysis><summary>mock summary result</summary>',
         toolCalls: undefined,
         stopReason: 'end_turn',
@@ -204,7 +204,7 @@ describe('CompactService - generateSummary with mock LLM', () => {
 
   it('falls back to raw text when no summary tags', async () => {
     const mockLLM = {
-      sendSystemMessage: mock.fn(async () => ({
+      sendSystemMessage: vi.fn(async () => ({
         text: 'plain response without tags',
         toolCalls: undefined,
         stopReason: 'end_turn',
@@ -221,7 +221,7 @@ describe('CompactService - generateSummary with mock LLM', () => {
 
 describe('CompactService - dry run', () => {
   it('returns stats without calling LLM', async () => {
-    const mockLLM = { sendSystemMessage: mock.fn() } as unknown as LLMClient;
+    const mockLLM = { sendSystemMessage: vi.fn() } as unknown as LLMClient;
     const service = new CompactService(mockLLM, new PluginRegistry());
     const agent = makeAgent([
       makeMsg('user', 'q1'),
@@ -236,7 +236,7 @@ describe('CompactService - dry run', () => {
     // savedTokens may be 0 or negative for very short messages (overhead of boundary+summary)
     assert.equal(typeof result.savedTokens, 'number');
     // LLM should NOT have been called
-    assert.equal((mockLLM.sendSystemMessage as any).mock.callCount(), 0);
+    expect(mockLLM.sendSystemMessage).toHaveBeenCalledTimes(0);
   });
 });
 

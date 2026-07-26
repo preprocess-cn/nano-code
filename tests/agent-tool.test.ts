@@ -1,4 +1,4 @@
-import { describe, it, afterEach } from 'node:test';
+import { describe, it, afterEach } from 'vitest';
 import * as assert from 'node:assert/strict';
 import { createAgentToolPlugin } from '../src/plugins/coordinator/agent-tool.js';
 import { PluginRegistry } from '../src/core/plugin.js';

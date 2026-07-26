@@ -1,4 +1,4 @@
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import assert from 'node:assert/strict';
 import { NanoPlugin } from '../src/core/plugin.js';
 import { ToolDefinition, ToolResponse } from '../src/core/contract.js';

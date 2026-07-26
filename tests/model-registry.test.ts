@@ -1,4 +1,4 @@
-import { describe, it, mock } from 'node:test';
+import { describe, it } from 'vitest';
 import * as assert from 'node:assert/strict';
 import { PluginRegistry } from '#src/core/plugin.js';
 import { createModelRegistryPlugin, type ModelRegistrySettings } from '#src/plugins/model-registry/index.js';

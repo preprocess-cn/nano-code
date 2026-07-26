@@ -1,4 +1,4 @@
-import { test, describe } from 'node:test';
+import { test, describe } from 'vitest';
 import assert from 'node:assert';
 import { isReadOnlyCommand } from '../src/plugins/tools/command-readonly.js';
 

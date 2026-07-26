@@ -1,4 +1,4 @@
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import * as assert from 'node:assert/strict';
 import { AgentManager } from '../src/core/agent-manager.js';
 import { LLMClient } from '../src/core/llm.js';

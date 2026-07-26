@@ -8,14 +8,17 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # Build (compile TypeScript)
 npm run build
 
-# Run all tests
+# Run all tests (vitest)
 npm test
 
-# Run tests in watch mode
-npx tsx --test --watch tests/*.test.ts
+# Run tests in watch mode (development)
+npm run test:watch
+
+# Run e2e tests only
+npm run test:e2e
 
 # Type check only (no emit)
-npx tsc --noEmit -p tsconfig.test.json
+npm run test:typecheck
 
 # Run without compiling (development)
 npx tsx src/index.ts

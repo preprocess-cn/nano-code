@@ -1,4 +1,4 @@
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import assert from 'node:assert/strict';
 import { EXPLORE_AGENT_DEF, EXPLORE_AGENT_NAME, isExploreAgent } from '../src/plugins/explore/explore-definition.js';
 

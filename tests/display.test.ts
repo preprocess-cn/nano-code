@@ -1,4 +1,4 @@
-import { describe, it, beforeEach, afterEach, mock } from 'node:test';
+import { describe, it, beforeEach, afterEach, vi } from 'vitest';
 import * as assert from 'node:assert/strict';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -27,18 +27,14 @@ describe('DisplayPlugin — repl', () => {
 
   describe('onUserInput', () => {
     let writes: string[];
-    let originalWrite: typeof process.stdout.write;
-
-    const mockWrite = (chunk: unknown): boolean => { writes.push(String(chunk)); return true; };
 
     beforeEach(() => {
       writes = [];
-      originalWrite = process.stdout.write.bind(process.stdout);
-      process.stdout.write = mockWrite as typeof process.stdout.write;
+      vi.spyOn(console, 'log').mockImplementation((...args) => { writes.push(args.join(' ')); });
     });
 
     afterEach(() => {
-      process.stdout.write = originalWrite;
+      vi.restoreAllMocks();
     });
 
     it('onUserInput with self source does not echo', () => {
@@ -116,8 +112,11 @@ describe('DisplayPlugin — repl', () => {
     });
 
     it('status level thinking outputs expected text', () => {
+      // thinking uses console.log (vitest wraps console.log, so spy it directly)
+      const origLog = console.log;
+      console.log = (...args) => { writes.push(args.join(' ')); };
       replDisplay.onStatus?.({ message: 'thinking', agentName: 'main', level: 'status' });
-      // thinking uses console.log (→ mocked stdout), verify the message
+      console.log = origLog;
       assert.ok(writes.some(w => w.includes('正在思考并请求大模型')));
     });
 

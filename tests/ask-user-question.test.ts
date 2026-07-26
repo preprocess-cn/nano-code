@@ -1,4 +1,4 @@
-import { test, describe, beforeEach } from 'node:test';
+import { test, describe, beforeEach } from 'vitest';
 import assert from 'node:assert';
 import { askUserQuestionPlugin } from '../src/plugins/tools/ask-user-question.js';
 import { ToolContext } from '../src/core/contract.js';

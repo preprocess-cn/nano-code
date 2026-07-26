@@ -1,4 +1,4 @@
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import * as assert from 'node:assert/strict';
 import { IStore, InMemoryStore } from '../src/core/store.js';
 import { PluginRegistry } from '../src/core/plugin.js';

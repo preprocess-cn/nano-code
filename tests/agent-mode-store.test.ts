@@ -1,4 +1,4 @@
-import { test, describe } from 'node:test';
+import { test, describe } from 'vitest';
 import assert from 'node:assert';
 import { PluginRegistry } from '../src/core/plugin.js';
 import { SK, type AgentModeInfo } from '../src/store-keys.js';

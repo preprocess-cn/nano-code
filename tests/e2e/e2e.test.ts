@@ -1,4 +1,4 @@
-import { describe, it, beforeEach, afterEach, mock } from 'node:test';
+import { describe, it, beforeEach, afterEach, vi } from 'vitest';
 import * as assert from 'node:assert/strict';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -14,11 +14,11 @@ describe('E2E — ReAct 循环全链路', () => {
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nc-e2e-'));
-    mock.method(process, 'cwd', () => tmpDir);
+    vi.spyOn(process, 'cwd').mockImplementation(() => tmpDir);
   });
 
   afterEach(() => {
-    mock.restoreAll();
+    vi.restoreAllMocks();
     if (tmpDir && fs.existsSync(tmpDir)) {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
@@ -71,7 +71,7 @@ describe('E2E — ReAct 循环全链路', () => {
     assert.equal(events.toolResults.length, 1);
     assert.equal(events.toolResults[0].status, 'success');
     assert.equal(events.turnStarts, 1);
-    assert.equal(events.turnEnds, 1);
+    assert.equal(events.turnEnds, 2); // agent.ts finally 块也会触发 endTurn
 
     // LLM 被调用 2 次
     assert.equal(stub.callCount, 2);

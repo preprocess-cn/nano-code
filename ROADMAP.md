@@ -167,6 +167,7 @@
 | 3 | ✅ | 依赖锁定 | `package-lock.json` 入版本库，`npm install` 的行为跨机器可复现 |
 | 4 | ✅ | npm publish 产出物 | 配置 `files` 字段或 `.npmignore`，只发布 `dist/` + `README.md` + `LICENSE`，不发布源码和测试 |
 | 5 | ✅ | E2E 测试 | 端到端 agent 循环测试：模拟 LLM 响应，验证工具调用 → 结果回注 → 下一轮循环的全链路 |
+| 6 | ✅ | **测试框架迁移（node:test → vitest）** | 53 个测试文件从 `node:test` 迁移到 `vitest`，利用 vitest 单进程 + 原生 TypeScript 支持，`npm test` 耗时从 **30.6s → 1.9s**（16x 提升）。迁移内容：`vitest.config.ts` 配置、`#src/*` 路径别名、`mock.method()` → `vi.spyOn().mockImplementation()`、`mock.fn()` → `vi.fn()`、`console.log` mock 适配等 |
 
 ## P3 — 锦上添花
 

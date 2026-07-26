@@ -1,4 +1,4 @@
-import { describe, it, beforeEach, afterEach } from 'node:test';
+import { describe, it, beforeEach, afterEach } from 'vitest';
 import assert from 'node:assert/strict';
 import { PluginRegistry } from '../src/core/plugin.js';
 import { createNotifyManagerPlugin } from '../src/plugins/notify-manager.js';

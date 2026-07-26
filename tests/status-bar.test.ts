@@ -1,4 +1,4 @@
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import * as assert from 'node:assert/strict';
 import React from 'react';
 import { StatusBar } from '../src/plugins/display/claude-code-ink/components/StatusBar.js';

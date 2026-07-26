@@ -5,7 +5,7 @@
  * 导入 inkDisplayPlugin（闭包创建，不触发渲染），
  * 调用 onStatus({level:'info'}) 验证不抛异常且消息被正确推送。
  */
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import * as assert from 'node:assert/strict';
 
 describe('Ink display — onStatus info level', () => {

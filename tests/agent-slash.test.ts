@@ -1,4 +1,4 @@
-import { describe, it, afterEach } from 'node:test';
+import { describe, it, afterEach } from 'vitest';
 import * as assert from 'node:assert/strict';
 import * as fs from 'fs';
 import * as path from 'path';

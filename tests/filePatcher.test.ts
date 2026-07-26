@@ -1,4 +1,4 @@
-import { test, describe, mock, afterEach, beforeEach } from 'node:test';
+import { test, describe, afterEach, beforeEach, vi } from 'vitest';
 import assert from 'node:assert';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -24,11 +24,11 @@ describe('filePatcher 修补文件功能测试', () => {
     tmpDir = createTempDir();
     testFilePath = path.join(tmpDir, 'test.txt');
     fs.writeFileSync(testFilePath, 'line one\nline two\nline three\n', 'utf8');
-    mock.method(patchConfirmation, 'ask', async () => true);
+    vi.spyOn(patchConfirmation, 'ask').mockImplementation(async () => true);
   });
 
   afterEach(() => {
-    mock.restoreAll();
+    vi.restoreAllMocks();
     removeTempDir(tmpDir);
   });
 
@@ -150,7 +150,7 @@ describe('filePatcher 修补文件功能测试', () => {
   });
 
   test('用户拒绝修改时返回 rejected_by_user', async () => {
-    mock.method(patchConfirmation, 'ask', async () => false);
+    vi.spyOn(patchConfirmation, 'ask').mockImplementation(async () => false);
 
     const response = await fsPlugin.execute('patch_file', {
       path: testFilePath,
@@ -164,7 +164,7 @@ describe('filePatcher 修补文件功能测试', () => {
   });
 
   test('skipPermission=true 越过确认，直接修补文件', async () => {
-    mock.restoreAll(); // 移除 beforeEach 中的 mock，验证不打 confirm 也能通过
+    vi.restoreAllMocks(); // 移除 beforeEach 中的 mock，验证不打 confirm 也能通过
 
     const response = await fsPlugin.execute('patch_file', {
       path: testFilePath,
@@ -178,7 +178,7 @@ describe('filePatcher 修补文件功能测试', () => {
   });
 
   test('skipPermission=false 且用户拒绝时返回 rejected_by_user', async () => {
-    mock.method(patchConfirmation, 'ask', async () => false);
+    vi.spyOn(patchConfirmation, 'ask').mockImplementation(async () => false);
 
     const response = await fsPlugin.execute('patch_file', {
       path: testFilePath,

@@ -1,4 +1,4 @@
-import { test, describe, mock, afterEach, beforeEach } from 'node:test';
+import { test, describe, afterEach, beforeEach, vi } from 'vitest';
 import assert from 'node:assert';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -18,7 +18,7 @@ describe('fileWriter 文件写入功能测试', () => {
   });
 
   afterEach(() => {
-    mock.restoreAll();
+    vi.restoreAllMocks();
     if (tmpDir) fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
@@ -34,7 +34,7 @@ describe('fileWriter 文件写入功能测试', () => {
   });
 
   test('skipPermission=false 且用户拒绝时返回 rejected_by_user', async () => {
-    mock.method(writerConfirmation, 'ask', async () => false);
+    vi.spyOn(writerConfirmation, 'ask').mockImplementation(async () => false);
 
     const filePath = path.relative(process.cwd(), path.join(tmpDir, 'secret.txt'));
     const response = await fsPlugin.execute('write_file_content', {
@@ -47,7 +47,7 @@ describe('fileWriter 文件写入功能测试', () => {
   });
 
   test('skipPermission=false 且用户批准时写入成功', async () => {
-    mock.method(writerConfirmation, 'ask', async () => true);
+    vi.spyOn(writerConfirmation, 'ask').mockImplementation(async () => true);
 
     const filePath = path.relative(process.cwd(), path.join(tmpDir, 'approved.txt'));
     const response = await fsPlugin.execute('write_file_content', {
@@ -80,7 +80,7 @@ describe('fileWriter 文件写入功能测试', () => {
 
   test('sideEffect=false 跳过确认直接写入', async () => {
     // sideEffect=false 时 writerConfirmation.ask 不应被调用
-    mock.method(writerConfirmation, 'ask', async () => { throw new Error('should not be called'); });
+    vi.spyOn(writerConfirmation, 'ask').mockImplementation(async () => { throw new Error('should not be called'); });
     const filePath = path.relative(process.cwd(), path.join(tmpDir, 'no-se.txt'));
     const response = await fsPlugin.execute('write_file_content', {
       path: filePath,
