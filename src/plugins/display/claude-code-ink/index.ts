@@ -960,6 +960,8 @@ function createPlugin(): DisplayPlugin {
 
       // 仅主 agent 结束 turn 时修改全局 llmStatus，子 agent 复用同一 display
       // 实例，若重置 llmStatus 会导致主 agent 状态栏计时器在子 agent 完成后过早消失
+      // Guard: finally 块中重复调用 endTurn() 时跳过
+      if (llmStatus !== 'running') { render(); return; }
       llmStatus = 'idle';
       // 更新本轮 token
       if (registry) {

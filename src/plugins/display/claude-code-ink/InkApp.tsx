@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback, type ErrorInfo } from 'react';
 import { Box, Text, useInput, useStdin, ThemeProvider, stringWidth, RawAnsi, useBlink } from '#src/plugins/display/claude-code-ink/ink.js';
 import { AlternateScreen } from '#src/plugins/display/claude-code-ink/engine/components/AlternateScreen.js';
 import ScrollBox, { type ScrollBoxHandle } from '#src/plugins/display/claude-code-ink/engine/components/ScrollBox.js';
@@ -17,6 +17,7 @@ import { ScrollChromeContext, type StickyPrompt } from './components/ScrollChrom
 import { StickyPromptHeaderRow } from './components/StickyPromptHeader.js';
 import { InputArea } from './components/InputArea.js';
 import { debugLog } from '#src/plugins/display/claude-code-ink/utils/debugLog.js';
+import { logManager } from '#src/utils/logger.js';
 
 export type PermissionResponse = 'allow_once' | 'always_allow' | 'deny';
 
@@ -1513,10 +1514,45 @@ visibleSuggestions,
   );
 }
 
+/**
+ * Error boundary 确保渲染错误不会导致整个 Ink 树卸载。
+ * React 要求 error boundary 必须是 class 组件。
+ * 若无此边界，任何子组件渲染异常都会使 <AlternateScreen> 卸载，
+ * 导致终端退出 alt-screen 模式（"弹回控制台"），后续输出变成乱码。
+ */
+class InkErrorBoundary extends React.Component<{ children: React.ReactNode }, { hasError: boolean }> {
+  state: { hasError: boolean } = { hasError: false };
+
+  static getDerivedStateFromError(): { hasError: boolean } {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
+    // 不能调用 display.onError（render 循环），也不能 console.error（stderr 直写破坏 alt-screen）。
+    // 仅通过 logManager 记录，由日志后端持久化。
+    logManager.error('ink', 'InkApp 渲染错误', error);
+  }
+
+  render(): React.ReactNode {
+    if (this.state.hasError) {
+      return React.createElement(
+        Box,
+        { flexDirection: 'column', paddingLeft: 1, paddingRight: 1 },
+        React.createElement(Text, { dimColor: true }, '⚠ 内容渲染异常 — 请在终端检查日志'),
+      );
+    }
+    return this.props.children;
+  }
+}
+
 export function InkApp(props: InkAppProps): React.ReactElement {
   return React.createElement(
     ThemeProvider,
     { initialState: 'dark' },
-    React.createElement(AppContent, { ...props }),
+    React.createElement(
+      InkErrorBoundary,
+      null,
+      React.createElement(AppContent, { ...props }),
+    ),
   );
 }

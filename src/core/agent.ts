@@ -230,14 +230,16 @@ export class NanoCodeAgent {
       this.registry.store.set(agentStatusKey(this.name), { agentName: this.name, status: "running", messageCount: this.messageHistory.length });
     }
     } finally {
+      // 确保 display 层始终收到 turn 结束通知（含异常路径：API 400 错误等）
+      this.endTurn();
+      // 在异常路径上也重置 agent 状态，避免 store 残留 'running' 状态
+      this.registry.store.set(agentStatusKey(this.name), { agentName: this.name, status: 'idle', messageCount: this.messageHistory.length });
+      this.registry.store.set(agentMessagesKey(this.name), this.getHistory());
       // 子 agent 退出时通知插件清理资源，主 agent 不在此处触发（跨轮存活）
       if (!isMainAgent(this.name)) {
         await this.registry.execOnAgentExit(this.name);
       }
     }
-
-    this.registry.store.set(agentStatusKey(this.name), { agentName: this.name, status: 'idle', messageCount: this.messageHistory.length });
-    this.registry.store.set(agentMessagesKey(this.name), this.getHistory());
 
     const lastMsg = this.messageHistory[this.messageHistory.length - 1];
     if (lastMsg?.role === 'assistant') {

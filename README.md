@@ -88,6 +88,29 @@ plugins:
       autoCompactEnabled: false
 ```
 
+### 模型上下文长度配置
+
+不同模型有不同上下文窗口，超出窗口会导致 API 返回 400 错误。可在项目配置中设置：
+
+```yaml
+plugins:
+  token-budget:
+    settings:
+      maxContextLength: 65536   # DeepSeek-chat 的窗口大小
+```
+
+`maxContextLength` 影响：
+- **自动压缩阈值**：到达 `maxContextLength × 0.7` 时触发压缩（默认值）
+- **硬上限检查**：单次请求超过 `maxContextLength × 0.95` 时注入停止指令，阻止 API 调用
+
+也可通过环境变量设置（优先级高于 YAML 配置）：
+
+```bash
+export NANO_CODE_MAX_CONTEXT_LENGTH=65536
+```
+
+不配置时默认值为 100000。`/context` 命令可查看当前上下文使用情况。
+
 ### 插件管理命令
 
 ```bash

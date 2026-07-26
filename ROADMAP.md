@@ -224,8 +224,10 @@ Ink 展示层（`claude-code-ink`）基于 React + 自研 Ink 引擎（fork 自 
 - **FIXED：`/` 搜索键防御性回退重复代码** — `InkApp.tsx` 中 `/` 按键的 if/else 双路径合并为单一路径。(2026-07-26)
 - **FIXED：StickyPromptHeader 死组件** — 删除返回 null 的 `StickyPromptHeader` 组件及未使用的 `ScrollChromeContext` 导入。(2026-07-26)
 - **FIXED：Dialog/Input 区域代码重复** — 欢迎页与正常视图的 prompt 输入区域和 suggestion 弹出列表（~38 行）提取为公共 `InputArea` 组件。新建 `InputArea.tsx`，InkApp.tsx 中两处重复 JSX 替换为 `<InputArea>` 调用。(2026-07-26)
-- **子 agent 400 错误后 AgentTracker 未正常退出** — 子 agent 超长导致 LLM API 返回 400 错误时，AgentTrackerBar 状态未正确清理，子 agent 卡在「执行中」状态不消失。需在 agent 异常退出路径中补充 display 事件通知。
+- **FIXED：子 agent 400 错误后 AgentTracker 未正常退出** — `runTask()` finally 块补充 `endTurn()` 调用，确保异常路径下 `onAgentTurnEnd` 始终触发并记录。同时 token-budget 插件新增 `maxContextLength` 配置 + `NANO_CODE_MAX_CONTEXT_LENGTH` 环境变量，超出模型窗口 × 0.95 时在发送前注入停止指令，从源头预防 400 错误。(2026-07-26)
 - **Escape 关闭 suggestion 弹窗未清空 `suggestionFiltered`** — Ink 输入框中 Esc 关闭建议弹窗时只调用了 `setIsSuggestionOpen(false)`，未调用 `setSuggestionFiltered([])`。虽然 `visibleSuggestions` 正确为空所以无渲染影响，但 `suggestionFiltered` 状态不变，存在状态不一致。
+- **FIXED：Ink 渲染错误导致 alt-screen 崩溃** — 添加 `InkErrorBoundary` React class 组件包裹 `AppContent`，任何子组件渲染异常被边界捕获后显示降级提示，防止 `<AlternateScreen>` 卸载导致终端弹出 alt-screen 模式。(2026-07-26)
+- **FIXED：退出时逃逸序列参数泄漏 `;5;99`** — Ink 引擎 `unmount()` 中 `writeDiffToTerminal`（`process.stdout.write`，libuv async）与 `writeSync`（同步 fd write）混合写入同一 fd 导致乱序，残留在主屏的部分逃逸序列参数被终端误输出为可见字符。移除冗余的 `writeDiffToTerminal` 调用。(2026-07-26)
 
 ## Agent 架构
 

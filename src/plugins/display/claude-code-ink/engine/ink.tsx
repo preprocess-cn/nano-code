@@ -1509,11 +1509,6 @@ export default class Ink {
     this.restoreStderr?.();
     this.unsubscribeTTYHandlers?.();
 
-    // Non-TTY environments don't handle erasing ansi escapes well, so it's better to
-    // only render last frame of non-static output
-    const diff = this.log.renderPreviousOutput_DEPRECATED(this.frontFrame);
-    writeDiffToTerminal(this.terminal, optimize(diff));
-
     // Clean up terminal modes synchronously before process exit.
     // React's componentWillUnmount won't run in time when process.exit() is called,
     // so we must reset terminal modes here to prevent escape sequence leakage.

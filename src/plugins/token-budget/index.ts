@@ -15,7 +15,7 @@ export interface TokenBudgetConfig {
   maxTokensPerRequest?: number;    // Default: 8000
   compressionThreshold?: number;   // Default: 80000 — start warning at this level
   warnAtTokens?: number;           // Default: 50000 — first warning level
-  /** 自动压缩阈值（默认 maxTokensPerSession * 0.9），超出后在 onAfterRequest 设置 compact:signal */
+  /** 自动压缩阈值（0 = 回退到 maxContextLength * contextWindowRatio），超出后在 onAfterRequest 设置 compact:signal */
   autoCompactThreshold?: number;
   /** 是否启用自动压缩（默认 false，opt-in） */
   autoCompactEnabled?: boolean;
@@ -23,6 +23,12 @@ export interface TokenBudgetConfig {
   llmClient?: LLMClient;
   /** 展示管理器引用（自动压缩需要） */
   displayMgr?: DisplayOutput;
+  /** 模型最大上下文长度，用于计算 auto-compact 和硬上限。默认 100000 */
+  maxContextLength?: number;
+  /** auto-compact 阈值 = maxContextLength * contextWindowRatio。默认 0.7 */
+  contextWindowRatio?: number;
+  /** 硬上限 = maxContextLength * contextWindowHardLimit。默认 0.95 */
+  contextWindowHardLimit?: number;
 }
 
 export function createTokenBudgetPlugin(config?: TokenBudgetConfig): NanoPlugin {
@@ -35,6 +41,9 @@ export function createTokenBudgetPlugin(config?: TokenBudgetConfig): NanoPlugin 
     autoCompactEnabled: config?.autoCompactEnabled ?? true,
     llmClient: config?.llmClient,
     displayMgr: config?.displayMgr,
+    maxContextLength: config?.maxContextLength ?? 100000,
+    contextWindowRatio: config?.contextWindowRatio ?? 0.7,
+    contextWindowHardLimit: config?.contextWindowHardLimit ?? 0.95,
   };
 
   let inputTokens = 0;
@@ -93,6 +102,16 @@ export function createTokenBudgetPlugin(config?: TokenBudgetConfig): NanoPlugin 
       if (registryConfig.warnAtTokens) cfg.warnAtTokens = registryConfig.warnAtTokens;
       if (registryConfig.autoCompactThreshold !== undefined) cfg.autoCompactThreshold = registryConfig.autoCompactThreshold;
       if (registryConfig.autoCompactEnabled !== undefined) cfg.autoCompactEnabled = registryConfig.autoCompactEnabled;
+      if (registryConfig.maxContextLength !== undefined) cfg.maxContextLength = registryConfig.maxContextLength;
+      if (registryConfig.contextWindowRatio !== undefined) cfg.contextWindowRatio = registryConfig.contextWindowRatio;
+      if (registryConfig.contextWindowHardLimit !== undefined) cfg.contextWindowHardLimit = registryConfig.contextWindowHardLimit;
+
+      // 环境变量覆盖（符合 Shell env > YAML 的配置优先级）
+      const envMaxContextLength = process.env.NANO_CODE_MAX_CONTEXT_LENGTH;
+      if (envMaxContextLength) {
+        const parsed = parseInt(envMaxContextLength, 10);
+        if (!isNaN(parsed) && parsed > 0) cfg.maxContextLength = parsed;
+      }
 
       inputTokens = 0;
       outputTokens = 0;
@@ -127,6 +146,22 @@ export function createTokenBudgetPlugin(config?: TokenBudgetConfig): NanoPlugin 
 
     onBeforeRequest(messages: ChatMessage[]): ChatMessage[] {
       const estimated = countMessagesTokens(messages);
+
+      // Check context window hard limit — prevent 400 errors from overflow
+      // Must be checked BEFORE maxTokensPerRequest: a context-overflowing request
+      // also exceeds the per-request limit, so the hard limit check would be dead code.
+      const hardLimit = Math.floor(cfg.maxContextLength * cfg.contextWindowHardLimit);
+      if (estimated > hardLimit) {
+        logManager.warn('token-budget', `请求上下文大小 (~${estimated} tokens) 超过硬上限 (${hardLimit})，注入停止指令`);
+        return [
+          ...messages,
+          {
+            role: 'user',
+            content: '<system-reminder>\n上下文窗口已满。请立即结束当前任务，总结已完成的工作，不要再调用任何工具。\n</system-reminder>',
+            isMeta: true,
+          },
+        ];
+      }
 
       // Check single-request limit
       if (estimated > cfg.maxTokensPerRequest) {
@@ -206,7 +241,7 @@ export function createTokenBudgetPlugin(config?: TokenBudgetConfig): NanoPlugin 
             const currentTokens = countMessagesTokens(messages);
             const threshold = cfg.autoCompactThreshold > 0
               ? cfg.autoCompactThreshold
-              : cfg.maxTokensPerSession * 0.9;
+              : cfg.maxContextLength * cfg.contextWindowRatio;
             if (currentTokens > threshold) {
               runCompact(cfg.llmClient, cfg.displayMgr, _registryRef);
             }
