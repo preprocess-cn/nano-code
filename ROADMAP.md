@@ -70,6 +70,7 @@
 | ✅ | Ink 后台任务指示器 | `BackgroundTaskBar` 底栏组件，实时展示运行/完成/失败状态，5 秒自动清理 |
 | ✅ | 后台任务展示层事件 | `BackgroundTaskEvent` + `onBackgroundTask` 回调，REPL 和 Ink 双实现 |
 | ✅ | **Ink 上下文可视化** | `InkApp.tsx` 内联 `ContextVis` 组件渲染色块网格，数据源为 `analyzer.ts` 的 8 维度分析 |
+| ✅ | **搜索委托 + VirtualMessageList** | 搜索扫描/位置计算/滚动匹配从 `InkApp.tsx` 整体提取到 `VirtualMessageList` 组件，暴露 `JumpHandle`（nextMatch/prevMatch/setSearchQuery）；新增 `useVirtualScroll` 虚拟滚动引擎、`StickyPromptHeader` 粘性提示头、`transcriptSearch` 搜索文本提取；`debugLog` 调试工具覆盖 ink.tsx/render-to-screen 高亮应用路径 |
 | ✅ | **工具级自定义超时** | `ToolDefinition.function.timeout` 字段，按工具设定超时时间；`Infinity` 永不超时（`ask_user_question`），未指定沿用全局默认 |
 | ✅ | **超时控制 CC 对齐** | Phase 1: PluginRegistry 仅显式 timeout 工具才 Promise.race 包裹，子 agent 不再被 120s kill；Phase 2: Bash timeout 参数 + `BASH_DEFAULT_TIMEOUT_MS`/`BASH_MAX_TIMEOUT_MS` 环境变量；Phase 3.2: auto-background 子 agent 超阈值自动转后台；Phase 3.3: Agent `maxTurns` 轮次限制，YAML 可配置 |
 | ✅ | **fs/search 超时保护** | `search.ts`/`fs.ts` async 操作使用 `ctx.defaultTimeout` 驱动的 `withTimeout` 包裹，防止 NFS stall 等场景无限挂起 |
@@ -215,6 +216,14 @@ Ink 展示层（`claude-code-ink`）基于 React + 自研 Ink 引擎（fork 自 
 - **FIXED：Ink 未实现 onAgentTurnStart/onAgentTurnEnd** — 子 agent 并行执行时无 lifecycle 显示，用户无法感知各 agent 处于什么阶段。已在 Ink 插件中实现 agent 状态追踪（`AgentRuntimeState`）、消息流内联进度（树形字符 + 工具计数 + 耗时 + 每秒定时刷新）、底部 Agent 列表焦点导航（↓ 进入、↑↓ 选择、Enter 查看详情、Esc 返回）、agent 完成自动回退主视图。
 - **FIXED：状态栏计时器跳变** — `sleep` 等静默命令执行期间，状态栏右侧 LLM 计时器数值跳变（如 14s→31s→76s）。根因：(1) `emoji-regex` 将 spinner 字符 `✳` (U+2733) 误判为 emoji 导致 `stringWidth` 返回 2（宽字符），spinner Box 宽度抖动挤占 timer 位置；(2) Box `width: 2` 仅含 1 字符导致第二列为空 cell，diff 引擎对空 cell 输出空 stdout 使 VirtualScreen 与终端光标不同步；(3) flexbox spacer 吸收左区宽度变化导致右区位置漂移。修复：`✳`→`✲`（非 emoji）、`spinnerChar + ' '` 填满 width=2、右区 `position: absolute` + `padEnd` 固定文本宽度。
 - **REGRESSION：`--think` 模式下计时器显示异常** — 偶发，运行 1 分钟后出现。之前已修复的计时器相关问题（跳变/消失）在 `--think` 模式下有复现。需要更多调试信息来追踪根因，目前难以稳定复现。
+
+### 待修复
+
+- **SearchMatch msgIdx 数据完整性** — `handleSearchMatchesChange` 使用 `Array.from({length: count})` 创建伪条目，`msgIdx` 设为数组下标而非真实消息索引。当前仅 `searchResults.length` 被消费（SearchBox 徽标计数），无运行时影响。修复：将 `searchResults` 状态改为纯计数标量，或传入真实消息索引。
+- **`messageRefs` 死 prop** — VirtualMessageList 声明并解构 `messageRefs` prop 但从未填充，所有 DOM 引用通过 `useVirtualScroll` 的 `itemRefs` Map 管理。移除该 prop 需同步清理 InkApp.tsx 的 `messageRefs` 创建与传递。
+- **`/` 搜索键防御性回退重复代码** — `InkApp.tsx` 中 `/` 按键处理有两条完全相同的搜索初始化路径（正常分支 + return 后防御性回退）。无功能性差异，但增加维护负担。
+- **StickyPromptHeader 死组件** — 组件文件返回 null 并附注释表示该模式不合理。实际渲染由 `StickyPromptHeaderRow` 直接完成。清理或按 CC 的 `FullscreenLayout` 模式重写。
+- **Dialog/Input 区域代码重复** — 欢迎页与正常视图的 PermissionDialog/QuestionsDialog 渲染 JSX 和提示输入区域（~50 行）完全重复。提取公共子组件。
 
 ## Agent 架构
 

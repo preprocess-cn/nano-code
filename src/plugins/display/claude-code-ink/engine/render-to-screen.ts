@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { debugLog, isDebugEnabled } from '#src/plugins/display/claude-code-ink/utils/debugLog.js';
 import noop from 'lodash-es/noop.js'
 import type { ReactElement } from 'react'
 import { LegacyRoot } from 'react-reconciler/constants.js'
@@ -224,6 +225,14 @@ export function applyPositionedHighlight(
   if (row < 0 || row >= screen.height) return false
   const transform = (id: number) => stylePool.withCurrentMatch(id)
   const rowOff = row * screen.width
+  if (isDebugEnabled()) {
+    let dbgText = '';
+    for (let c = p.col + colOffset; c < p.col + colOffset + p.len && c < screen.width; c++) {
+      const ci = cellAtIndex(screen, rowOff + c);
+      dbgText += ci.char;
+    }
+    debugLog(`engine-pos-cell: screenRow=${row} screenCol=${p.col + colOffset} len=${p.len} cellText="${dbgText}"`);
+  }
   const startCol = p.col + colOffset
   for (let col = startCol; col < startCol + p.len; col++) {
     if (col < 0 || col >= screen.width) continue

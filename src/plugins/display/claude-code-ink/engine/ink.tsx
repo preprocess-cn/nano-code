@@ -1,6 +1,7 @@
 // @ts-nocheck
 import autoBind from 'auto-bind';
 import { closeSync, constants as fsConstants, openSync, readSync, writeSync } from 'fs';
+import { debugLog, isDebugEnabled } from '#src/plugins/display/claude-code-ink/utils/debugLog.js';
 import noop from 'lodash-es/noop.js';
 import throttle from 'lodash-es/throttle.js';
 import React, { type ReactNode } from 'react';
@@ -31,7 +32,7 @@ import reconciler, { dispatcher, getLastCommitMs, getLastYogaMs, isDebugRepaints
 import renderNodeToOutput, { consumeFollowScroll, didLayoutShift } from '#src/plugins/display/claude-code-ink/engine/render-node-to-output.js';
 import { applyPositionedHighlight, type MatchPosition, scanPositions } from '#src/plugins/display/claude-code-ink/engine/render-to-screen.js';
 import createRenderer, { type Renderer } from '#src/plugins/display/claude-code-ink/engine/renderer.js';
-import { CellWidth, CharPool, cellAt, createScreen, HyperlinkPool, isEmptyCellAt, migrateScreenPools, StylePool } from '#src/plugins/display/claude-code-ink/engine/screen.js';
+import { CellWidth, CharPool, cellAt, cellAtIndex, createScreen, HyperlinkPool, isEmptyCellAt, migrateScreenPools, StylePool } from '#src/plugins/display/claude-code-ink/engine/screen.js';
 import { applySearchHighlight } from '#src/plugins/display/claude-code-ink/engine/searchHighlight.js';
 import { applySelectionOverlay, captureScrolledRows, clearSelection, createSelectionState, extendSelection, type FocusMove, findPlainTextUrlAt, getSelectedText, hasSelection, moveFocus, type SelectionState, selectLineAt, selectWordAt, shiftAnchor, shiftSelection, shiftSelectionForFollow, startSelection, updateSelection } from '#src/plugins/display/claude-code-ink/engine/selection.js';
 import { SYNC_OUTPUT_SUPPORTED, isProgressReportingAvailable, supportsExtendedKeys, type Terminal, writeDiffToTerminal } from '#src/plugins/display/claude-code-ink/engine/terminal.js';
@@ -423,6 +424,13 @@ export default class Ink {
     if (this.isUnmounted || this.isPaused) {
       return;
     }
+    const sp = this.searchPositions;
+    if (sp) {
+      const p = sp.positions[sp.currentIdx];
+      debugLog(`engine-onrender: searchPositions=SET count=${sp.positions.length} rowOffset=${sp.rowOffset} currentIdx=${sp.currentIdx} colOffset=${sp.colOffset ?? 0} p={row:${p?.row},col:${p?.col},len:${p?.len}}`);
+    } else {
+      debugLog(`engine-onrender: searchPositions=NULL`);
+    }
     // Entering a render cancels any pending drain tick — this render will
     // handle the drain (and re-schedule below if needed). Prevents a
     // wheel-event-triggered render AND a drain-timer render both firing.
@@ -549,6 +557,23 @@ export default class Ink {
       if (this.searchPositions) {
         const sp = this.searchPositions;
         const posApplied = applyPositionedHighlight(frame.screen, this.stylePool, sp.positions, sp.rowOffset, sp.currentIdx, sp.colOffset ?? 0);
+        if (posApplied && sp.positions[sp.currentIdx] && isDebugEnabled()) {
+          const p = sp.positions[sp.currentIdx]!;
+          const screenRow = p.row + sp.rowOffset;
+          const screenColStart = p.col + (sp.colOffset ?? 0);
+          let dbgText = '';
+          const rowOff = screenRow * frame.screen.width;
+          for (let c = screenColStart; c < screenColStart + p.len && c < frame.screen.width; c++) {
+            dbgText += cellAtIndex(frame.screen, rowOff + c).char;
+          }
+          const ctxStart = Math.max(0, screenColStart - 20);
+          const ctxEnd = Math.min(frame.screen.width, screenColStart + p.len + 20);
+          let ctx = '';
+          for (let c = ctxStart; c < ctxEnd; c++) {
+            ctx += cellAtIndex(frame.screen, rowOff + c).char;
+          }
+          debugLog(`engine-apply-pos: rowOffset=${sp.rowOffset} colOffset=${sp.colOffset ?? 0} currentIdx=${sp.currentIdx}/${sp.positions.length} p.row=${p.row} p.col=${p.col} p.len=${p.len} screenRow=${screenRow} screenCol=${screenColStart} screenW=${frame.screen.width} screenH=${frame.screen.height} cellText="${dbgText}" context="[${ctxStart}:${ctxEnd}]${ctx}"`);
+        }
         hlActive = hlActive || posApplied;
       }
     }
@@ -1098,6 +1123,17 @@ export default class Ink {
     // correctly. One extra paint of this message, but correct > fast.
     dom.markDirty(el);
     const positions = scanPositions(rendered, this.searchHighlightQuery);
+    if (isDebugEnabled()) {
+      for (let pi = 0; pi < positions.length; pi++) {
+        const pp = positions[pi]!;
+        const ri = pp.row * width;
+        let txt = '';
+        for (let c = pp.col; c < pp.col + pp.len && c < width; c++) {
+          txt += cellAtIndex(screen, ri + c).char;
+        }
+        debugLog(`scan-buf-cell: pos[${pi}] bufRow=${pp.row} bufCol=${pp.col} len=${pp.len} w=${width} h=${height} cellText="${txt}"`);
+      }
+    }
     logForDebugging(`scanElementSubtree: q='${this.searchHighlightQuery}' ` + `el=${width}x${height}@(${elLeft},${elTop}) n=${positions.length} ` + `[${positions.slice(0, 10).map(p => `${p.row}:${p.col}`).join(',')}` + `${positions.length > 10 ? ',…' : ''}]`);
     return positions;
   }
@@ -1114,6 +1150,12 @@ export default class Ink {
     colOffset?: number;
   } | null): void {
     this.searchPositions = state;
+    if (state) {
+      const p = state.positions[state.currentIdx];
+      debugLog(`engine-set-pos: state=SET count=${state.positions.length} rowOffset=${state.rowOffset} currentIdx=${state.currentIdx} colOffset=${state.colOffset ?? 0} p={row:${p?.row},col:${p?.col},len:${p?.len}}`);
+    } else {
+      debugLog(`engine-set-pos: state=NULL`);
+    }
     this.scheduleRender();
   }
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useLayoutEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from 'react';
 import { Box, Text, useInput, useStdin, ThemeProvider, stringWidth, RawAnsi, useBlink } from '#src/plugins/display/claude-code-ink/ink.js';
 import { AlternateScreen } from '#src/plugins/display/claude-code-ink/engine/components/AlternateScreen.js';
 import ScrollBox, { type ScrollBoxHandle } from '#src/plugins/display/claude-code-ink/engine/components/ScrollBox.js';
@@ -15,6 +15,10 @@ import { SearchBox } from './SearchBox.js';
 import { useSearchHighlight } from '#src/plugins/display/claude-code-ink/engine/hooks/use-search-highlight.js';
 import type { DOMElement } from '#src/plugins/display/claude-code-ink/engine/dom.js';
 import type { MatchPosition } from '#src/plugins/display/claude-code-ink/engine/render-to-screen.js';
+import { VirtualMessageList, type JumpHandle, type MessageActionsNav } from './components/VirtualMessageList.js';
+import { ScrollChromeContext, type StickyPrompt } from './components/ScrollChromeContext.js';
+import { StickyPromptHeaderRow } from './components/StickyPromptHeader.js';
+import { debugLog } from '#src/plugins/display/claude-code-ink/utils/debugLog.js';
 
 export type PermissionResponse = 'allow_once' | 'always_allow' | 'deny';
 
@@ -618,6 +622,7 @@ function AppContent(props: InkAppProps): React.ReactElement {
   const [transcriptMode, setTranscriptMode] = useState(false);
   const transcriptModeRef = useRef(false);
   const searchModeRef = useRef<'inactive' | 'active' | 'persistent'>('inactive');
+
   const [trackerIndex, setTrackerIndex] = useState(0);
   const draftRef = useRef('');
   const desiredColumnRef = useRef<number | null>(null);
@@ -625,6 +630,60 @@ function AppContent(props: InkAppProps): React.ReactElement {
   const scrollRef = useRef<ScrollBoxHandle>(null);
   const messageRefs = useRef<(DOMElement | null)[]>([]);
   const searchHighlight = useSearchHighlight();
+  const [stickyPrompt, setStickyPrompt] = useState<StickyPrompt | null>(null);
+  const jumpRef = useRef<JumpHandle>(null);
+  const cursorNavRef = useRef<MessageActionsNav>(null);
+  const handleSearchMatchesChange = useCallback((count: number, current: number) => {
+    debugLog(`handleSearchMatchesChange: count=${count} current=${current}`);
+    setSearchResults(Array.from({ length: count }, (_, i) => ({
+      msgIdx: i,
+      msgPositions: [] as MatchPosition[],
+      posIdxWithinMsg: 0,
+    })));
+    setSearchCurrentIdx(current > 0 ? current - 1 : 0);
+  }, []);
+
+  // ── Search: delegate to VirtualMessageList JumpHandle ──
+  useEffect(() => {
+    if (searchMode === 'inactive' || !searchQuery) {
+      jumpRef.current?.disarmSearch();
+      return;
+    }
+    jumpRef.current?.setSearchQuery(searchQuery);
+  }, [searchQuery, jumpRef]);
+  const displayItems = useMemo(() => {
+    const items: UIMessage[] = [];
+    for (const item of groupedMessages) {
+      if ((item as FoldGroup).type === 'group') {
+        const g = item as FoldGroup;
+        if (!transcriptMode) {
+          // Folded: one-line dim summary
+          items.push({
+            agentName: '',
+            text: ` ${g.toolName} × ${g.items.length} (ctrl+o to expand)`,
+            kind: 'info',
+          } as UIMessage);
+        } else {
+          // Expanded: show all child messages
+          items.push(...g.items);
+        }
+      } else {
+        items.push(item as UIMessage);
+      }
+    }
+    return items;
+  }, [groupedMessages, transcriptMode]);
+
+  const renderItem = useCallback(
+    (msg: UIMessage, idx: number) => {
+      if (msg.kind === 'info' && msg.text.startsWith(' ')) {
+        return React.createElement(Text, { dimColor: true }, msg.text);
+      }
+      return React.createElement(MessageItem, { msg, agentColorMap });
+    },
+    [agentColorMap],
+  );
+
   const [suggestionFiltered, setSuggestionFiltered] = useState<CommandSuggestion[]>([]);
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(0);
   const [isSuggestionOpen, setIsSuggestionOpen] = useState(false);
@@ -699,12 +758,7 @@ function AppContent(props: InkAppProps): React.ReactElement {
     active: true,
   });
 
-  // Sync messageRefs array length to messages
-  useEffect(() => {
-    messageRefs.current.length = messages.length;
-  });
-
-  // ── Search: setQuery → screen-buffer inverse highlight ──
+  // ── Search: setQuery on searchHighlight for screen-buffer inverse ──
   useEffect(() => {
     if (searchMode === 'inactive' || !searchQuery) {
       searchHighlight.setQuery('');
@@ -713,97 +767,7 @@ function AppContent(props: InkAppProps): React.ReactElement {
     }
   }, [searchQuery, searchMode, searchHighlight]);
 
-  const searchScannedRef = useRef(false);
-  const searchPrevQueryRef = useRef('');
-
-  // ── Search: scan messages and build results ──
-  useEffect(() => {
-    if (searchMode === 'inactive' || !searchQuery) {
-      setSearchResults([]);
-      setSearchCurrentIdx(0);
-      searchScannedRef.current = false;
-      return;
-    }
-    // Query changed → reset scan flag so we re-scan
-    if (searchQuery !== searchPrevQueryRef.current) {
-      searchScannedRef.current = false;
-      searchPrevQueryRef.current = searchQuery;
-    }
-    // Skip re-scan when entering persistent mode (same query, results cached)
-    if (searchScannedRef.current) return;
-    searchScannedRef.current = true;
-    const matches: SearchMatch[] = [];
-    const refs = messageRefs.current;
-    for (let i = 0; i < refs.length; i++) {
-      const el = refs[i];
-      if (!el) continue;
-      try {
-        const positions = searchHighlight.scanElement(el);
-        if (positions && positions.length > 0) {
-          for (let j = 0; j < positions.length; j++) {
-            matches.push({ msgIdx: i, msgPositions: positions, posIdxWithinMsg: j });
-          }
-        }
-      } catch {
-        // 单个消息扫描失败不阻塞整体
-      }
-    }
-    setSearchResults(matches);
-    setSearchCurrentIdx(0);
-  }, [searchQuery, searchMode, searchHighlight]);
-
-  // ── Search: sync current match position → yellow overlay ──
-  // 直接订阅滚动事件，不经过 React state，避免 Ink 渲染早于 useEffect 的一帧延迟
-  useEffect(() => {
-    if (searchMode === 'inactive' || searchResults.length === 0 || searchCurrentIdx >= searchResults.length) {
-      searchHighlight.setPositions(null);
-      return;
-    }
-    const h = scrollRef.current;
-    if (!h) return;
-
-    const updatePosition = () => {
-      const entry = searchResults[searchCurrentIdx];
-      const el = messageRefs.current[entry.msgIdx];
-      if (!el || !(el as any).yogaNode) {
-        searchHighlight.setPositions(null);
-        return;
-      }
-      const scrollTop = h.getScrollTop();
-      const viewportTop = h.getViewportTop();
-      const yogaTop = Math.ceil((el as any).yogaNode.getComputedTop());
-      const rowOffset = viewportTop + yogaTop - scrollTop;
-      // 列偏移：从元素向上遍历到 ScrollBox 内容区，累加 getComputedLeft
-      let colOffset = 0;
-      let node: any = el;
-      while (node) {
-        const yg = node.yogaNode;
-        if (yg) colOffset += Math.ceil(yg.getComputedLeft());
-        if (node.parentNode) node = node.parentNode; else break;
-      }
-      searchHighlight.setPositions({
-        positions: entry.msgPositions,
-        rowOffset,
-        colOffset,
-        currentIdx: entry.posIdxWithinMsg,
-      });
-    };
-
-    updatePosition(); // 立即计算当前偏移
-    return h.subscribe(updatePosition); // 每次滚动直接更新，不经 React state 异步周期
-  }, [searchCurrentIdx, searchResults, searchMode, searchHighlight]);
-
-  // ── Search: scroll to current match ──
-  useEffect(() => {
-    if (searchMode === 'inactive' || searchResults.length === 0 || searchCurrentIdx >= searchResults.length) return;
-    const entry = searchResults[searchCurrentIdx];
-    const el = messageRefs.current[entry.msgIdx];
-    if (!el || !(el as any).yogaNode || !scrollRef.current) return;
-    const yogaTop = Math.ceil((el as any).yogaNode.getComputedTop());
-    const viewportH = scrollRef.current.getViewportHeight();
-    const targetScroll = Math.max(0, yogaTop - Math.floor(viewportH / 3));
-    scrollRef.current.scrollTo(targetScroll);
-  }, [searchCurrentIdx, searchResults, searchMode]);
+  // Delegated to VirtualMessageList: scanning, position overlay, scroll-to-match
 
   // 查看的 agent 执行完毕时自动回退到主视图（类似 CC 的 useTeammateViewAutoExit）
   useEffect(() => {
@@ -901,6 +865,7 @@ function AppContent(props: InkAppProps): React.ReactElement {
     delete: boolean; pageUp: boolean; pageDown: boolean;
     wheelUp: boolean; wheelDown: boolean; tab: boolean;
   }) => {
+    debugLog("input: _input=" + _input + " transcriptMode=" + transcriptModeRef.current + " searchMode=" + searchModeRef.current);
     // Any dialog active: ESC/Ctrl+C cancels the ReAct process
     if ((pendingPermission && onPermissionResponse) || (pendingQuestions && onQuestionsResponse)) {
       if (key.ctrl && _input === 'c') {
@@ -959,13 +924,31 @@ function AppContent(props: InkAppProps): React.ReactElement {
       } else {
         transcriptModeRef.current = true;
         setTranscriptMode(true);
+        // 确保进入 transcript 模式时 searchMode 是 inactive
+        // 防止因渲染顺序/竞态导致 ref 残留非 inactive 值
+        searchModeRef.current = 'inactive';
+        setSearchMode('inactive');
       }
       return;
     }
 
     // ── Transcript mode: `/` opens search, `q`/Esc/Ctrl+O exits ──
     if (transcriptModeRef.current) {
-      if (_input === '/' && searchModeRef.current === 'inactive') {
+      if (_input === '/') {
+        debugLog(`/ pressed in transcript: searchModeRef=${searchModeRef.current}`);
+        if (searchModeRef.current === 'inactive') {
+          searchModeRef.current = 'active';
+          setSearchMode('active');
+          debugLog('search mode set to active');
+          setSearchQuery('');
+          setSearchCursorPos(0);
+          setSearchResults([]);
+          setSearchCurrentIdx(0);
+          searchHighlight.setQuery('');
+          searchHighlight.setPositions(null);
+          return;
+        }
+        // 防御：searchModeRef 已处于非 inactive 状态，直接强制进入搜索
         searchModeRef.current = 'active';
         setSearchMode('active');
         setSearchQuery('');
@@ -974,6 +957,7 @@ function AppContent(props: InkAppProps): React.ReactElement {
         setSearchCurrentIdx(0);
         searchHighlight.setQuery('');
         searchHighlight.setPositions(null);
+        debugLog(`/ fallback: searchModeRef=${searchModeRef.current}`);
         return;
       }
       if (searchModeRef.current === 'inactive') {
@@ -1008,15 +992,11 @@ function AppContent(props: InkAppProps): React.ReactElement {
         return;
       }
       if (key.downArrow) {
-        if (searchResults.length > 0) {
-          setSearchCurrentIdx(i => i < searchResults.length - 1 ? i + 1 : 0);
-        }
+        jumpRef.current?.nextMatch();
         return;
       }
       if (key.upArrow) {
-        if (searchResults.length > 0) {
-          setSearchCurrentIdx(i => i > 0 ? i - 1 : searchResults.length - 1);
-        }
+        jumpRef.current?.prevMatch();
         return;
       }
       if (key.backspace) {
@@ -1043,8 +1023,10 @@ function AppContent(props: InkAppProps): React.ReactElement {
     }
 
     // ── Search: persistent mode (transcript mode only: n/N/↑/↓ navigate) ──
+    debugLog(`persistent-gate: transcriptMode=${transcriptModeRef.current} searchMode=${searchModeRef.current} searchResults=[${searchResults.length}] current=${searchCurrentIdx} jumpRef=${jumpRef.current ? 'set' : 'NULL'} key="${_input}" esc=${key.escape} up=${key.upArrow} down=${key.downArrow}`);
     if (transcriptModeRef.current && searchModeRef.current === 'persistent' && searchResults.length > 0) {
       if (key.escape) {
+        debugLog("persistent: escape -> clear search");
         searchHighlight.setQuery('');
         searchHighlight.setPositions(null);
         searchModeRef.current = 'inactive';
@@ -1055,11 +1037,22 @@ function AppContent(props: InkAppProps): React.ReactElement {
         return;
       }
       if (_input === 'n' || _input === 'N' || key.downArrow) {
-        setSearchCurrentIdx(i => i < searchResults.length - 1 ? i + 1 : 0);
+        // n/downArrow = nextMatch, N/shift+n = prevMatch (vim convention)
+        const isPrev = _input === 'N' || key.shift;
+        if (isPrev) {
+          debugLog(`persistent: N/shift+n -> prevMatch() searchResults=[${searchResults.length}] current=${searchCurrentIdx}`);
+          jumpRef.current?.prevMatch();
+        } else {
+          debugLog(`persistent: n/down -> nextMatch() searchResults=[${searchResults.length}] current=${searchCurrentIdx}`);
+          jumpRef.current?.nextMatch();
+        }
+        debugLog(`persistent: nav done`);
         return;
       }
       if (key.upArrow) {
-        setSearchCurrentIdx(i => i > 0 ? i - 1 : searchResults.length - 1);
+        debugLog(`persistent: up -> prevMatch() searchResults=[${searchResults.length}] searchCurrentIdx=${searchCurrentIdx}`);
+        jumpRef.current?.prevMatch();
+        debugLog(`persistent: prevMatch() done`);
         return;
       }
       // Fall through to normal input for other keys
@@ -1472,50 +1465,43 @@ function AppContent(props: InkAppProps): React.ReactElement {
       { flexDirection: 'column', flexGrow: 1, overflow: 'hidden', paddingLeft: 1, paddingRight: 1 },
       headerRow,
       React.createElement(
-        ScrollBox,
-        { ref: scrollRef, flexGrow: 1, stickyScroll: true, paddingTop: 1 },
-        ...groupedMessages.map((item: UIMessage | FoldGroup) => {
-          if ((item as FoldGroup).type === 'group') {
-            const g = item as FoldGroup;
-            if (!transcriptMode) {
-              // 收起态：一行 dim 摘要 + (ctrl+o to expand)，CC 风格
-              return React.createElement(Text, { dimColor: true },
-                ` ${g.toolName} × ${g.items.length} (ctrl+o to expand)`,
-              );
-            }
-            // 展开态（transcriptMode）：完整显示所有子消息
-            return React.createElement(Box, {
-              key: g.id,
-              flexDirection: 'column',
-            },
-              ...g.items.map((msg, j) =>
-                React.createElement(Box, {
-                  key: g.indices[j],
-                  ref: (el: any) => { messageRefs.current[g.indices[j]] = el; },
-                },
-                  React.createElement(MessageItem, { msg, agentColorMap }),
-                ),
-              ),
-            );
-          }
-          // Plain message (not folded)
-          const msg = item as UIMessage;
-          const idx = messages.indexOf(msg);
-          return React.createElement(Box, {
-            key: idx,
-            ref: (el: any) => { messageRefs.current[idx] = el; },
-          },
-            React.createElement(MessageItem, { msg, agentColorMap }),
-          );
-        }),
-        llmStatus === 'running' && llmStartTime && llmStartTime > 0
-          ? React.createElement(SpinnerWithVerb, {
-              key: '__spinner__',
-              startTime: llmStartTime,
-              tokens: turnTokens ?? 0,
-              lastTokenTime: llmLastTokenTime ?? llmStartTime,
+        ScrollChromeContext.Provider,
+        { value: { setStickyPrompt } },
+        stickyPrompt !== null && typeof stickyPrompt !== 'string'
+          ? React.createElement(StickyPromptHeaderRow, {
+              prompt: stickyPrompt,
+              onClick: () => { stickyPrompt.scrollTo(); setStickyPrompt('clicked'); },
+              onMouseEnter: () => {},
+              onMouseLeave: () => {},
             })
           : null,
+        React.createElement(
+          ScrollBox,
+          { ref: scrollRef, flexGrow: 1, stickyScroll: true, paddingTop: stickyPrompt !== null ? 0 : 1 },
+          React.createElement(VirtualMessageList, {
+            messages: displayItems,
+            scrollRef,
+            columns: process.stdout.columns ?? 80,
+            itemKey: (msg: UIMessage, i: number) => `${msg.kind}-${i}`,
+            renderItem,
+            isItemExpanded: () => false,
+            messageRefs,
+            trackStickyPrompt: true,
+            cursorNavRef,
+            jumpRef,
+            scanElement: searchHighlight.scanElement,
+            setPositions: searchHighlight.setPositions,
+            onSearchMatchesChange: handleSearchMatchesChange,
+          }),
+          llmStatus === 'running' && llmStartTime && llmStartTime > 0
+            ? React.createElement(SpinnerWithVerb, {
+                key: '__spinner__',
+                startTime: llmStartTime,
+                tokens: turnTokens ?? 0,
+                lastTokenTime: llmLastTokenTime ?? llmStartTime,
+              })
+            : null,
+        ),
       ),
     ),
     // Agent header — shown when user has switched to an agent
