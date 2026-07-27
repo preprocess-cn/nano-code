@@ -97,9 +97,9 @@ export class DisplayState {
   // ── LLM 状态追踪 ──
   llmStatus: 'idle' | 'running' = 'idle';
   llmTurnStartTime = 0;
-  llmPrevTokens = 0;
-  llmTurnTokens = 0;
   llmLastTokenTime = 0;
+  /** CC 风格：本轮流式字符累计长度，用于实时 token 估算 */
+  responseLength = 0;
 
   // ── StatusBar 状态 ──
   statusSegments: Record<string, string> = {};
@@ -143,9 +143,8 @@ export class DisplayState {
     this.thinkingStatusMsg = null;
     this.llmStatus = 'idle';
     this.llmTurnStartTime = 0;
-    this.llmPrevTokens = 0;
-    this.llmTurnTokens = 0;
     this.llmLastTokenTime = 0;
+    this.responseLength = 0;
     this.greetingShown = false;
     this.sessionDateShown = '';
     this.statusSegments = {};
@@ -322,7 +321,7 @@ export class DisplayState {
       this.llmStatus = 'running';
       this.llmTurnStartTime = Date.now();
       this.llmLastTokenTime = Date.now();
-      this.llmTurnTokens = 0;
+      this.responseLength = 0;
       return;
     }
 
@@ -422,16 +421,13 @@ export class DisplayState {
     this.notification = n;
   }
 
-  /** 主 agent LLM turn token 初始化 */
-  initLLMTurn(getUsage?: () => { outputTokens: number }): void {
-    if (getUsage) this.llmPrevTokens = getUsage().outputTokens;
-    this.llmTurnTokens = 0;
+  /** CC 风格：流式响应字符累计 */
+  addResponseDelta(delta: string): void {
+    if (delta) this.responseLength += delta.length;
   }
 
-  /** 主 agent LLM turn token 更新 */
-  updateTurnTokens(getUsage?: () => { outputTokens: number }): void {
-    if (getUsage && this.llmStatus === 'running') {
-      this.llmTurnTokens = getUsage().outputTokens - this.llmPrevTokens;
-    }
+  /** CC 风格：字符长度 / 4 实时估算本轮 token */
+  getEstimatedTurnTokens(): number {
+    return Math.round(this.responseLength / 4);
   }
 }

@@ -43,6 +43,8 @@ export const SK = {
   TokenBudgetInitialAccumulated: 'token-budget:initialAccumulated',
   /** () => { prompt, completion }: 获取当前 API token 用量 */
   TokenBudgetGetApiUsage: 'token-budget:getApiUsage',
+  /** () => { inputTokens, cacheCreationTokens, cacheReadTokens }: 获取最后一次 API 响应的当前上下文窗口使用量 */
+  TokenBudgetGetCurrentUsage: 'token-budget:getCurrentUsage',
   /** () => ReadCacheEntry[]: 获取文件读取缓存 */
   FsReadCache: 'fs:readCache',
   /** { name, description } | undefined: 当前活跃的 agent-slash 模式 */

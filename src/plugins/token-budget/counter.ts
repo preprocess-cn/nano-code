@@ -1,1 +1,1 @@
-export { initTokenizer, countTokens, countMessagesTokens } from '#src/utils/token-counter.js';
+export { initTokenizer, countTokens, countMessagesTokens, roughTokenCountEstimation } from '#src/utils/token-counter.js';

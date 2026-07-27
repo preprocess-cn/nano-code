@@ -48,8 +48,8 @@ export class AgentTracker {
     }
     let baseline = 0;
     if (registry) {
-      const getUsage = registry.store.get<() => { outputTokens: number }>(SK.TokenBudgetGetApiUsage);
-      if (getUsage) baseline = getUsage().outputTokens;
+      const getUsage = registry.store.get<() => { totalTokens: number }>(SK.TokenBudgetGetApiUsage);
+      if (getUsage) baseline = getUsage().totalTokens;
     }
     this.tokenBaselines.set(agentName, baseline);
     const querySnippet = query ? query.slice(0, 60).replace(/\n/g, ' ') : '';
@@ -78,10 +78,10 @@ export class AgentTracker {
     state.toolUseCount++;
     state.lastToolName = toolName;
     if (registry) {
-      const getUsage = registry.store.get<() => { outputTokens: number }>(SK.TokenBudgetGetApiUsage);
+      const getUsage = registry.store.get<() => { totalTokens: number }>(SK.TokenBudgetGetApiUsage);
       if (getUsage) {
-        const baseline = this.tokenBaselines.get(agentName) ?? getUsage().outputTokens;
-        state.tokens = getUsage().outputTokens - baseline;
+        const baseline = this.tokenBaselines.get(agentName) ?? getUsage().totalTokens;
+        state.tokens = getUsage().totalTokens - baseline;
       }
     }
     const startMsg = this.startMessages.get(agentName);
@@ -98,10 +98,10 @@ export class AgentTracker {
     state.status = 'completed';
     state.endTime = Date.now();
     if (registry) {
-      const getUsage = registry.store.get<() => { outputTokens: number }>(SK.TokenBudgetGetApiUsage);
+      const getUsage = registry.store.get<() => { totalTokens: number }>(SK.TokenBudgetGetApiUsage);
       if (getUsage) {
-        const baseline = this.tokenBaselines.get(agentName) ?? getUsage().outputTokens;
-        state.tokens = getUsage().outputTokens - baseline;
+        const baseline = this.tokenBaselines.get(agentName) ?? getUsage().totalTokens;
+        state.tokens = getUsage().totalTokens - baseline;
       }
     }
     this.tokenBaselines.delete(agentName);

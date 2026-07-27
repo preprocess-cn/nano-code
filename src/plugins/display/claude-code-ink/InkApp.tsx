@@ -620,7 +620,7 @@ function AppContent(props: InkAppProps): React.ReactElement {
   const [input, setInput] = useState('');
   const [cursorPos, setCursorPos] = useState(0);
   const [historyIdx, setHistoryIdx] = useState(-1);
-  const [focusMode, setFocusMode] = useState<'input' | 'pill'>('input');
+  const [focusMode, setFocusMode] = useState<'input' | 'tasks'>('input');
   // 折叠组由 transcriptMode 全局控制：收起态为 dim 摘要，Ctrl+O 展开所有
   const groupedMessages = useMemo(() => groupMessages(messages), [messages]);
   const [searchMode, setSearchMode] = useState<'inactive' | 'active' | 'persistent'>('inactive');
@@ -632,10 +632,10 @@ function AppContent(props: InkAppProps): React.ReactElement {
   const transcriptModeRef = useRef(false);
   const searchModeRef = useRef<'inactive' | 'active' | 'persistent'>('inactive');
 
-  const [trackerIndex, setTrackerIndex] = useState(0);
+  const [taskIndex, setTaskIndex] = useState(0);
   const hasSwarmAgents = props.hasSwarmAgents ?? false;
   const runningSubAgents = (props.agentStates ?? []).filter(
-    s => s.type && s.fullName !== 'main' && s.status === 'running',
+    s => s.type && s.fullName && s.fullName !== 'main' && s.status === 'running',
   );
   const showSummaryPill = runningSubAgents.length > 0 && !hasSwarmAgents;
   const draftRef = useRef('');
@@ -1146,58 +1146,51 @@ function AppContent(props: InkAppProps): React.ReactElement {
       }
     }
 
-    // Tab 切换焦点：输入 ↔ Agent Pill（CC 兼容）
-    if (key.tab && !key.shift) {
-      if (focusMode === 'pill') {
-        setFocusMode('input');
-        return;
-      }
-      // 仅在 suggestion 弹窗关闭、有 agent 视图可切换、且 hasSwarmAgents 时激活 pill 模式
-      const hasAgents = props.viewAgents && props.viewAgents.some(a => a.name !== 'main');
-      if (!isSuggestionOpen && hasAgents && hasSwarmAgents) {
-        setFocusMode('pill');
-        setTrackerIndex(0);
-        return;
-      }
-    }
+    // Tab 切换焦点已移除，改用 ↓ 方向键进入 tasks 导航
 
-    // ── Agent Pill 焦点模式键盘导航 ──
-    // pillList：从 viewAgents 推导（和 AgentPillBar 一致），pill 0 固定为 main
-    const pillList = [
-      { name: 'main', label: 'main' },
-      ...(props.viewAgents ?? []).filter(a => a.name !== 'main')
-        .sort((a, b) => a.label.localeCompare(b.label)),
-    ];
-    if (focusMode === 'pill') {
-      if (key.escape || (key.tab && !key.shift)) {
+    // ── Tasks 焦点模式键盘导航（CC 风格：↑↓ 选 agent，Enter 查看）──
+    if (focusMode === 'tasks') {
+      const tasksList = [
+        { name: 'main', label: 'main' },
+        ...runningSubAgents.map(s => ({ name: s.fullName, label: s.type })),
+      ];
+      // 安全夹紧：tasksList 可能因 agent 完成而缩小
+      if (taskIndex >= tasksList.length && tasksList.length > 0) {
+        setTaskIndex(tasksList.length - 1);
+      }
+      if (key.escape) {
         setFocusMode('input');
-        setTrackerIndex(0);
+        setTaskIndex(0);
         return;
       }
-      if (key.leftArrow) {
-        setTrackerIndex(i => (i <= 0 ? pillList.length - 1 : i - 1));
+      if (key.upArrow) {
+        setTaskIndex(i => {
+          if (i <= 0) { setFocusMode('input'); return 0; }
+          return i - 1;
+        });
         return;
       }
-      if (key.rightArrow) {
-        setTrackerIndex(i => (i >= pillList.length - 1 ? 0 : i + 1));
+      if (key.downArrow) {
+        setTaskIndex(i => Math.min(i + 1, tasksList.length - 1));
         return;
       }
-      if (key.return) {
-        const selected = pillList[trackerIndex];
-        if (selected.name === 'main') {
-          onViewAgentClear?.();
-        } else {
-          onViewAgentChange?.(selected.name);
-        }
+      if (key.return && !key.shift) {
+        const selected = tasksList[taskIndex] ?? tasksList[0] ?? { name: 'main' };
+        if (selected.name === 'main') onViewAgentClear?.();
+        else onViewAgentChange?.(selected.name);
         setFocusMode('input');
         return;
       }
-      // Type-to-exit: 可打印字符回到输入模式（CC 兼容）
+      // left/right arrows: back to input
+      if (key.leftArrow || key.rightArrow) {
+        setFocusMode('input');
+        return;
+      }
+      // Type-to-exit: printable char goes back to input
       if (_input && !key.ctrl && !key.meta) {
         setFocusMode('input');
-        // 不 return，让字符落到输入处理逻辑，直接插入输入框
       } else {
-        return; // 焦点在 pill 列表时屏蔽其他非打印按键
+        return; // block other non-navigation keys
       }
     }
 
@@ -1261,6 +1254,13 @@ function AppContent(props: InkAppProps): React.ReactElement {
           setCursorPos(text.length);
         }
         desiredColumnRef.current = null;
+        return; // 历史浏览中 → 不进入 tasks 模式
+      }
+      // 末行 + 有 running 子 agent → 进入 tasks 导航模式
+      if (runningSubAgents.length > 0) {
+        setFocusMode('tasks');
+        setTaskIndex(0);
+        return;
       }
       return;
     }
@@ -1284,8 +1284,12 @@ function AppContent(props: InkAppProps): React.ReactElement {
       return;
     }
 
-    // Ctrl+C / Escape：agent 视图中 Esc 返回主视图，主视图中 Esc 无效果（类似 vim 的 ESC 仅退出编辑模式）
+    // Ctrl+C / Escape：tasks 模式中 Esc 回 input，agent 视图中 Esc 返回主视图
     if (key.escape) {
+      if (focusMode === 'tasks') {
+        setFocusMode('input');
+        return;
+      }
       if (viewAgent) {
         onViewAgentClear?.();
         return;
@@ -1508,9 +1512,9 @@ visibleSuggestions,
         ? React.createElement(AgentPillBar, {
             agents: props.viewAgents ?? [],
             agentColorMap: props.agentColorMap,
-            selectedIndex: trackerIndex,
+            selectedIndex: taskIndex,
             currentView: viewAgent,
-            isFocused: focusMode === 'pill',
+            isFocused: focusMode === 'tasks',
           })
         : null,
       // Agent 视图提示
@@ -1539,6 +1543,8 @@ visibleSuggestions,
         states: props.agentStates ?? [],
         agentColorMap: props.agentColorMap,
         currentView: viewAgent,
+        selectedIndex: taskIndex,
+        isFocused: focusMode === 'tasks',
       }),
       React.createElement(StatusBar, {
         segments: props.statusSegments,

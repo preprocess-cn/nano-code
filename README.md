@@ -202,7 +202,7 @@ display:
 | 插件 | 说明 |
 |------|------|
 | `repl` | 默认（交互式），基于 `@clack/prompts` + `console` 的 REPL 交互；流分页器（大输出分段展示）、plan mode `(plan)` 提示符前缀 |
-| `claude-code-ink` | 基于 React + Ink 的全屏终端 UI，支持 ScrollBox 滚动、`--think` 思考内容灰色斜体区分、agent 前缀、keybinding 系统、多行输入（Shift+Enter / `\`+Enter 换行）、交互式问题对话框（自定义文本输入 + 确认）、ESC/Ctrl+C 关闭弹框等；内含全局 stderr 拦截，防止第三方输出腐蚀 alt-screen；**子 agent 跟踪**：消息流内联进度（树形字符 + 工具计数 + 耗时 + 实时刷新）、底部 AgentTrackerBar 列表（agent 名称 + 类型 + 耗时 + 耗 token）、聚合 SummaryPill 统计（"N explore agents"）、agent 完成自动回退主视图；**VirtualMessageList** 虚拟滚动消息列表（`useVirtualScroll` 引擎），支持 StickPromptHeader 粘性提示头和搜索委托（`JumpHandle` nextMatch/prevMatch）；`--think` 计时器状态栏实时显示 |
+| `claude-code-ink` | 基于 React + Ink 的全屏终端 UI，支持 ScrollBox 滚动、`--think` 思考内容灰色斜体区分、agent 前缀、keybinding 系统、多行输入（Shift+Enter / `\`+Enter 换行）、交互式问题对话框（自定义文本输入 + 确认）、ESC/Ctrl+C 关闭弹框等；内含全局 stderr 拦截，防止第三方输出腐蚀 alt-screen；**子 agent 跟踪**：消息流内联进度（树形字符 + 工具计数 + 耗时 + 实时刷新）、底部 AgentTrackerBar 列表（agent 名称 + 类型 + 耗时 + 耗 token + 颜色区分）、方向键 Agent 导航（↓ 进入、↑↓ 选择、Enter 查看、Esc/字符返回输入）、聚合 SummaryPill 统计（"N explore agents"）、agent 完成自动回退主视图；**VirtualMessageList** 虚拟滚动消息列表（`useVirtualScroll` 引擎），支持 StickPromptHeader 粘性提示头和搜索委托（`JumpHandle` nextMatch/prevMatch）；`--think` 计时器状态栏实时显示 |
 | `cli` | 非交互式 CLI 展示，AI 响应输出到 stdout，状态/错误输出到 stderr；`display.enabled: false` 时的兜底方案 |
 
 自定义展示插件可通过 `nano-code plugin install <source>` 安装，自动注册到 `~/.nano-code/presentations/`，设置 `display.plugin: <name>` 即可激活。详见 [DisplayPlugin 安装](#displayplugin-安装)。
@@ -218,11 +218,16 @@ display:
 | `Escape` | 退出程序 | 取消当前操作 |
 | `↑`/`↓`（单行输入） | 历史命令浏览 | — |
 | `↑`/`↓`（多行输入） | 在输入行间移动光标，到首/末行再进历史 | — |
+| `↓`（输入末行） | 进入 Agent 列表导航模式（有运行中子 agent 时） | — |
 | `Shift+Enter` | 插入换行（多行输入） | — |
 | `\` + `Enter` | 反斜杠换行：删除 `\` 并插入 `\n` | — |
 | `PageUp`/`PageDown` | 滚动浏览历史消息 | 滚动浏览历史消息 |
 | `Tab` | 命令名补全 / 补全建议切换 | — |
 | `@<agent名>` | 切换到对应 agent 的子视图（仅 Ink 模式） | — |
+| `↑`/`↓`（Agent 列表导航） | 切换选中 agent（↑ 到末项回输入框） | 切换 agent 视图 |
+| `Enter`（Agent 列表导航） | 查看选中 agent 的子视图 | — |
+| `Esc`（Agent 列表导航） | 返回输入模式 | — |
+| `任意字符`（Agent 列表导航） | 返回输入模式并输入字符 | — |
 | `Esc`（子视图中） | 返回主视图 | — |
 | `↑`/`↓`（子视图中） | 切换上一个/下一个 agent 视图 | — |
 | `Esc`（弹框中） | 权限弹框 → 拒绝并终止；问题弹框 → 取消 | 取消操作 |
@@ -937,7 +942,7 @@ return { status: 'success', data: `[交互式提问] ...` };
 ## 测试
 
 ```bash
-npm test         # 单元测试（1242 项）
+npm test         # 单元测试（1234 项）
 npm run test:e2e # E2E 测试（11 场景，覆盖 ReAct 全链路 + 并发执行 + 混合工具）
 npm run test:all # 全部测试
 ```

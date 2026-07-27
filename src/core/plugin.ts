@@ -19,7 +19,8 @@ export interface NanoPlugin {
   onSystemPrompt?(prompt: string): string;
   onBeforeRequest?(messages: ChatMessage[]): ChatMessage[];
   /** rawMeta 是 LLM 层返回的原始元数据（如 token 用量），核心不知晓其结构，由插件自行解析 */
-  onAfterRequest?(response: LLMResponse, rawMeta?: Record<string, unknown>): void;
+  /** requestMessages 是本次 API 请求发送的完整消息数组，供插件在 rawMeta 缺失时自行估算 */
+  onAfterRequest?(response: LLMResponse, rawMeta?: Record<string, unknown>, requestMessages?: ChatMessage[]): void;
   onBeforeToolCall?(toolCall: ToolCall): ToolCall | null;
   onAfterToolCall?(result: ToolResponse): ToolResponse;
 
@@ -340,8 +341,8 @@ export class PluginRegistry {
     return this.execPipe(p => p.onBeforeRequest, messages, 'onBeforeRequest');
   }
 
-  execAfterRequest(response: LLMResponse, rawMeta?: Record<string, unknown>): void {
-    this.execBroadcast(p => p.onAfterRequest, 'onAfterRequest', response, rawMeta);
+  execAfterRequest(response: LLMResponse, rawMeta?: Record<string, unknown>, requestMessages?: ChatMessage[]): void {
+    this.execBroadcast(p => p.onAfterRequest, 'onAfterRequest', response, rawMeta, requestMessages);
   }
 
   collectExtraParams(): Record<string, unknown> {

@@ -425,12 +425,12 @@ const BUILTIN_COMMANDS: BuiltinCommand[] = [
         return { handled: true, skipAgent: true };
       }
 
-      // Get API usage from token-budget plugin (priority 1)
-      const getApiUsage = ctx.registry.store.get(SK.TokenBudgetGetApiUsage) as
-        (() => { inputTokens: number; outputTokens: number; totalTokens: number }) | undefined;
-      const apiTotalTokens = getApiUsage?.().totalTokens;
+      // Get current context usage from token-budget plugin (priority 1，对齐 CC)
+      const getCurrentUsage = ctx.registry.store.get(SK.TokenBudgetGetCurrentUsage) as
+        (() => { inputTokens: number; cacheCreationTokens: number; cacheReadTokens: number }) | undefined;
+      const currentInputTokens = getCurrentUsage?.().inputTokens;
 
-      const analysis = analyzeContextUsage(ctx.agent, ctx.registry, ctx.config, apiTotalTokens);
+      const analysis = analyzeContextUsage(ctx.agent, ctx.registry, ctx.config, currentInputTokens);
 
       // 推送结构化数据给展示层（Ink 渲染色块，REPL 无操作）
       ctx.display?.onContextAnalysis?.(analysis);

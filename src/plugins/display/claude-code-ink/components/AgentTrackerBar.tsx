@@ -6,6 +6,8 @@ interface AgentTrackerBarProps {
   states: AgentRuntimeState[];
   agentColorMap?: Record<string, string>;
   currentView?: string;
+  selectedIndex?: number;
+  isFocused?: boolean;
 }
 
 function formatDuration(state: AgentRuntimeState): string {
@@ -28,11 +30,14 @@ function formatTokens(n: number): string {
 /**
  * AgentTrackerBar — 底部 Agent 任务面板。
  * 有 running 子 agent 时显示，全部完成后自动隐藏。
+ * 支持键盘导航：↑↓ 选择 item，Enter 查看 agent，Esc 返回。
  */
 export function AgentTrackerBar({
   states,
   agentColorMap,
   currentView,
+  selectedIndex,
+  isFocused,
 }: AgentTrackerBarProps): React.ReactElement | null {
   const subAgents = states.filter(s => s.type && s.fullName && s.fullName !== 'main');
   const running = subAgents.filter(s => s.status === 'running');
@@ -45,19 +50,34 @@ export function AgentTrackerBar({
     Box,
     { flexDirection: 'column', paddingLeft: 1, paddingBottom: 1 },
     // Main 行
-    React.createElement(
-      Box,
-      { height: 1 },
-      React.createElement(Text, null,
-        React.createElement(Text, { color: isViewingMain ? BASE_COLOR : undefined, dimColor: !isViewingMain },
-          `${isViewingMain ? '●' : '○'} `),
-        React.createElement(Text, { color: BASE_COLOR, bold: isViewingMain }, 'main'),
-      ),
-    ),
+    (() => {
+      const idx = 0;
+      const isSelected = isFocused && selectedIndex === idx;
+      return React.createElement(
+        Box,
+        { height: 1 },
+        React.createElement(Text, null,
+          React.createElement(Text, {
+            inverse: isSelected,
+            color: isViewingMain ? BASE_COLOR : undefined,
+            dimColor: !isViewingMain && !isSelected,
+            bold: isViewingMain,
+          },
+            `${isViewingMain ? '●' : '○'} `),
+          React.createElement(Text, {
+            inverse: isSelected,
+            color: BASE_COLOR,
+            bold: isViewingMain || isSelected,
+          }, 'main'),
+        ),
+      );
+    })(),
     // 子 agent 行
     ...running.map((s, i) => {
+      const listIdx = i + 1;
       const isViewing = currentView === s.fullName;
-      const agentColor = agentColorMap?.[s.fullName] || '#06b6d4';
+      const isSelected = isFocused && selectedIndex === listIdx;
+      const agentColor = agentColorMap?.[s.fullName] || BASE_COLOR;
       const bullet = isViewing ? '●' : '○';
       const durationStr = formatDuration(s);
       const tokensStr = formatTokens(s.tokens);
@@ -66,8 +86,17 @@ export function AgentTrackerBar({
         Box,
         { key: s.fullName, height: 1, flexDirection: 'row' },
         React.createElement(Text, null,
-          React.createElement(Text, { color: isViewing ? agentColor : undefined, dimColor: !isViewing }, `${bullet} `),
-          React.createElement(Text, { color: agentColor, bold: isViewing }, s.type),
+          React.createElement(Text, {
+            inverse: isSelected,
+            color: isViewing || isSelected ? agentColor : undefined,
+            dimColor: !isViewing && !isSelected,
+            bold: isViewing || isSelected,
+          }, `${bullet} `),
+          React.createElement(Text, {
+            inverse: isSelected,
+            color: agentColor,
+            bold: isViewing || isSelected,
+          }, s.type),
           s.query
             ? React.createElement(Text, { dimColor: true }, ` · ${s.query}`)
             : null,
@@ -78,6 +107,9 @@ export function AgentTrackerBar({
         ),
       );
     }),
-    React.createElement(Text, { dimColor: true }, 'Tab 切换 Agent 导航'),
+    // 焦点提示
+    isFocused
+      ? React.createElement(Text, { dimColor: true }, '↑ ↓ Select · Enter View · Esc Return')
+      : null,
   );
 }

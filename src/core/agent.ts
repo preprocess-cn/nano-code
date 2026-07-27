@@ -172,7 +172,7 @@ export class NanoCodeAgent {
         break;
       }
 
-      this.registry.execAfterRequest(response, responseMeta);
+      this.registry.execAfterRequest(response, responseMeta, messagesWithSystem);
       turnCount++;
 
       // DEBUG: emit full response

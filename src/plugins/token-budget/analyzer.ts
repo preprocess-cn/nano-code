@@ -57,7 +57,6 @@ function analyzeSystemPrompt(registry: PluginRegistry, config: NanoConfig): { di
       if (content.trim()) {
         items.push({ name: file, tokens: countTokens(content.trim()) });
         foundFiles.push(file);
-        break;
       }
     } catch { /* skip missing */ }
   }
@@ -241,15 +240,16 @@ function analyzeMessages(agent: NanoCodeAgent): ContextDimension {
 /**
  * Analyze context usage across all 8 dimensions.
  *
- * Token priority:
- * 1. API usage data from token-budget (accumulated across requests)
- * 2. tiktoken estimation (fallback)
+ * Token priority (对齐 CC）:
+ * 1. 最后一次 API 响应的 prompt 侧 token 数（TokenBudgetGetCurrentUsage），=
+ *    模型实际看到的当前上下文大小
+ * 2. tiktoken 本地估算（fallback）
  */
 export function analyzeContextUsage(
   agent: NanoCodeAgent,
   registry: PluginRegistry,
   config: NanoConfig,
-  apiTotalTokens?: number,
+  currentInputTokens?: number,
 ): ContextAnalysis {
   const systemResult = analyzeSystemPrompt(registry, config);
   const dimensions: ContextDimension[] = [
@@ -266,9 +266,9 @@ export function analyzeContextUsage(
   // Calculate totals
   const estimatedTokens = dimensions.reduce((s, d) => s + d.tokens, 0);
 
-  // Priority 1: use API usage data if available (more accurate)
-  const hasApiData = apiTotalTokens != null && apiTotalTokens > 0;
-  const totalTokens = hasApiData ? apiTotalTokens! : estimatedTokens;
+  // Priority 1: use last API response's input tokens (current context window)
+  const hasApiData = currentInputTokens != null && currentInputTokens > 0;
+  const totalTokens = hasApiData ? currentInputTokens! : estimatedTokens;
 
   const modelName = config.core.model || process.env.OPENAI_MODEL_NAME || 'gpt-4o';
   const contextWindow = resolveContextWindow(modelName, config);

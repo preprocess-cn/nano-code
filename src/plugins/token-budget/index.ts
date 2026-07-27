@@ -1,8 +1,7 @@
 import { NanoPlugin, PluginRegistry } from '#src/core/plugin.js';
 import { ToolResponse, ToolContext, ToolDefinition, ToolCall, LLMResponse, type SessionRestoreContext } from '#src/core/contract.js';
 import { ChatMessage } from '#src/core/llm.js';
-import { countMessagesTokens } from '#src/plugins/token-budget/counter.js';
-import { initTokenizer } from '#src/plugins/token-budget/counter.js';
+import { countMessagesTokens, initTokenizer, roughTokenCountEstimation } from '#src/plugins/token-budget/counter.js';
 import type { LLMClient } from '#src/core/llm.js';
 import type { DisplayOutput } from '#src/display.js';
 import { SK, agentMessagesKey, compactResultKey, compactCompletedKey, compactRetryKey } from '#src/store-keys.js';
@@ -49,6 +48,10 @@ export function createTokenBudgetPlugin(config?: TokenBudgetConfig): NanoPlugin 
   let inputTokens = 0;
   let outputTokens = 0;
   let totalTokensAccumulated = 0;
+
+  // 当前上下文窗口（最后一次 API 响应的 prompt 侧数据，非累计）
+  let lastUsage = { inputTokens: 0, cacheCreationTokens: 0, cacheReadTokens: 0 };
+
   let warned = false;
   let compressed = false;
   let _registryRef: PluginRegistry | null = null;
@@ -132,6 +135,9 @@ export function createTokenBudgetPlugin(config?: TokenBudgetConfig): NanoPlugin 
         totalTokens: totalTokensAccumulated,
       }));
 
+      // 暴露当前上下文窗口使用量（最后一次 API 响应的 prompt 侧）
+      _registry.store.set(SK.TokenBudgetGetCurrentUsage, () => ({ ...lastUsage }));
+
       // Initialize auto-compact signals
       const name = _agentName();
       _registry.store.set(SK.CompactSignal, false);
@@ -211,18 +217,28 @@ export function createTokenBudgetPlugin(config?: TokenBudgetConfig): NanoPlugin 
       return messages;
     },
 
-    onAfterRequest(response: LLMResponse, rawMeta?: Record<string, unknown>): void {
+    onAfterRequest(response: LLMResponse, rawMeta?: Record<string, unknown>, requestMessages?: ChatMessage[]): void {
       if (rawMeta?.promptTokens != null) {
-        // Use exact token counts from API response (priority 1)
+        // 会话累计（不变）
         inputTokens += rawMeta.promptTokens as number;
         outputTokens += rawMeta.completionTokens as number;
         totalTokensAccumulated += rawMeta.totalTokens as number;
+
+        // 当前上下文窗口（替换式存储，非累计）
+        lastUsage = {
+          inputTokens: rawMeta.promptTokens as number,
+          cacheCreationTokens: (rawMeta as any).cacheCreationTokens ?? 0,
+          cacheReadTokens: (rawMeta as any).cacheReadTokens ?? 0,
+        };
       } else {
-        // Fallback estimation when API doesn't return usage
-        const responseText = response.text || '';
-        const estOutput = Math.ceil(responseText.length / 3);
+        // Fallback: 同时估算 input 和 output
+        const estInput = countMessagesTokens(requestMessages ?? []);
+        const estOutput = roughTokenCountEstimation(response.text ?? '', 4);
+        inputTokens += estInput;
         outputTokens += estOutput;
-        totalTokensAccumulated = inputTokens + outputTokens;
+        totalTokensAccumulated += estInput + estOutput;
+
+        lastUsage = { inputTokens: estInput, cacheCreationTokens: 0, cacheReadTokens: 0 };
       }
 
       const name = _agentName();

@@ -23,13 +23,17 @@ export async function initTokenizer(): Promise<void> {
   await getTokenizer();
 }
 
-/** 精确 token 计数（tiktoken cl100k_base），不可用时回退 text/3 估算 */
+/** CC 风格粗略估算：content.length / bytesPerToken，按文件类型调整 */
+export function roughTokenCountEstimation(content: string, bytesPerToken = 4): number {
+  return Math.round(content.length / bytesPerToken);
+}
+
+/** 精确 token 计数（tiktoken cl100k_base），不可用时回退 text/4 估算（对齐 CC） */
 export function countTokens(text: string): number {
   if (_tokenizer) {
     return _tokenizer.encode(text).length;
   }
-  // Fallback estimation when tiktoken is unavailable
-  return Math.ceil(text.length / 3);
+  return roughTokenCountEstimation(text, 4);
 }
 
 /** 遍历消息数组计算 token 总数，每消息 +4 overhead */

@@ -70,10 +70,6 @@ function createPlugin(): DisplayPlugin {
     }
   }
 
-  function getTokenUsage(): (() => { inputTokens: number; outputTokens: number; totalTokens: number }) | undefined {
-    return registry?.store?.get<() => { inputTokens: number; outputTokens: number; totalTokens: number }>(SK.TokenBudgetGetApiUsage);
-  }
-
   /** 收集消息中出现的所有 agentName */
   function collectAgentNames(): Set<string> {
     return state.collectAgentNames();
@@ -169,7 +165,7 @@ function createPlugin(): DisplayPlugin {
           notification: state.notification,
           llmStatus: state.llmStatus,
           llmStartTime: state.llmTurnStartTime,
-          turnTokens: state.llmTurnTokens,
+          turnTokens: state.getEstimatedTurnTokens(),
           llmLastTokenTime: state.llmLastTokenTime,
           agentColorMap: tracker.colors,
           agentStates: Array.from(tracker.states.values()),
@@ -306,7 +302,7 @@ function createPlugin(): DisplayPlugin {
           notification: state.notification,
           llmStatus: state.llmStatus,
           llmStartTime: state.llmTurnStartTime,
-          turnTokens: state.llmTurnTokens,
+          turnTokens: state.getEstimatedTurnTokens(),
           llmLastTokenTime: state.llmLastTokenTime,
           agentColorMap: {},
           agentStates: [],
@@ -352,13 +348,16 @@ function createPlugin(): DisplayPlugin {
 
     onStreamChunk(event: StreamEvent): void {
       const updated = state.handleStreamChunk(event);
+      // 仅主 agent 的流式文本计入 responseLength（副 agent 在子 transcript 中）
+      if (event.agentName === 'main') {
+        state.addResponseDelta(event.text ?? '');
+      }
       if (updated) render();
     },
 
     onToolCall(event: ToolCallEvent): void {
       state.resetStream();
       tracker.updateToolCall(event.agentName, event.toolName, registry ?? undefined);
-      state.updateTurnTokens(getTokenUsage());
       state.addToolCall(event, registry ?? undefined);
       render();
     },
@@ -385,7 +384,7 @@ function createPlugin(): DisplayPlugin {
         state.llmStatus = 'running';
         state.llmTurnStartTime = Date.now();
         state.llmLastTokenTime = Date.now();
-        state.initLLMTurn(getTokenUsage());
+        state.responseLength = 0;
       } else {
         state.handleAgentTurnStart(_event, tracker);
       }

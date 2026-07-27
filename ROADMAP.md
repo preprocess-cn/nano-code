@@ -56,7 +56,7 @@
 | ✅ | **`plugin install` 检测 DisplayPlugin** | 安装时自动检测包中的 DisplayPlugin，写入 `~/.nano-code/presentations/`（绝对路径 re-export），全局配置注册为 `type: display`（默认 disabled），`plugin list` 显示 `[display]` 标签 |
 | ✅ | **权限系统（CC 对齐）** | 8 阶段权限评估管道（deny → allow → 路径检查 → ask → safety → 默认），RuleStore 路径通配 + 命令匹配，PathValidator 符号链解析，`permission:evaluator` store 回调与 agent.ts 集成，路径级授权（点「始终允许」创建 `Read(/tmp/**)` 目录规则），FIFO 弹窗队列（permission 优先于 ask_question），重检查跳过已授权路径，`/permissions` 查看/管理已允许工具 |
 | ✅ | **交互式 `/plugin` 命令** | 会话中通过 `/plugin list/enable/disable/manage` 管理插件；Ink 下进入全屏交互式插件管理器，`↑↓`/`Enter`/`/` 搜索/Esc 退出；REPL 回退文本列表 |
-| ✅ | **子 Agent 内联跟踪** | Ink 消息流中显示 agent 实时进度（树形字符 + 工具计数 + 耗时 + 每秒刷新），底部 Agent 列表支持焦点环导航（↓ 进入、↑↓ 选择、Enter 查看详情、Esc 返回），agent 完成自动回退主视图 |
+| ✅ | **子 Agent 内联跟踪 + 方向键导航** | Ink 消息流中显示 agent 实时进度（树形字符 + 工具计数 + 耗时 + 每秒刷新），底部 AgentTrackerBar 支持方向键导航（↓ 进入、↑↓ 选择、Enter 查看详情、Esc/任意字符返回），agent 颜色标识区分，agent 完成自动回退主视图 |
 | ✅ | **Agent 定义透传 description 到 Display 层** | 所有 Agent 类型插件（内置 explore + YAML 定义）需将 `description`/`role` 传递到 Display 层，让 AgentTrackerBar 可展示 agent 描述文案（如 `explore: 快速搜索和探索代码库`） |
 | ✅ | **会话恢复 tool 状态修复** | `-c` 恢复会话时解析 content JSON 中的真实状态（rejected_by_user / error / success），替代全部硬编码 success |
 | ✅ | **后台 agent 独立 transcript** | 将 Ink display 的单一 `messages[]` 替换为 `Map<string, UIMessage[]>`，每个 agent 拥有独立消息存储。`onAgentTurnStart` 双写：agent 自身 transcript + 主视图摘要。agent 视图（`@agentName`）展示完整 transcript（含开始/结束摘要），与 CC 行为一致。(2026-07-26) |
@@ -70,7 +70,7 @@
 | ✅ | Ink 后台任务指示器 | `BackgroundTaskBar` 底栏组件，实时展示运行/完成/失败状态，5 秒自动清理 |
 | ✅ | 后台任务展示层事件 | `BackgroundTaskEvent` + `onBackgroundTask` 回调，REPL 和 Ink 双实现 |
 | ✅ | **SummaryPill 聚合统计** | 非 swarm 模式下运行 agent 显示聚合文本（"N explore agents"），`hasSwarmAgents` 门控预留 AgentPillBar 扩展点 |
-| ✅ | **AgentTrackerBar 简化** | 移除死代码（selection 光标 `❯`、`isInFocus`、聚焦帮助文本），AgentTrackerBar 为纯信息展示组件 |
+| ✅ | **AgentTrackerBar 导航 + 颜色标识恢复** | 方向键导航替代原 Tab 切换（↓ 进入 tasks 模式、↑↓ 选择、Enter 查看、Esc/字符返回输入），恢复 agent 颜色标识（`agentColorMap`），添加选中态 inverse 效果；移除死代码 `trackerList` 变量，安全夹紧防 agent 完成时越界 |
 | ✅ | **Agent 视图帮助文本修正** | 删除误导性的 "← → 切换Agent" 帮助文本，该导航仅限 swarm 模式下可用 |
 | ✅ | **Ink 上下文可视化** | `InkApp.tsx` 内联 `ContextVis` 组件渲染色块网格，数据源为 `analyzer.ts` 的 8 维度分析 |
 | ✅ | **搜索委托 + VirtualMessageList** | 搜索扫描/位置计算/滚动匹配从 `InkApp.tsx` 整体提取到 `VirtualMessageList` 组件，暴露 `JumpHandle`（nextMatch/prevMatch/setSearchQuery）；新增 `useVirtualScroll` 虚拟滚动引擎、`StickyPromptHeader` 粘性提示头、`transcriptSearch` 搜索文本提取；`debugLog` 调试工具覆盖 ink.tsx/render-to-screen 高亮应用路径 |
