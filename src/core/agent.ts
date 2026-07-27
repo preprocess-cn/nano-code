@@ -140,7 +140,7 @@ export class NanoCodeAgent {
       const onChunk = (chunk: string) => {
         if (!chunk) return;
         if (isSubAgent) streamBuffer += chunk;
-        else this.display?.onStreamChunk?.({ text: chunk, agentName: this.name });
+        else this.display?.onStreamChunk?.({ text: chunk, agentName: this.name, deltaType: 'text_delta' });
       };
 
       const extraParams = this.registry.collectExtraParams();
@@ -192,7 +192,7 @@ export class NanoCodeAgent {
       _log(`llmResp: agent=${this.name} textLen=${respText.length} tools=${toolNames} textStart="${respText.slice(0, 100)}" textEnd="${respText.slice(-100)}"`);
 
       if (isSubAgent && streamBuffer) {
-        this.display?.onStreamChunk?.({ text: '\n' + streamBuffer + '\n', agentName: this.name });
+        this.display?.onStreamChunk?.({ text: '\n' + streamBuffer + '\n', agentName: this.name, deltaType: 'text_delta' });
       }
 
       const assistantMessage: ChatMessage = {
