@@ -111,8 +111,13 @@ function createPlugin(): DisplayPlugin {
 
   // ──────── Render ────────
 
-  /** 获取指定 agent 的 token 值：优先 per-agent store key，fallback 到 response-length 估算 */
+  /** 获取指定 agent 的 token 值：主 agent 用流式估算（本轮实时），子 agent 用 per-agent store key */
   function getAgentTokens(agentName: string): number {
+    if (agentName === 'main') {
+      // 主 agent：用 responseLength 流式估算，实时反映本轮 token 增长
+      // token-budget 的累计值只在 LLM 响应结束时才更新，流式过程中一直不变
+      return state.getEstimatedTurnTokens(agentName);
+    }
     const apiUsage = registry?.store.get<() => { totalTokens: number }>(tokenBudgetKey(agentName));
     return apiUsage?.()?.totalTokens ?? state.getEstimatedTurnTokens(agentName);
   }
