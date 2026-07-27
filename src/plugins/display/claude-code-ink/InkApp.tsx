@@ -1511,7 +1511,7 @@ visibleSuggestions,
       hasSwarmAgents
         ? React.createElement(AgentPillBar, {
             agents: props.viewAgents ?? [],
-            agentColorMap: props.agentColorMap,
+            agentColorMap: props.agentColorMap ?? {},
             selectedIndex: taskIndex,
             currentView: viewAgent,
             isFocused: focusMode === 'tasks',
