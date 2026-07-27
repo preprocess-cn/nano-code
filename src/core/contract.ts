@@ -17,6 +17,8 @@ export interface StatusEvent extends AgentEvent {
 
 export interface StreamEvent extends AgentEvent {
   text: string;
+  /** delta 类型：text_delta（可见文本）或 thinking_delta（思考内容）。默认 text_delta。 */
+  deltaType?: 'text_delta' | 'thinking_delta';
 }
 
 export interface ToolCallEvent extends AgentEvent {

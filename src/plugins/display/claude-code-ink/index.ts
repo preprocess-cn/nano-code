@@ -271,7 +271,7 @@ function createPlugin(): DisplayPlugin {
       state.showThink = config.showThink === true;
       state.debug = config.debug === true;
 
-      const mainMessages = state.agentMessages.get('main')!;
+      const mainMessages = state.getAgentMessages('main');
       if (mainMessages.length > 0 && !state.greetingShown) {
         mainMessages.unshift({ agentName: state.agentName, text: state.greeting, kind: 'status' });
         state.greetingShown = true;
@@ -281,7 +281,7 @@ function createPlugin(): DisplayPlugin {
       const initPromise = inkRender(
         React.createElement(InkApp, {
           greeting: state.greeting,
-          messages: [...(state.agentMessages.get('main') ?? [])],
+          messages: [...state.getAgentMessages('main')],
           inputBuffer: '',
           suggestions: initSuggestions,
           activeAgentName: registry?.store?.get<AgentModeInfo>(SK.AgentMode)?.name,

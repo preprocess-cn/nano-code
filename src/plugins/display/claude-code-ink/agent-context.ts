@@ -1,6 +1,9 @@
 import type { IStore } from '#src/core/store.js';
 import type { UIMessage } from '#src/plugins/display/claude-code-ink/InkApp.js';
 
+// re-export for downstream consumers
+export type { UIMessage };
+
 /**
  * 对标 CC ToolUseContext 的轻量版 per-agent 隔离上下文。
  * 只包含 display 层需要的字段，不涉及 CC 的完整 tool 系统。
