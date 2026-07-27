@@ -10,6 +10,9 @@ import { logManager } from '#src/utils/logger.js';
 import { enqueue, requestExit } from '#src/core/message-queue.js';
 import React from 'react';
 import * as path from 'path';
+import { writeSync } from 'fs';
+import { drainStdin } from '#src/plugins/display/claude-code-ink/engine/ink.js';
+import { DISABLE_MOUSE_TRACKING } from '#src/plugins/display/claude-code-ink/engine/termio/dec.js';
 
 import { DisplayState, parseThinkSegments } from '#src/plugins/display/claude-code-ink/display-state.js';
 import { AgentTracker } from '#src/plugins/display/claude-code-ink/agent-tracker.js';
@@ -158,8 +161,15 @@ function createPlugin(): DisplayPlugin {
             enqueue({ mode: 'prompt', value: text });
           },
           onExit: () => {
+            // 同步 terminal cleanup：关闭鼠标追踪 + 排空 stdin
+            // 防止异步 shutdown 延迟中鼠标事件泄漏为 ANSI 乱码
+            try { writeSync(1, DISABLE_MOUSE_TRACKING); } catch {}
+            try { drainStdin(process.stdin); } catch {}
             cancelExecution();
             requestExit();
+          },
+          onInterrupt: () => {
+            cancelExecution();
           },
           pendingPermission,
           onPermissionResponse: (response: PermissionResponse) => {
@@ -303,8 +313,13 @@ function createPlugin(): DisplayPlugin {
             enqueue({ mode: 'prompt', value: text });
           },
           onExit: () => {
+            try { writeSync(1, DISABLE_MOUSE_TRACKING); } catch {}
+            try { drainStdin(process.stdin); } catch {}
             cancelExecution();
             requestExit();
+          },
+          onInterrupt: () => {
+            cancelExecution();
           },
           onModeToggle: handleModeToggle,
           statusSegments: state.statusSegments,

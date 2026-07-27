@@ -121,6 +121,8 @@ export interface InkAppProps {
   onInputChange: (text: string) => void;
   onInputSubmit: (text: string) => void;
   onExit: () => void;
+  /** 第一次 Ctrl+C：中断当前操作（不退出） */
+  onInterrupt?: () => void;
   suggestions?: CommandSuggestion[];
   activeAgentName?: string;
   pendingPermission?: PermissionPrompt | null;
@@ -615,7 +617,7 @@ function offsetFromLineCol(lines: string[], lineIdx: number, col: number): numbe
 }
 
 function AppContent(props: InkAppProps): React.ReactElement {
-  const { messages, onInputSubmit, onExit, greeting, pendingPermission, onPermissionResponse, pendingQuestions, onQuestionsResponse, activeAgentName, viewAgent, onViewAgentClear, onViewAgentChange, mode, agentColorMap, agentStates, llmStatus, llmStartTime, turnTokens, llmLastTokenTime } = props;
+  const { messages, onInputSubmit, onExit, onInterrupt, greeting, pendingPermission, onPermissionResponse, pendingQuestions, onQuestionsResponse, activeAgentName, viewAgent, onViewAgentClear, onViewAgentChange, mode, agentColorMap, agentStates, llmStatus, llmStartTime, turnTokens, llmLastTokenTime } = props;
   const { setRawMode } = useStdin();
   const [input, setInput] = useState('');
   const [cursorPos, setCursorPos] = useState(0);
@@ -627,6 +629,8 @@ function AppContent(props: InkAppProps): React.ReactElement {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchCursorPos, setSearchCursorPos] = useState(0);
   const [searchMatchCount, setSearchMatchCount] = useState(0);
+  const [exitPending, setExitPending] = useState(false);
+  const exitTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [searchCurrentIdx, setSearchCurrentIdx] = useState(0);
   const [transcriptMode, setTranscriptMode] = useState(false);
   const transcriptModeRef = useRef(false);
@@ -875,12 +879,23 @@ function AppContent(props: InkAppProps): React.ReactElement {
     wheelUp: boolean; wheelDown: boolean; tab: boolean;
   }) => {
     debugLog("input: _input=" + _input + " transcriptMode=" + transcriptModeRef.current + " searchMode=" + searchModeRef.current);
+    // 任何非 Ctrl+C 的按键重置双 Ctrl+C 退出状态
+    if (!(key.ctrl && _input === 'c') && exitPending) {
+      setExitPending(false);
+    }
     // Any dialog active: ESC/Ctrl+C cancels the ReAct process
     if ((pendingPermission && onPermissionResponse) || (pendingQuestions && onQuestionsResponse)) {
       if (key.ctrl && _input === 'c') {
-        if (pendingPermission && onPermissionResponse) onPermissionResponse('deny');
-        if (pendingQuestions && onQuestionsResponse) onQuestionsResponse({});
-        onExit();
+        if (exitPending) {
+          setExitPending(false);
+          onExit();
+        } else {
+          if (pendingPermission && onPermissionResponse) onPermissionResponse('deny');
+          if (pendingQuestions && onQuestionsResponse) onQuestionsResponse({});
+          setExitPending(true);
+          onInterrupt?.();
+          setTimeout(() => setExitPending(false), 2000);
+        }
         return;
       }
       if (key.escape) {
@@ -1297,7 +1312,14 @@ function AppContent(props: InkAppProps): React.ReactElement {
       return;
     }
     if (key.ctrl && _input === 'c') {
-      onExit();
+      if (exitPending) {
+        setExitPending(false);
+        onExit();
+      } else {
+        setExitPending(true);
+        onInterrupt?.();
+        setTimeout(() => setExitPending(false), 2000);
+      }
       return;
     }
     if (key.return) {
@@ -1546,6 +1568,10 @@ visibleSuggestions,
         selectedIndex: taskIndex,
         isFocused: focusMode === 'tasks',
       }),
+      // 双 Ctrl+C 退出提示
+      exitPending
+        ? React.createElement(Text, { dimColor: true }, 'Press Ctrl+C again to exit')
+        : null,
       React.createElement(StatusBar, {
         segments: props.statusSegments,
         notification: props.notification,
