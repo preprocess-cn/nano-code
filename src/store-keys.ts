@@ -19,6 +19,7 @@ export const agentCancelledKey = (name: string): string => `agent:cancelled:${na
 export const compactResultKey = (name: string): string => `compact:result:${name}`;
 export const compactCompletedKey = (name: string): string => `compact:completed:${name}`;
 export const compactRetryKey = (name: string): string => `compact:retry:${name}`;
+export const tokenBudgetKey = (name: string): string => `token-budget:agent:${name}`;
 
 export const SK = {
   /** AgentManager 实例引用（存入共享 store 供插件获取） */
@@ -45,6 +46,8 @@ export const SK = {
   TokenBudgetGetApiUsage: 'token-budget:getApiUsage',
   /** () => { inputTokens, cacheCreationTokens, cacheReadTokens }: 获取最后一次 API 响应的当前上下文窗口使用量 */
   TokenBudgetGetCurrentUsage: 'token-budget:getCurrentUsage',
+  /** (agentName: string) => void: 按 agent 名清理 per-agent token 累计值 */
+  TokenBudgetRemoveAgent: 'token-budget:removeAgent',
   /** () => ReadCacheEntry[]: 获取文件读取缓存 */
   FsReadCache: 'fs:readCache',
   /** { name, description } | undefined: 当前活跃的 agent-slash 模式 */

@@ -5,6 +5,14 @@ import { buildSystemPrompt, formatToolResponse } from '#src/core/prompt.js';
 import { ToolResponse, ToolContext, ToolCall, InjectedMessage, isMainAgent, AgentDisplay } from '#src/core/contract.js';
 import { getToolDisplayName } from '#src/utils/tool-name.js';
 import { SK, agentStatusKey, agentAbortKey, agentMessagesKey, agentCancelledKey, compactResultKey } from '#src/store-keys.js';
+import { appendFileSync } from 'fs';
+
+/** 跨层调试日志（核心层不允许 import 插件，直接写文件） */
+function _log(msg: string): void {
+  if (process.env.NANO_CODE_DEBUG === '1' || process.env.NANO_CODE_DEBUG === 'true') {
+    try { appendFileSync('/tmp/nano-code-debug.log', `[${Date.now()}] ${msg}\n`); } catch {}
+  }
+}
 
 export interface NanoCodeAgentOptions {
   registry: PluginRegistry;
@@ -177,6 +185,11 @@ export class NanoCodeAgent {
 
       // DEBUG: emit full response
       try { this.display?.onDebug?.({ agentName: this.name, data: `[RESPONSE]\n${JSON.stringify(response, null, 2)}` }); } catch {}
+
+      // Log full LLM response text for debugging display completeness
+      const respText = response.text ?? '';
+      const toolNames = response.toolCalls?.map(tc => tc.function.name).join(',') ?? '';
+      _log(`llmResp: agent=${this.name} textLen=${respText.length} tools=${toolNames} textStart="${respText.slice(0, 100)}" textEnd="${respText.slice(-100)}"`);
 
       if (isSubAgent && streamBuffer) {
         this.display?.onStreamChunk?.({ text: '\n' + streamBuffer + '\n', agentName: this.name });

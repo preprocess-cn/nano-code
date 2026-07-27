@@ -69,6 +69,7 @@ export const EXPLORE_AGENT_DEF: AgentDefinition = {
     'file-search': {},
     command: {},
     web: {},
+    'token-budget': {},
   },
 
   systemPrompt: {

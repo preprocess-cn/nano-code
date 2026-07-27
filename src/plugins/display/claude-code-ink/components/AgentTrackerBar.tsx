@@ -1,5 +1,6 @@
 import React from 'react';
 import { Box, Text } from '#src/plugins/display/claude-code-ink/ink.js';
+import { formatDuration, formatTokens } from '#src/utils/format.js';
 import type { AgentRuntimeState } from '#src/plugins/display/claude-code-ink/InkApp.js';
 
 interface AgentTrackerBarProps {
@@ -8,23 +9,6 @@ interface AgentTrackerBarProps {
   currentView?: string;
   selectedIndex?: number;
   isFocused?: boolean;
-}
-
-function formatDuration(state: AgentRuntimeState): string {
-  const end = state.status === 'running' ? Date.now() : (state.endTime ?? Date.now());
-  const ms = Math.max(0, end - state.startTime);
-  const totalSec = Math.floor(ms / 1000);
-  const h = Math.floor(totalSec / 3600);
-  const m = Math.floor((totalSec % 3600) / 60);
-  const s = totalSec % 60;
-  if (h > 0) return `${h}h ${m}m ${s}s`;
-  if (m > 0) return `${m}m ${s}s`;
-  return `${s}s`;
-}
-
-function formatTokens(n: number): string {
-  if (n < 1000) return `${n} tokens`;
-  return `${(n / 1000).toFixed(1)}K tokens`;
 }
 
 /**
@@ -79,7 +63,8 @@ export function AgentTrackerBar({
       const isSelected = isFocused && selectedIndex === listIdx;
       const agentColor = agentColorMap?.[s.fullName] || BASE_COLOR;
       const bullet = isViewing ? '●' : '○';
-      const durationStr = formatDuration(s);
+      const end = s.status === 'running' ? Date.now() : (s.endTime ?? Date.now());
+      const durationStr = formatDuration(Math.max(0, end - s.startTime));
       const tokensStr = formatTokens(s.tokens);
 
       return React.createElement(

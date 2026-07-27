@@ -1,5 +1,7 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { Box, Text, useAnimationFrame } from '#src/plugins/display/claude-code-ink/ink.js';
+import { formatDuration, formatTokens } from '#src/utils/format.js';
+import { debugLog } from '#src/plugins/display/claude-code-ink/utils/debugLog.js';
 
 /** Starburst 动画帧序列（与 StatusBar LlmSpinner 一致） */
 const SPINNER_FRAMES = ['·', '✢', '✲', '✶', '✻', '✽', '✻', '✶', '✲', '✢'];
@@ -19,22 +21,6 @@ export interface SpinnerWithVerbProps {
   verb?: string;
   /** 是否强制显示 stalled 态（用于测试） */
   stalled?: boolean;
-}
-
-function formatElapsed(startTime: number): string {
-  const ms = Date.now() - startTime;
-  const totalSec = Math.floor(ms / 1000);
-  const h = Math.floor(totalSec / 3600);
-  const m = Math.floor((totalSec % 3600) / 60);
-  const s = totalSec % 60;
-  if (h > 0) return `${h}h ${m}m ${s}s`;
-  if (m > 0) return `${m}m ${s}s`;
-  return `${s}s`;
-}
-
-function formatTokens(n: number): string {
-  if (n < 1000) return `${n} tokens`;
-  return `${(n / 1000).toFixed(1)}K tokens`;
 }
 
 /**
@@ -57,12 +43,20 @@ export function SpinnerWithVerb({
 }: SpinnerWithVerbProps): React.ReactElement {
   const [ref, animTime] = useAnimationFrame(50);
   const frameIdx = Math.floor(animTime / 120) % SPINNER_FRAMES.length;
+  const _lastLogRef = useRef(0);
 
   const stalled = forceStalled !== undefined ? forceStalled : (Date.now() - lastTokenTime) > STALL_THRESHOLD_MS;
   const color = stalled ? COLOR_STALLED : COLOR_ACTIVE;
 
-  const elapsedStr = formatElapsed(startTime);
+  const elapsedStr = formatDuration(Date.now() - startTime);
   const tokenStr = formatTokens(tokens);
+
+  // Throttled spinner state log: once per second
+  const now = Date.now();
+  if (now - _lastLogRef.current > 1000) {
+    _lastLogRef.current = now;
+    debugLog(`spinner: tokens=${tokens} elapsed=${elapsedStr} verb=${verb} stalled=${stalled} startTime=${startTime}`);
+  }
 
   return React.createElement(
     Box,

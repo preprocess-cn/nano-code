@@ -128,13 +128,66 @@ describe('Token Budget Plugin', () => {
     assert.match(last.content!, /token budget/, 'should inject budget exceeded message');
   });
 
-  it('can be registered as a NanoPlugin', async () => {
-    const r = new PluginRegistry();
+  it('writes per-agent token key on afterRequest', async () => {
+    const registry = new PluginRegistry();
+    registry.setAgentName('explore_sync_x1');
     const plugin = createTokenBudgetPlugin();
-    await r.register(plugin);
+    // onInit triggers during register
+    await registry.register(plugin);
 
-    assert.equal(plugin.name, 'token-budget');
-    assert.equal(r.getAllSchemas().length, 0);
+    plugin.onAfterRequest!({ text: 'hello world this is a test message', toolCalls: undefined },
+      { promptTokens: 10, completionTokens: 15, totalTokens: 25 });
+
+    // Per-agent key should be writable and contain accumulated total
+    const getFn = registry.store.get<() => { totalTokens: number }>('token-budget:agent:explore_sync_x1');
+    assert.ok(getFn, 'per-agent key should exist');
+    assert.equal(getFn!().totalTokens, 25);
+  });
+
+  it('protects TokenBudgetGetApiUsage from sub-agent overwrite', async () => {
+    // Simulate: first main agent registers, then sub-agent registers
+    const { InMemoryStore } = await import('../src/core/store.js');
+    const store = new InMemoryStore();
+    const mainReg = new PluginRegistry({ store });
+    mainReg.setAgentName('main');
+
+    const mainPlugin = createTokenBudgetPlugin();
+    await mainReg.register(mainPlugin);
+    mainPlugin.onAfterRequest!({ text: 'x', toolCalls: undefined },
+      { promptTokens: 5, completionTokens: 5, totalTokens: 10 });
+
+    // Sub-agent registers with same store
+    const subReg = new PluginRegistry({ store });
+    subReg.setAgentName('explore_sync_x1');
+    const subPlugin = createTokenBudgetPlugin();
+    await subReg.register(subPlugin);
+
+    // Main agent's TokenBudgetGetApiUsage should still reflect main agent's data
+    const mainGet = store.get<() => { totalTokens: number }>('token-budget:getApiUsage');
+    assert.ok(mainGet, 'TokenBudgetGetApiUsage should still exist');
+    assert.equal(mainGet!().totalTokens >= 10, true, 'should have main agent total');
+  });
+
+  it('removeAgent cleans up per-agent key', async () => {
+    const registry = new PluginRegistry();
+    const plugin = createTokenBudgetPlugin();
+    await registry.register(plugin);
+
+    // Simulate sub-agent writes
+    registry.setAgentName('explore_sync_x1');
+    plugin.onAfterRequest!({ text: 'test', toolCalls: undefined },
+      { promptTokens: 5, completionTokens: 3, totalTokens: 8 });
+
+    // Verify key exists
+    assert.ok(registry.store.get('token-budget:agent:explore_sync_x1'), 'key should exist');
+
+    // Cleanup
+    const removeAgent = registry.store.get<(name: string) => void>('token-budget:removeAgent');
+    assert.ok(removeAgent, 'removeAgent function should exist');
+    removeAgent!('explore_sync_x1');
+
+    // Key should be removed
+    assert.equal(registry.store.get('token-budget:agent:explore_sync_x1'), undefined);
   });
 });
 

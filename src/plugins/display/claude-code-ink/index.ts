@@ -4,7 +4,7 @@ import { inkRender, type Instance } from '#src/plugins/display/claude-code-ink/i
 import { InkApp, type UIMessage, type PermissionPrompt, type PermissionResponse, type AgentRuntimeState, type BackgroundTaskInfo } from '#src/plugins/display/claude-code-ink/InkApp.js';
 import type { PluginRegistry } from '#src/core/plugin.js';
 import type { AgentModeInfo } from '#src/store-keys.js';
-import { SK, agentCancelledKey, agentAbortKey } from '#src/store-keys.js';
+import { SK, tokenBudgetKey, agentCancelledKey, agentAbortKey } from '#src/store-keys.js';
 import type { ModelEntry } from '#src/core/llm.js';
 import { logManager } from '#src/utils/logger.js';
 import { enqueue, requestExit } from '#src/core/message-queue.js';
@@ -14,6 +14,7 @@ import * as path from 'path';
 import { DisplayState, parseThinkSegments } from '#src/plugins/display/claude-code-ink/display-state.js';
 import { AgentTracker } from '#src/plugins/display/claude-code-ink/agent-tracker.js';
 import { ModalQueue } from '#src/plugins/display/claude-code-ink/modal-queue.js';
+import { debugLog } from '#src/plugins/display/claude-code-ink/utils/debugLog.js';
 
 // ──────── Module-level exports ────────
 
@@ -107,8 +108,16 @@ function createPlugin(): DisplayPlugin {
 
   // ──────── Render ────────
 
+  /** 获取指定 agent 的 token 值：优先 per-agent store key，fallback 到 response-length 估算 */
+  function getAgentTokens(agentName: string): number {
+    const apiUsage = registry?.store.get<() => { totalTokens: number }>(tokenBudgetKey(agentName));
+    return apiUsage?.()?.totalTokens ?? state.getEstimatedTurnTokens(agentName);
+  }
+
   function render(): void {
     if (!inkInstance) return;
+    const _debugTT = state.getEstimatedTurnTokens();
+    debugLog(`render: turnTokens=${_debugTT} llmStatus=${state.llmStatus} responseLen=${state.responseLength.get('main')}`);
     const suggestions = _suggestionProvider?.() ?? [];
     try {
       const currentMode = (registry?.store?.get<string>(SK.Mode)) ?? 'normal';
@@ -165,7 +174,7 @@ function createPlugin(): DisplayPlugin {
           notification: state.notification,
           llmStatus: state.llmStatus,
           llmStartTime: state.llmTurnStartTime,
-          turnTokens: state.getEstimatedTurnTokens(),
+          turnTokens: getAgentTokens(currentViewAgent ?? 'main'),
           llmLastTokenTime: state.llmLastTokenTime,
           agentColorMap: tracker.colors,
           agentStates: Array.from(tracker.states.values()),
@@ -302,7 +311,7 @@ function createPlugin(): DisplayPlugin {
           notification: state.notification,
           llmStatus: state.llmStatus,
           llmStartTime: state.llmTurnStartTime,
-          turnTokens: state.getEstimatedTurnTokens(),
+          turnTokens: getAgentTokens('main'),
           llmLastTokenTime: state.llmLastTokenTime,
           agentColorMap: {},
           agentStates: [],
@@ -325,6 +334,9 @@ function createPlugin(): DisplayPlugin {
       state.resetAll();
       tracker.clearAll();
       modalQueue.clearAll();
+      // Clear residual ANSI escape sequences from Ctrl+C-interrupted writes.
+      // Resets text attributes, shows cursor, clears to end of screen.
+      process.stdout.write('\x1b[m\x1b[?25h\x1b[0J');
       process.stdout.write('\n' + message + '\n');
     },
 
@@ -348,16 +360,18 @@ function createPlugin(): DisplayPlugin {
 
     onStreamChunk(event: StreamEvent): void {
       const updated = state.handleStreamChunk(event);
-      // 仅主 agent 的流式文本计入 responseLength（副 agent 在子 transcript 中）
-      if (event.agentName === 'main') {
-        state.addResponseDelta(event.text ?? '');
-      }
       if (updated) render();
+      if (event.agentName === 'main') {
+        debugLog(`osc:main updated=${updated} turnTokens=${state.getEstimatedTurnTokens()}`);
+      }
     },
 
     onToolCall(event: ToolCallEvent): void {
       state.resetStream();
-      tracker.updateToolCall(event.agentName, event.toolName, registry ?? undefined);
+      // 优先读 per-agent store key，fallback 到 response-length 估算
+      const apiUsage = registry?.store.get<() => { totalTokens: number }>(tokenBudgetKey(event.agentName));
+      const tokens = apiUsage?.()?.totalTokens ?? state.getEstimatedTurnTokens(event.agentName);
+      tracker.updateToolCall(event.agentName, event.toolName, tokens);
       state.addToolCall(event, registry ?? undefined);
       render();
     },
@@ -380,11 +394,18 @@ function createPlugin(): DisplayPlugin {
     onAgentTurnStart(_event: AgentEvent): void {
       if (_event.agentName === 'main') {
         // 主 agent — 管理 LLM 状态栏
-        if (state.llmStatus === 'running') return;
+        if (state.llmStatus === 'running') {
+          // 同一轮中的后续 LLM 调用（如子 agent 结束后主 agent 继续生成）：
+          // 重置流式状态，清除上一个 LLM 调用残留的 visibleAccumulator
+          state.resetStream();
+          debugLog(`ats:main alreadyRunning — resetStream`);
+          return;
+        }
         state.llmStatus = 'running';
         state.llmTurnStartTime = Date.now();
         state.llmLastTokenTime = Date.now();
-        state.responseLength = 0;
+        state.responseLength.set('main', 0);
+        debugLog(`ats:main running turnStart=${state.llmTurnStartTime}`);
       } else {
         state.handleAgentTurnStart(_event, tracker);
       }

@@ -6,6 +6,7 @@ import { AgentManager } from '#src/core/agent-manager.js';
 import { LLMClient } from '#src/core/llm.js';
 import { AgentDefinition } from '#src/plugins/coordinator/agent-loader.js';
 import { AgentLifecycle } from '#src/plugins/coordinator/lifecycle.js';
+import { SK } from '#src/store-keys.js';
 
 /** createSubRegistry 的额外选项 */
 export interface SubRegistryOptions {
@@ -93,7 +94,11 @@ export function createAgentToolPlugin(
           data: result || '(子 agent 未返回内容)',
         };
       } finally {
-        if (agentManager) agentManager.removeAgent(subAgent.getName());
+        const actualName = subAgent.getName();
+        // Cleanup per-agent token key in shared store
+        const removeAgent = subRegistry.store.get<(name: string) => void>(SK.TokenBudgetRemoveAgent);
+        removeAgent?.(actualName);
+        if (agentManager) agentManager.removeAgent(actualName);
         lifecycle.cleanup(controllerId);
       }
     },

@@ -4,7 +4,7 @@ import { ChatMessage } from '#src/core/llm.js';
 import { countMessagesTokens, initTokenizer, roughTokenCountEstimation } from '#src/plugins/token-budget/counter.js';
 import type { LLMClient } from '#src/core/llm.js';
 import type { DisplayOutput } from '#src/display.js';
-import { SK, agentMessagesKey, compactResultKey, compactCompletedKey, compactRetryKey } from '#src/store-keys.js';
+import { SK, tokenBudgetKey, agentMessagesKey, compactResultKey, compactCompletedKey, compactRetryKey } from '#src/store-keys.js';
 import { logManager } from '#src/utils/logger.js';
 
 // ── Plugin ──
@@ -128,18 +128,32 @@ export function createTokenBudgetPlugin(config?: TokenBudgetConfig): NanoPlugin 
         totalTokensAccumulated += initialAccumulated;
       }
 
-      // Expose getApiUsage via shared store for other plugins (e.g. /context)
-      _registry.store.set(SK.TokenBudgetGetApiUsage, () => ({
-        inputTokens,
-        outputTokens,
+      const name = _agentName();
+
+      // Expose getApiUsage for main agent only — sub-agents each have their
+      // own token-budget instance and would overwrite the shared store key.
+      if (name === 'main') {
+        _registry.store.set(SK.TokenBudgetGetApiUsage, () => ({
+          inputTokens,
+          outputTokens,
+          totalTokens: totalTokensAccumulated,
+        }));
+      }
+
+      // Write per-agent token key for agent-tracker consumption
+      _registry.store.set(tokenBudgetKey(name), () => ({
         totalTokens: totalTokensAccumulated,
       }));
+
+      // Register removeAgent cleanup interface for agent-tool's finally block
+      _registry.store.set(SK.TokenBudgetRemoveAgent, (agentName: string) => {
+        _registry.store.set(tokenBudgetKey(agentName), undefined as any);
+      });
 
       // 暴露当前上下文窗口使用量（最后一次 API 响应的 prompt 侧）
       _registry.store.set(SK.TokenBudgetGetCurrentUsage, () => ({ ...lastUsage }));
 
       // Initialize auto-compact signals
-      const name = _agentName();
       _registry.store.set(SK.CompactSignal, false);
       _registry.store.set(compactCompletedKey(name), false);
       _registry.store.set(compactRetryKey(name), false);
@@ -242,6 +256,13 @@ export function createTokenBudgetPlugin(config?: TokenBudgetConfig): NanoPlugin 
       }
 
       const name = _agentName();
+      // 更新 per-agent token 累计值（供 display 层读取）
+      if (_registryRef) {
+        _registryRef.store.set(tokenBudgetKey(name), () => ({
+          totalTokens: totalTokensAccumulated,
+        }));
+      }
+
       // 失败重试信号清理
       if (_registryRef) {
         _registryRef.store.set(compactRetryKey(name), false);
