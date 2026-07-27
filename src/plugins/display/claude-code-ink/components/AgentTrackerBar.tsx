@@ -49,6 +49,7 @@ export function AgentTrackerBar({
     (() => {
       const idx = 0;
       const isSelected = isFocused && selectedIndex === idx;
+      const focusMarker = isSelected ? '> ' : '  ';
       return React.createElement(
         Box,
         { height: 1 },
@@ -59,7 +60,7 @@ export function AgentTrackerBar({
             dimColor: !isViewingMain && !isSelected,
             bold: isViewingMain,
           },
-            `${isViewingMain ? '●' : '○'} `),
+            `${focusMarker}${isViewingMain ? '●' : '○'} `),
           React.createElement(Text, {
             inverse: isSelected,
             color: BASE_COLOR,
@@ -74,13 +75,14 @@ export function AgentTrackerBar({
       const isViewing = currentView === s.fullName;
       const isSelected = isFocused && selectedIndex === listIdx;
       const agentColor = agentColorMap?.[s.fullName] || BASE_COLOR;
+      const focusMarker = isSelected ? '> ' : '  ';
       const bullet = isViewing ? '●' : '○';
       const end = s.status === 'running' ? now : (s.endTime ?? now);
       const durationStr = formatDuration(Math.max(0, end - s.startTime));
       const tokensStr = formatTokens(s.tokens);
 
       // CC 风格：计算可用宽度，截断 query/description
-      const prefixWidth = stringWidth(`${bullet} ${s.type}`);
+      const prefixWidth = stringWidth(`${focusMarker}${bullet} ${s.type}`);
       const suffixStr = `  ${durationStr} · ${tokensStr}`;
       const suffixWidth = stringWidth(suffixStr);
       let middleText = '';
@@ -112,7 +114,7 @@ export function AgentTrackerBar({
             color: isViewing || isSelected ? agentColor : undefined,
             dimColor: !isViewing && !isSelected,
             bold: isViewing || isSelected,
-          }, `${bullet} `),
+          }, `${focusMarker}${bullet} `),
           React.createElement(Text, {
             inverse: isSelected,
             color: agentColor,

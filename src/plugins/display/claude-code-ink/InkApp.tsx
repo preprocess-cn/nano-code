@@ -1185,6 +1185,7 @@ function AppContent(props: InkAppProps): React.ReactElement {
         setTaskIndex(tasksList.length - 1);
       }
       if (key.escape) {
+        if (viewAgent) onViewAgentClear?.();
         setFocusMode('input');
         setTaskIndex(0);
         return;
@@ -1204,8 +1205,7 @@ function AppContent(props: InkAppProps): React.ReactElement {
         const selected = tasksList[taskIndex] ?? tasksList[0] ?? { name: 'main' };
         if (selected.name === 'main') onViewAgentClear?.();
         else onViewAgentChange?.(selected.name);
-        setFocusMode('input');
-        return;
+        return; // 保持 tasks 焦点，选中位置不变
       }
       // left/right arrows: back to input
       if (key.leftArrow || key.rightArrow) {
