@@ -1,6 +1,8 @@
-import React from 'react';
-import { Box, Text } from '#src/plugins/display/claude-code-ink/ink.js';
+import React, { useContext } from 'react';
+import { Box, Text, stringWidth, wrapText } from '#src/plugins/display/claude-code-ink/ink.js';
+import { TerminalSizeContext } from '#src/plugins/display/claude-code-ink/engine/components/TerminalSizeContext.js';
 import { formatDuration, formatTokens } from '#src/utils/format.js';
+import { debugLog } from '#src/plugins/display/claude-code-ink/utils/debugLog.js';
 import type { AgentRuntimeState } from '#src/plugins/display/claude-code-ink/InkApp.js';
 
 interface AgentTrackerBarProps {
@@ -27,6 +29,8 @@ export function AgentTrackerBar({
   const running = subAgents.filter(s => s.status === 'running');
   if (running.length === 0) return null;
 
+  const terminalSize = useContext(TerminalSizeContext);
+  const columns = terminalSize?.columns ?? process.stdout.columns ?? 80;
   const isViewingMain = !currentView;
   const BASE_COLOR = '#06b6d4';
 
@@ -56,7 +60,7 @@ export function AgentTrackerBar({
         ),
       );
     })(),
-    // 子 agent 行
+    // 子 agent 行（CC 风格：手动计算宽度截断 query/description）
     ...running.map((s, i) => {
       const listIdx = i + 1;
       const isViewing = currentView === s.fullName;
@@ -66,6 +70,30 @@ export function AgentTrackerBar({
       const end = s.status === 'running' ? Date.now() : (s.endTime ?? Date.now());
       const durationStr = formatDuration(Math.max(0, end - s.startTime));
       const tokensStr = formatTokens(s.tokens);
+
+      // CC 风格：计算可用宽度，截断 query/description
+      const prefixWidth = stringWidth(`${bullet} ${s.type}`);
+      const suffixStr = `  ${durationStr} · ${tokensStr}`;
+      const suffixWidth = stringWidth(suffixStr);
+      let middleText = '';
+      if (s.query && s.description) {
+        middleText = ` · ${s.query} · ${s.description}`;
+      } else if (s.query) {
+        middleText = ` · ${s.query}`;
+      } else if (s.description) {
+        middleText = ` · ${s.description}`;
+      }
+      const availableWidth = columns - prefixWidth - suffixWidth;
+      const truncated = middleText && stringWidth(middleText) > Math.max(0, availableWidth)
+        ? wrapText(middleText, Math.max(0, availableWidth), 'truncate-end')
+        : middleText;
+
+      debugLog(
+        `AgentTrackerBar ${s.fullName}: cols=${columns}` +
+        ` prefix=${prefixWidth} suffix=${suffixWidth} available=${availableWidth}` +
+        ` middleLen=${stringWidth(middleText)} truncatedLen=${stringWidth(truncated)}` +
+        ` query=${s.query?.length} desc=${s.description?.length}`,
+      );
 
       return React.createElement(
         Box,
@@ -82,13 +110,10 @@ export function AgentTrackerBar({
             color: agentColor,
             bold: isViewing || isSelected,
           }, s.type),
-          s.query
-            ? React.createElement(Text, { dimColor: true }, ` · ${s.query}`)
+          truncated
+            ? React.createElement(Text, { dimColor: true }, truncated)
             : null,
-          s.description
-            ? React.createElement(Text, { dimColor: true }, ` · ${s.description}`)
-            : null,
-          React.createElement(Text, { dimColor: true }, `  ${durationStr} · ${tokensStr}`),
+          React.createElement(Text, { dimColor: true }, suffixStr),
         ),
       );
     }),
