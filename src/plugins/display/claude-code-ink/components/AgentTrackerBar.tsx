@@ -1,4 +1,4 @@
-import React, { useContext } from 'react';
+import React, { useContext, useState, useEffect } from 'react';
 import { Box, Text, stringWidth, wrapText } from '#src/plugins/display/claude-code-ink/ink.js';
 import { TerminalSizeContext } from '#src/plugins/display/claude-code-ink/engine/components/TerminalSizeContext.js';
 import { formatDuration, formatTokens } from '#src/utils/format.js';
@@ -34,6 +34,14 @@ export function AgentTrackerBar({
   const isViewingMain = !currentView;
   const BASE_COLOR = '#06b6d4';
 
+  // 运行中的 agent 每秒更新一次持续时间，避免每次 render（如 stream chunk）都重算布局
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    if (running.length === 0) return;
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, [running.length]);
+
   return React.createElement(
     Box,
     { flexDirection: 'column', paddingLeft: 1, paddingBottom: 1 },
@@ -67,7 +75,7 @@ export function AgentTrackerBar({
       const isSelected = isFocused && selectedIndex === listIdx;
       const agentColor = agentColorMap?.[s.fullName] || BASE_COLOR;
       const bullet = isViewing ? '●' : '○';
-      const end = s.status === 'running' ? Date.now() : (s.endTime ?? Date.now());
+      const end = s.status === 'running' ? now : (s.endTime ?? now);
       const durationStr = formatDuration(Math.max(0, end - s.startTime));
       const tokensStr = formatTokens(s.tokens);
 

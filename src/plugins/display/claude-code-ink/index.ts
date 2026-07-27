@@ -61,7 +61,12 @@ function createPlugin(): DisplayPlugin {
   const state = new DisplayState();
   const tracker = new AgentTracker();
   const modalQueue = new ModalQueue();
-  tracker.setRenderFn(render);
+  // 缓存 agentStates 数组，避免 tracker 未变化时每次 render() 都创建新引用
+  let agentStatesCache: AgentRuntimeState[] | null = null;
+  tracker.setRenderFn(() => {
+    agentStatesCache = null;
+    render();
+  });
   modalQueue.setRenderFn(render);
 
   // ──────── 工具函数 ────────
@@ -78,6 +83,19 @@ function createPlugin(): DisplayPlugin {
   function collectAgentNames(): Set<string> {
     return state.collectAgentNames();
   }
+
+  // ──────── Hoisted callbacks（避免 onExit/onInterrupt 在 render() 和 onStart() 中重复）───────
+
+  const handleExit = (): void => {
+    try { writeSync(1, DISABLE_MOUSE_TRACKING); } catch {}
+    try { drainStdin(process.stdin); } catch {}
+    cancelExecution();
+    requestExit();
+  };
+
+  const handleInterrupt = (): void => {
+    cancelExecution();
+  };
 
   /** 处理 @ 开头的视图切换命令 */
   function handleViewSwitch(text: string): boolean {
@@ -165,17 +183,8 @@ function createPlugin(): DisplayPlugin {
             if (text.startsWith('@') && handleViewSwitch(text)) return;
             enqueue({ mode: 'prompt', value: text });
           },
-          onExit: () => {
-            // 同步 terminal cleanup：关闭鼠标追踪 + 排空 stdin
-            // 防止异步 shutdown 延迟中鼠标事件泄漏为 ANSI 乱码
-            try { writeSync(1, DISABLE_MOUSE_TRACKING); } catch {}
-            try { drainStdin(process.stdin); } catch {}
-            cancelExecution();
-            requestExit();
-          },
-          onInterrupt: () => {
-            cancelExecution();
-          },
+          onExit: handleExit,
+          onInterrupt: handleInterrupt,
           pendingPermission,
           onPermissionResponse: (response: PermissionResponse) => {
             modalQueue.handlePermissionResponse(response);
@@ -192,7 +201,7 @@ function createPlugin(): DisplayPlugin {
           turnTokens: getAgentTokens(currentViewAgent ?? 'main'),
           llmLastTokenTime: state.llmLastTokenTime,
           agentColorMap: tracker.colors,
-          agentStates: Array.from(tracker.states.values()),
+          agentStates: agentStatesCache ?? (agentStatesCache = Array.from(tracker.states.values())),
         }),
       );
     } catch {
@@ -317,15 +326,8 @@ function createPlugin(): DisplayPlugin {
             if (text.startsWith('@') && handleViewSwitch(text)) return;
             enqueue({ mode: 'prompt', value: text });
           },
-          onExit: () => {
-            try { writeSync(1, DISABLE_MOUSE_TRACKING); } catch {}
-            try { drainStdin(process.stdin); } catch {}
-            cancelExecution();
-            requestExit();
-          },
-          onInterrupt: () => {
-            cancelExecution();
-          },
+          onExit: handleExit,
+          onInterrupt: handleInterrupt,
           onModeToggle: handleModeToggle,
           statusSegments: state.statusSegments,
           notification: state.notification,

@@ -664,6 +664,13 @@ function AppContent(props: InkAppProps): React.ReactElement {
     }
     jumpRef.current?.setSearchQuery(searchQuery);
   }, [searchQuery, jumpRef]);
+
+  // 退出计时器清理（组件卸载时清除未触发的 timeout）
+  useEffect(() => {
+    return () => {
+      if (exitTimeoutRef.current) clearTimeout(exitTimeoutRef.current);
+    };
+  }, []);
   const displayItems = useMemo(() => {
     const items: UIMessage[] = [];
     for (const item of groupedMessages) {
@@ -881,12 +888,15 @@ function AppContent(props: InkAppProps): React.ReactElement {
     debugLog("input: _input=" + _input + " transcriptMode=" + transcriptModeRef.current + " searchMode=" + searchModeRef.current);
     // 任何非 Ctrl+C 的按键重置双 Ctrl+C 退出状态
     if (!(key.ctrl && _input === 'c') && exitPending) {
+      if (exitTimeoutRef.current) clearTimeout(exitTimeoutRef.current);
       setExitPending(false);
     }
     // Any dialog active: ESC/Ctrl+C cancels the ReAct process
     if ((pendingPermission && onPermissionResponse) || (pendingQuestions && onQuestionsResponse)) {
       if (key.ctrl && _input === 'c') {
         if (exitPending) {
+          if (pendingPermission && onPermissionResponse) onPermissionResponse('deny');
+          if (pendingQuestions && onQuestionsResponse) onQuestionsResponse({});
           setExitPending(false);
           onExit();
         } else {
@@ -894,7 +904,8 @@ function AppContent(props: InkAppProps): React.ReactElement {
           if (pendingQuestions && onQuestionsResponse) onQuestionsResponse({});
           setExitPending(true);
           onInterrupt?.();
-          setTimeout(() => setExitPending(false), 2000);
+          if (exitTimeoutRef.current) clearTimeout(exitTimeoutRef.current);
+          exitTimeoutRef.current = setTimeout(() => setExitPending(false), 2000);
         }
         return;
       }
@@ -1318,7 +1329,8 @@ function AppContent(props: InkAppProps): React.ReactElement {
       } else {
         setExitPending(true);
         onInterrupt?.();
-        setTimeout(() => setExitPending(false), 2000);
+        if (exitTimeoutRef.current) clearTimeout(exitTimeoutRef.current);
+        exitTimeoutRef.current = setTimeout(() => setExitPending(false), 2000);
       }
       return;
     }
