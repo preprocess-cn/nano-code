@@ -7,6 +7,7 @@ import { ColorDiff } from '#src/plugins/display/claude-code-ink/color-diff.js';
 import { Markdown, StreamingMarkdown } from '#src/plugins/display/claude-code-ink/components/Markdown.js';
 import { BackgroundTaskBar } from '#src/plugins/display/claude-code-ink/components/BackgroundTaskBar.js';
 import { AgentTrackerBar } from '#src/plugins/display/claude-code-ink/components/AgentTrackerBar.js';
+import { AgentPillBar } from '#src/plugins/display/claude-code-ink/components/AgentPillBar.js';
 import { SpinnerWithVerb } from '#src/plugins/display/claude-code-ink/SpinnerWithVerb.js';
 import type { DiffHunk, ContextAnalysis } from '#src/core/contract.js';
 import { QuestionsDialog } from './QuestionsDialog.js';
@@ -80,6 +81,17 @@ export function getAgentColor(type: string): string {
   return BUILTIN_AGENT_COLORS[type] || AGENT_COLORS.cyan;
 }
 
+/** 生成 SummaryPill 标签文本。匹配 CC getPillLabel()：同类型时使用类型名，否则泛化 */
+function getSummaryPillLabel(agents: AgentRuntimeState[]): string {
+  const n = agents.length;
+  const types = new Set(agents.map(a => a.type));
+  if (types.size === 1) {
+    const type = agents[0].type;
+    return `${n} ${type} agent${n > 1 ? 's' : ''}`;
+  }
+  return `${n} sub-agents`;
+}
+
 export interface PermissionPrompt {
   toolName: string;
   displayName?: string;
@@ -147,6 +159,8 @@ export interface InkAppProps {
   agentColorMap?: Record<string, string>;
   /** 子 Agent 运行时状态列表（由 index.ts 维护） */
   agentStates?: AgentRuntimeState[];
+  /** 是否有 swarm/teammate 类 agent（true=显示 AgentPillBar，false=显示 SummaryPill） */
+  hasSwarmAgents?: boolean;
 }
 
 function AgentLabel({ agentName, color }: { agentName: string; color?: string }): React.ReactElement | null {
@@ -606,7 +620,7 @@ function AppContent(props: InkAppProps): React.ReactElement {
   const [input, setInput] = useState('');
   const [cursorPos, setCursorPos] = useState(0);
   const [historyIdx, setHistoryIdx] = useState(-1);
-  const [focusMode, setFocusMode] = useState<'input' | 'agent-list'>('input');
+  const [focusMode, setFocusMode] = useState<'input' | 'pill'>('input');
   // 折叠组由 transcriptMode 全局控制：收起态为 dim 摘要，Ctrl+O 展开所有
   const groupedMessages = useMemo(() => groupMessages(messages), [messages]);
   const [searchMode, setSearchMode] = useState<'inactive' | 'active' | 'persistent'>('inactive');
@@ -619,6 +633,11 @@ function AppContent(props: InkAppProps): React.ReactElement {
   const searchModeRef = useRef<'inactive' | 'active' | 'persistent'>('inactive');
 
   const [trackerIndex, setTrackerIndex] = useState(0);
+  const hasSwarmAgents = props.hasSwarmAgents ?? false;
+  const runningSubAgents = (props.agentStates ?? []).filter(
+    s => s.type && s.fullName !== 'main' && s.status === 'running',
+  );
+  const showSummaryPill = runningSubAgents.length > 0 && !hasSwarmAgents;
   const draftRef = useRef('');
   const desiredColumnRef = useRef<number | null>(null);
   const lastKeyEventRef = useRef(0);
@@ -1127,47 +1146,48 @@ function AppContent(props: InkAppProps): React.ReactElement {
       }
     }
 
-    // Tab 切换焦点：输入 ↔ Agent 列表（CC 兼容）
+    // Tab 切换焦点：输入 ↔ Agent Pill（CC 兼容）
     if (key.tab && !key.shift) {
-      if (focusMode === 'agent-list') {
+      if (focusMode === 'pill') {
         setFocusMode('input');
         return;
       }
-      // 仅在 suggestion 弹窗关闭且有 running agent 时切换焦点
-      if (!isSuggestionOpen && agentStates && agentStates.some(s => s.type && s.fullName !== 'main' && s.status === 'running')) {
-        setFocusMode('agent-list');
+      // 仅在 suggestion 弹窗关闭、有 agent 视图可切换、且 hasSwarmAgents 时激活 pill 模式
+      const hasAgents = props.viewAgents && props.viewAgents.some(a => a.name !== 'main');
+      if (!isSuggestionOpen && hasAgents && hasSwarmAgents) {
+        setFocusMode('pill');
         setTrackerIndex(0);
         return;
       }
     }
 
-    // ── Agent 列表焦点模式键盘导航 ──
-    const trackerStates = (agentStates ?? [])
-      .filter(s => s.type && s.fullName !== 'main' && s.status === 'running');
-    if (focusMode === 'agent-list') {
-      if (key.escape) {
+    // ── Agent Pill 焦点模式键盘导航 ──
+    // pillList：从 viewAgents 推导（和 AgentPillBar 一致），pill 0 固定为 main
+    const pillList = [
+      { name: 'main', label: 'main' },
+      ...(props.viewAgents ?? []).filter(a => a.name !== 'main')
+        .sort((a, b) => a.label.localeCompare(b.label)),
+    ];
+    if (focusMode === 'pill') {
+      if (key.escape || (key.tab && !key.shift)) {
         setFocusMode('input');
         setTrackerIndex(0);
         return;
       }
-      if (key.upArrow) {
-        setTrackerIndex(i => i <= 0 ? trackerStates.length : i - 1);
+      if (key.leftArrow) {
+        setTrackerIndex(i => (i <= 0 ? pillList.length - 1 : i - 1));
         return;
       }
-      if (key.downArrow) {
-        setTrackerIndex(i => i >= trackerStates.length ? 0 : i + 1);
+      if (key.rightArrow) {
+        setTrackerIndex(i => (i >= pillList.length - 1 ? 0 : i + 1));
         return;
       }
       if (key.return) {
-        if (trackerIndex === 0) {
-          // Main 行选中：回到主视图
-          if (viewAgent) onViewAgentClear?.();
-          setFocusMode('input');
-          return;
-        }
-        const target = trackerStates[trackerIndex - 1];
-        if (target && onViewAgentChange) {
-          onViewAgentChange(target.fullName);
+        const selected = pillList[trackerIndex];
+        if (selected.name === 'main') {
+          onViewAgentClear?.();
+        } else {
+          onViewAgentChange?.(selected.name);
         }
         setFocusMode('input');
         return;
@@ -1177,7 +1197,7 @@ function AppContent(props: InkAppProps): React.ReactElement {
         setFocusMode('input');
         // 不 return，让字符落到输入处理逻辑，直接插入输入框
       } else {
-        return; // 焦点在 agent 列表时屏蔽其他非打印按键
+        return; // 焦点在 pill 列表时屏蔽其他非打印按键
       }
     }
 
@@ -1477,12 +1497,28 @@ visibleSuggestions,
         isAtPrefix,
         suggestionWindowStart,
       }),
+      // SummaryPill — 非 swarm 模式下运行 agent 的聚合统计（CC 兼容）
+      showSummaryPill
+        ? React.createElement(Text, { dimColor: true, key: 'summary-pill' },
+            getSummaryPillLabel(runningSubAgents),
+          )
+        : null,
+      // AgentPillBar — swarm 模式下显示个体 @name pills（当前 hasSwarmAgents=false 隐藏）
+      hasSwarmAgents
+        ? React.createElement(AgentPillBar, {
+            agents: props.viewAgents ?? [],
+            agentColorMap: props.agentColorMap,
+            selectedIndex: trackerIndex,
+            currentView: viewAgent,
+            isFocused: focusMode === 'pill',
+          })
+        : null,
       // Agent 视图提示
       viewAgent
         ? React.createElement(
             Text,
             { dim: true },
-            'Agent 视图 · ↑↓ 切换Agent · Esc 返回',
+            'Agent 视图 · Esc 返回',
           )
         : null,
       // 权限/问题弹窗（固定在 bottom 区域，不随消息滚动）
@@ -1502,9 +1538,7 @@ visibleSuggestions,
       React.createElement(AgentTrackerBar, {
         states: props.agentStates ?? [],
         agentColorMap: props.agentColorMap,
-        selectedIndex: trackerIndex,
         currentView: viewAgent,
-        focusMode,
       }),
       React.createElement(StatusBar, {
         segments: props.statusSegments,

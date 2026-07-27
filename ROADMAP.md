@@ -69,6 +69,9 @@
 | ✅ | Agent Coordinator 协调层 | 统一管理所有 agent 工具的注册、后台执行生命周期和 agent 间消息传递，替代逐一手动注册 |
 | ✅ | Ink 后台任务指示器 | `BackgroundTaskBar` 底栏组件，实时展示运行/完成/失败状态，5 秒自动清理 |
 | ✅ | 后台任务展示层事件 | `BackgroundTaskEvent` + `onBackgroundTask` 回调，REPL 和 Ink 双实现 |
+| ✅ | **SummaryPill 聚合统计** | 非 swarm 模式下运行 agent 显示聚合文本（"N explore agents"），`hasSwarmAgents` 门控预留 AgentPillBar 扩展点 |
+| ✅ | **AgentTrackerBar 简化** | 移除死代码（selection 光标 `❯`、`isInFocus`、聚焦帮助文本），AgentTrackerBar 为纯信息展示组件 |
+| ✅ | **Agent 视图帮助文本修正** | 删除误导性的 "← → 切换Agent" 帮助文本，该导航仅限 swarm 模式下可用 |
 | ✅ | **Ink 上下文可视化** | `InkApp.tsx` 内联 `ContextVis` 组件渲染色块网格，数据源为 `analyzer.ts` 的 8 维度分析 |
 | ✅ | **搜索委托 + VirtualMessageList** | 搜索扫描/位置计算/滚动匹配从 `InkApp.tsx` 整体提取到 `VirtualMessageList` 组件，暴露 `JumpHandle`（nextMatch/prevMatch/setSearchQuery）；新增 `useVirtualScroll` 虚拟滚动引擎、`StickyPromptHeader` 粘性提示头、`transcriptSearch` 搜索文本提取；`debugLog` 调试工具覆盖 ink.tsx/render-to-screen 高亮应用路径 |
 | ✅ | **工具级自定义超时** | `ToolDefinition.function.timeout` 字段，按工具设定超时时间；`Infinity` 永不超时（`ask_user_question`），未指定沿用全局默认 |
@@ -226,6 +229,8 @@ Ink 展示层（`claude-code-ink`）基于 React + 自研 Ink 引擎（fork 自 
 - **FIXED：StickyPromptHeader 死组件** — 删除返回 null 的 `StickyPromptHeader` 组件及未使用的 `ScrollChromeContext` 导入。(2026-07-26)
 - **FIXED：Dialog/Input 区域代码重复** — 欢迎页与正常视图的 prompt 输入区域和 suggestion 弹出列表（~38 行）提取为公共 `InputArea` 组件。新建 `InputArea.tsx`，InkApp.tsx 中两处重复 JSX 替换为 `<InputArea>` 调用。(2026-07-26)
 - **FIXED：子 agent 400 错误后 AgentTracker 未正常退出** — `runTask()` finally 块补充 `endTurn()` 调用，确保异常路径下 `onAgentTurnEnd` 始终触发并记录。同时 token-budget 插件新增 `maxContextLength` 配置 + `NANO_CODE_MAX_CONTEXT_LENGTH` 环境变量，超出模型窗口 × 0.95 时在发送前注入停止指令，从源头预防 400 错误。(2026-07-26)
+- **FIXED：AgentTrackerBar 死选择逻辑** — `focusMode` 从 `'agent-list'` 改为 `'pill'` 后，AgentTrackerBar 的 `isInFocus = (focusMode === 'agent-list')` 恒为 `false`，selection 光标、聚焦帮助文本永久死代码。修复：移除 `selectedIndex`/`focusMode` props、`isInFocus`/`isMainSelected`/`isSelected` 变量和 ❯ 光标渲染，AgentTrackerBar 转为纯信息展示。(2026-07-27)
+- **FIXED：SummaryPill 死代码与帮助文本误导** — `hasSwarmAgents` 恒为 `false` 导致 Tab 进入 pill 模式不可达，但 Agent 视图帮助文本承诺 "← → 切换Agent"。修复：添加聚合 `getSummaryPillLabel()`，删除误导性帮助文本。保留 `hasSwarmAgents` 门控为未来 swarm 模式扩展。(2026-07-27)
 - **Escape 关闭 suggestion 弹窗未清空 `suggestionFiltered`** — Ink 输入框中 Esc 关闭建议弹窗时只调用了 `setIsSuggestionOpen(false)`，未调用 `setSuggestionFiltered([])`。虽然 `visibleSuggestions` 正确为空所以无渲染影响，但 `suggestionFiltered` 状态不变，存在状态不一致。
 - **FIXED：Ink 渲染错误导致 alt-screen 崩溃** — 添加 `InkErrorBoundary` React class 组件包裹 `AppContent`，任何子组件渲染异常被边界捕获后显示降级提示，防止 `<AlternateScreen>` 卸载导致终端弹出 alt-screen 模式。(2026-07-26)
 - **FIXED：退出时逃逸序列参数泄漏 `;5;99`** — Ink 引擎 `unmount()` 中 `writeDiffToTerminal`（`process.stdout.write`，libuv async）与 `writeSync`（同步 fd write）混合写入同一 fd 导致乱序，残留在主屏的部分逃逸序列参数被终端误输出为可见字符。移除冗余的 `writeDiffToTerminal` 调用。(2026-07-26)
