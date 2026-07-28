@@ -3,7 +3,7 @@ import * as path from 'path';
 import * as os from 'os';
 import * as yaml from 'js-yaml';
 import * as dotenv from 'dotenv';
-import { DEFAULT_SYSTEM_PLUGINS } from '#src/bootstrap/plugin-loader.js';
+import { DEFAULT_SYSTEM_PLUGINS, DEFAULT_FEATURE_PLUGINS } from '#src/bootstrap/plugin-loader.js';
 import { logManager } from '#src/utils/logger.js';
 import type { NanoConfig, AgentConfig, PluginConfigEntry, SystemPromptConfig, ConfigValidationWarning } from '#src/core/config.js';
 
@@ -602,6 +602,15 @@ export function loadConfig(): NanoConfig {
   const result = mergeConfigs(yamlMerge, projectData);
   result.systemPlugins = systemPlugins;
   result.systemPrompt = systemPrompt;
+
+  // 普通模式：预填充默认内置插件，用户无需在 plugins 段显式声明
+  // Profile 模式（loadProfileAsConfig）不做预填充——profile 的 plugins 段是唯一来源
+  for (const name of DEFAULT_FEATURE_PLUGINS) {
+    if (!(name in result.plugins)) {
+      result.plugins[name] = {};
+    }
+  }
+
   return result;
 }
 

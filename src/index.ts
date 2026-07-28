@@ -1,7 +1,7 @@
 import * as path from 'path';
 import { NanoCodeAgent } from '#src/core/agent.js';
 import { PluginRegistry } from '#src/core/plugin.js';
-import { registerBuiltinPlugin, DEFAULT_SYSTEM_PLUGINS, DEFAULT_FEATURE_PLUGINS } from '#src/bootstrap/plugin-loader.js';
+import { registerBuiltinPlugin, DEFAULT_SYSTEM_PLUGINS } from '#src/bootstrap/plugin-loader.js';
 import { loadConfig, loadProfileAsConfig, initEnvironment, getSystemWhitelist } from '#src/bootstrap/config.js';
 import { LLMClient } from '#src/core/llm.js';
 import { loadSession, saveSession } from '#src/bootstrap/session.js';
@@ -125,38 +125,31 @@ async function initializePlugins(
       continue; // 已在 step 2.5 无条件注册
     } else if (systemWhitelist.has(name)) {
       continue; // 已在 step 2 注册
-    } else if ((DEFAULT_FEATURE_PLUGINS as unknown as string[]).includes(name)) {
-      continue; // feature 插件在 step 4 统一注册
     } else {
-      await registerBuiltinPlugin(registry, name, pluginCfg.settings);
+      // 统一注册：所有非系统、非 MCP、非 npm 的内置插件走此路径
+      // 运行时依赖（llmClient、displayMgr 等）按需注入
+      const s: Record<string, any> = { ...pluginCfg.settings };
+      if (['skills', 'coordinator', 'skills-slash'].includes(name)) { s.llmClient = llmClient; s.agentManager = agentManager; }
+      if (['skills', 'coordinator', 'commands', 'skills-slash', 'bang', 'task-plan'].includes(name)) s.displayMgr = displayMgr;
+      if (name === 'commands') s.config = config;
+      if (name === 'skills') { s.disabled = config.skills?.disabled ?? []; s.disableSkillTool = config.skills?.disableSkillTool ?? false; s.skillsDirs = config.skills?.dirs; }
+      if (name === 'coordinator') {
+        s.agentDirs = config.agents?.dirs;
+        if (config.agents?.builtin) {
+          s.disabledBuiltins = Object.entries(config.agents.builtin)
+            .filter(([, v]) => v === false)
+            .map(([k]) => k);
+        }
+      }
+      if (name === 'agent-slash') { s.agentDirs = config.agents?.dirs; }
+      if (name === 'skills-slash') { s.skillsDirs = config.skills?.dirs; }
+      await registerBuiltinPlugin(registry, name, s);
     }
   }
 
-  // 4. Register feature plugins with runtime deps
-  for (const name of DEFAULT_FEATURE_PLUGINS) {
-    if (config.plugins[name]?.enabled === false) continue;
-    if (name === 'npm-loader') {
-      // npmEntries 直接作为配置传给 npm-loader，避免嵌套在 { entries: ... } 中
-      await registerBuiltinPlugin(registry, name, npmEntries as Record<string, any>);
-      continue;
-    }
-    const s: Record<string, any> = {};
-    if (['skills', 'coordinator', 'skills-slash'].includes(name)) { s.llmClient = llmClient; s.agentManager = agentManager; }
-    if (['skills', 'coordinator', 'commands', 'skills-slash', 'bang', 'task-plan'].includes(name)) s.displayMgr = displayMgr;
-    if (name === 'commands') s.config = config;
-    if (name === 'guidance') Object.assign(s, config.plugins[name]?.settings ?? {});
-    if (name === 'skills') { s.disabled = config.skills?.disabled ?? []; s.disableSkillTool = config.skills?.disableSkillTool ?? false; s.skillsDirs = config.skills?.dirs; }
-    if (name === 'coordinator') {
-      s.agentDirs = config.agents?.dirs;
-      if (config.agents?.builtin) {
-        s.disabledBuiltins = Object.entries(config.agents.builtin)
-          .filter(([, v]) => v === false)
-          .map(([k]) => k);
-      }
-    }
-    if (name === 'agent-slash') { s.agentDirs = config.agents?.dirs; }
-    if (name === 'skills-slash') { s.skillsDirs = config.skills?.dirs; }
-    await registerBuiltinPlugin(registry, name, s);
+  // npm-loader 在循环后注册，确保 npmEntries 已收集完毕
+  if ('npm-loader' in config.plugins && config.plugins['npm-loader']?.enabled !== false) {
+    await registerBuiltinPlugin(registry, 'npm-loader', npmEntries as Record<string, any>);
   }
 
   await displayMgr.init(registry);

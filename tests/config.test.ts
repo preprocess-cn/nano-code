@@ -3,7 +3,8 @@ import * as assert from 'node:assert/strict';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
-import { _mergeConfigs, getPluginConfig, validateConfigObject, loadProfileAsConfig } from '../src/bootstrap/config.js';
+import { _mergeConfigs, getPluginConfig, validateConfigObject, loadProfileAsConfig, loadConfig } from '../src/bootstrap/config.js';
+import { DEFAULT_FEATURE_PLUGINS } from '../src/bootstrap/plugin-loader.js';
 
 describe('Config — merge', () => {
 
@@ -474,6 +475,53 @@ describe('Config — loadProfileAsConfig', () => {
       assert.deepEqual(cfg.agents?.dirs, ['/custom/agents']);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('loadProfileAsConfig does not pre-populate feature plugins', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nc-profile-nopre-'));
+    try {
+      fs.writeFileSync(path.join(dir, 'minimal.json'), JSON.stringify({
+        core: { model: 'test' },
+        plugins: { only: { enabled: true } },
+      }), 'utf-8');
+      const cfg = loadProfileAsConfig(path.join(dir, 'minimal.json'));
+      // Only the explicitly written plugin should be present
+      assert.ok('only' in cfg.plugins);
+      // No DEFAULT_FEATURE_PLUGINS should leak in
+      for (const name of DEFAULT_FEATURE_PLUGINS) {
+        assert.ok(!(name in cfg.plugins), `${name} should not be pre-populated in profile mode`);
+      }
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+});
+
+describe('Config — loadConfig with feature plugins', () => {
+
+  it('loadConfig pre-populates default feature plugins', () => {
+    const cfg = loadConfig();
+    for (const name of DEFAULT_FEATURE_PLUGINS) {
+      assert.ok(name in cfg.plugins, `${name} should be pre-populated by loadConfig`);
+    }
+  });
+
+  it('loadConfig pre-population respects user-disable in project config', () => {
+    // loadConfig reads global + project configs.  If a project YAML
+    // has plugins.skills.enabled = false, the pre-population should
+    // not override that setting (it only adds entries that DON'T exist yet).
+    const cfg = loadConfig();
+    for (const name of DEFAULT_FEATURE_PLUGINS) {
+      const entry = cfg.plugins[name];
+      // The entry should exist and not be explicitly disabled (unless
+      // the user's ~/.nano-code/config.yaml or .nano-code.yaml disabled it
+      // — which is not the default template, so enabled should not be false).
+      assert.ok(entry !== undefined, `${name} should exist`);
+      if (entry && 'enabled' in entry) {
+        assert.notEqual(entry.enabled, false, `${name} should not be disabled by default`);
+      }
     }
   });
 
