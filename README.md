@@ -2,6 +2,53 @@
 
 轻量级终端 AI 编程助手。极简核心 + 插件驱动架构，通过自然语言与代码仓库交互。
 
+## 安装
+
+### 环境要求
+
+- **Node.js >= 20**
+
+### 通过 npm 全局安装（推荐）
+
+```bash
+npm install -g @preprocess-cn/nano-code
+```
+
+安装后即可使用 `nano-code` 命令启动。
+
+### 国内镜像源
+
+如果网络无法直接访问 npm 官方源，可使用淘宝镜像：
+
+```bash
+# 临时使用
+npm install -g @preprocess-cn/nano-code --registry=https://registry.npmmirror.com
+
+# 或持久配置（推荐）
+npm config set registry https://registry.npmmirror.com
+npm install -g @preprocess-cn/nano-code
+```
+
+其他可用镜像源：
+
+```bash
+# 腾讯云
+npm install -g @preprocess-cn/nano-code --registry=https://mirrors.cloud.tencent.com/npm/
+
+# 华为云
+npm install -g @preprocess-cn/nano-code --registry=https://repo.huaweicloud.com/repository/npm/
+```
+
+### 从源码安装
+
+```bash
+git clone https://github.com/preprocess-cn/nano-code.git
+cd nano-code
+npm install
+npm run build
+npm install -g .
+```
+
 ## 快速开始
 
 ```bash
