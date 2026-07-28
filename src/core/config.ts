@@ -88,6 +88,8 @@ export interface NanoConfig {
   agents?: {
     /** 自定义 agent 目录路径列表（多目录）。指定后不扫描 ~/.nano-code/agents */
     dirs?: string[];
+    /** 禁用内置 agent（如 explore、general-purpose）。key=agent名, value=false 表示禁用 */
+    builtin?: Record<string, boolean>;
   };
   /** 状态栏 shell 命令配置。输出按 KEY: VALUE 行解析并显示在 StatusBar。 */
   statusLine?: {

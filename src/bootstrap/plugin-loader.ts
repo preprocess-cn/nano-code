@@ -22,7 +22,7 @@ const BUILTIN_LOADERS: Record<string, (settings?: Record<string, any>) => Promis
   web: async () => (await import('#src/plugins/tools/web.js')).webPlugin,
   'model-registry': async (s) => (await import('#src/plugins/model-registry/index.js')).createModelRegistryPlugin(s || {}),
   // ── Feature plugins (loaded via registerBuiltinPlugin) ──
-  coordinator: async (s) => (await import('#src/plugins/coordinator/coordinator.js')).createAgentCoordinatorPlugin(s?.llmClient, s?.displayMgr, s?.agentManager, s?.agentDirs),
+  coordinator: async (s) => (await import('#src/plugins/coordinator/coordinator.js')).createAgentCoordinatorPlugin(s?.llmClient, s?.displayMgr, s?.agentManager, s?.agentDirs, s?.disabledBuiltins),
   commands: async (s) => (await import('#src/plugins/commands/index.js')).createCommandsPlugin(s?.displayMgr),
   'skills-slash': async (s) => (await import('#src/plugins/commands/skills-slash.js')).createSkillsSlashPlugin(s?.llmClient, s?.displayMgr, s?.agentManager),
   'agent-slash': async (s) => (await import('#src/plugins/commands/agent-slash.js')).createAgentSlashPlugin(),

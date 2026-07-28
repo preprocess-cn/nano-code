@@ -143,6 +143,24 @@ describe('Config — merge', () => {
     assert.deepEqual(cfg.agents?.dirs, ['/project/agents']);
   });
 
+  it('merges agents.builtin from global', () => {
+    const cfg = _mergeConfigs(
+      { agents: { builtin: { explore: false } } },
+      null,
+    );
+    assert.deepEqual(cfg.agents?.builtin, { explore: false });
+  });
+
+  it('project agents.builtin overrides global agents.builtin (shallow replace)', () => {
+    // agents 是浅合并，project 的 builtin 对象整体覆盖 global 的 builtin
+    const cfg = _mergeConfigs(
+      { agents: { builtin: { explore: false, 'general-purpose': false } } },
+      { agents: { builtin: { explore: true } } },
+    );
+    assert.equal(cfg.agents?.builtin?.explore, true);
+    assert.equal(cfg.agents?.builtin?.['general-purpose'], undefined); // project 整值替换
+  });
+
 });
 
 describe('Config — getPluginConfig', () => {
@@ -436,6 +454,24 @@ describe('Config — loadProfileAsConfig', () => {
       assert.equal(cfg.plugins.fs?.enabled, true);
       // agent should be undefined — not inherited from any global config
       assert.equal(cfg.agent, undefined);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('loadProfileAsConfig parses agents.builtin', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'nc-profile-builtin-'));
+    try {
+      fs.writeFileSync(path.join(dir, 'builtin.json'), JSON.stringify({
+        core: { model: 'test' },
+        agents: {
+          builtin: { explore: false, 'general-purpose': false },
+          dirs: ['/custom/agents'],
+        },
+      }), 'utf-8');
+      const cfg = loadProfileAsConfig(path.join(dir, 'builtin.json'));
+      assert.deepEqual(cfg.agents?.builtin, { explore: false, 'general-purpose': false });
+      assert.deepEqual(cfg.agents?.dirs, ['/custom/agents']);
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }

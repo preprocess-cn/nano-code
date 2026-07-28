@@ -7,7 +7,7 @@ import { createAgentToolPlugin } from '#src/plugins/coordinator/agent-tool.js';
 import { MessageBus } from '#src/plugins/coordinator/message-bus.js';
 import { validateSendMessageArgs } from '#src/plugins/coordinator/messaging-plugins.js';
 import { EXPLORE_AGENT_DEF, EXPLORE_AGENT_NAME } from '#src/plugins/explore/explore-definition.js';
-import { GENERAL_PURPOSE_AGENT_DEF } from '#src/plugins/coordinator/general-purpose-definition.js';
+import { GENERAL_PURPOSE_AGENT_DEF, GENERAL_PURPOSE_AGENT_NAME } from '#src/plugins/coordinator/general-purpose-definition.js';
 import { createFilteredPlugin, createReadonlyCommandPlugin } from '#src/plugins/explore/tool-utils.js';
 
 export function createAgentCoordinatorPlugin(
@@ -15,12 +15,18 @@ export function createAgentCoordinatorPlugin(
   displayMgr?: AgentDisplay,
   agentManager?: AgentManager,
   agentDirs?: string[],
+  disabledBuiltins?: string[],
 ): NanoPlugin {
   const yamlDefs = loadAgentDefinitions(agentDirs).filter((d) => d.enabled !== false);
 
-  // Merge built-in agents (Explore) with YAML-defined agents.
-  // Built-in agents are always available even when ~/.nano-code/agents/ is empty.
-  const defs = [EXPLORE_AGENT_DEF, GENERAL_PURPOSE_AGENT_DEF, ...yamlDefs];
+  // Merge built-in agents with YAML-defined agents.
+  // Built-in agents can be disabled via disabledBuiltins (from agents.builtin config).
+  const disabledSet = new Set(disabledBuiltins ?? []);
+  const builtinDefs = [
+    ...(disabledSet.has(EXPLORE_AGENT_NAME) ? [] : [EXPLORE_AGENT_DEF]),
+    ...(disabledSet.has(GENERAL_PURPOSE_AGENT_NAME) ? [] : [GENERAL_PURPOSE_AGENT_DEF]),
+  ];
+  const defs = [...builtinDefs, ...yamlDefs];
 
   return {
     name: 'agent-coordinator',

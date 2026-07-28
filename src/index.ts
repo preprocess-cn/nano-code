@@ -146,7 +146,14 @@ async function initializePlugins(
     if (name === 'commands') s.config = config;
     if (name === 'guidance') Object.assign(s, config.plugins[name]?.settings ?? {});
     if (name === 'skills') { s.disabled = config.skills?.disabled ?? []; s.disableSkillTool = config.skills?.disableSkillTool ?? false; s.skillsDirs = config.skills?.dirs; }
-    if (name === 'coordinator') { s.agentDirs = config.agents?.dirs; }
+    if (name === 'coordinator') {
+      s.agentDirs = config.agents?.dirs;
+      if (config.agents?.builtin) {
+        s.disabledBuiltins = Object.entries(config.agents.builtin)
+          .filter(([, v]) => v === false)
+          .map(([k]) => k);
+      }
+    }
     if (name === 'agent-slash') { s.agentDirs = config.agents?.dirs; }
     if (name === 'skills-slash') { s.skillsDirs = config.skills?.dirs; }
     await registerBuiltinPlugin(registry, name, s);

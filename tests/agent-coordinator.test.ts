@@ -95,6 +95,55 @@ describe('AgentCoordinator', () => {
     assert.equal(sendTool, undefined);
   });
 
+  it('registers built-in agents by default', async () => {
+    const plugin = createAgentCoordinatorPlugin(mockLLMClient(), undefined, undefined, [agentDir]);
+    const registry = new PluginRegistry();
+    await plugin.onInit!(registry);
+    const toolNames = registry.getAllSchemas().map(t => t.function.name);
+    assert.ok(toolNames.includes('agent-explore'), 'explore should be registered by default');
+    assert.ok(toolNames.includes('agent-general-purpose'), 'general-purpose should be registered by default');
+    assert.ok(toolNames.includes('agent-dba'), 'YAML-defined agent should be registered');
+  });
+
+  it('disabledBuiltins filters out explore agent', async () => {
+    const plugin = createAgentCoordinatorPlugin(mockLLMClient(), undefined, undefined, [agentDir], ['explore']);
+    const registry = new PluginRegistry();
+    await plugin.onInit!(registry);
+    const toolNames = registry.getAllSchemas().map(t => t.function.name);
+    assert.ok(!toolNames.includes('agent-explore'), 'explore should be disabled');
+    assert.ok(toolNames.includes('agent-general-purpose'), 'general-purpose should still be present');
+    assert.ok(toolNames.includes('agent-dba'), 'YAML-defined agent should still be present');
+  });
+
+  it('disabledBuiltins filters out general-purpose agent', async () => {
+    const plugin = createAgentCoordinatorPlugin(mockLLMClient(), undefined, undefined, [agentDir], ['general-purpose']);
+    const registry = new PluginRegistry();
+    await plugin.onInit!(registry);
+    const toolNames = registry.getAllSchemas().map(t => t.function.name);
+    assert.ok(toolNames.includes('agent-explore'), 'explore should still be present');
+    assert.ok(!toolNames.includes('agent-general-purpose'), 'general-purpose should be disabled');
+    assert.ok(toolNames.includes('agent-dba'), 'YAML-defined agent should still be present');
+  });
+
+  it('disabledBuiltins filters both built-in agents', async () => {
+    const plugin = createAgentCoordinatorPlugin(mockLLMClient(), undefined, undefined, [agentDir], ['explore', 'general-purpose']);
+    const registry = new PluginRegistry();
+    await plugin.onInit!(registry);
+    const toolNames = registry.getAllSchemas().map(t => t.function.name);
+    assert.ok(!toolNames.includes('agent-explore'), 'explore should be disabled');
+    assert.ok(!toolNames.includes('agent-general-purpose'), 'general-purpose should be disabled');
+    assert.ok(toolNames.includes('agent-dba'), 'YAML-defined agent should still be present');
+  });
+
+  it('onSystemPrompt does not mention disabled built-in agents', () => {
+    const plugin = createAgentCoordinatorPlugin(mockLLMClient(), undefined, undefined, [agentDir], ['explore', 'general-purpose']);
+    const result = plugin.onSystemPrompt!('Base prompt.');
+    assert.ok(result.includes('## Specialist Agents'));
+    assert.ok(result.includes('agent-dba'), 'YAML-defined agent should appear');
+    assert.ok(!result.includes('agent-explore'), 'disabled explore should not appear');
+    assert.ok(!result.includes('agent-general-purpose'), 'disabled general-purpose should not appear');
+  });
+
   // ── Phase 3: send_message ──
 
   it('provides send_message tool', () => {
