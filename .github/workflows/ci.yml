@@ -29,10 +29,10 @@ jobs:
         run: npx tsc --noEmit -p tsconfig.test.json
 
       - name: Unit tests
-        run: node --import tsx --test tests/*.test.ts
+        run: npx vitest run --reporter=verbose
 
       - name: E2E tests
-        run: node --import tsx --test tests/e2e/e2e.test.ts
+        run: npx vitest run tests/e2e/ --reporter=verbose
 
   publish:
     if: startsWith(github.ref, 'refs/tags/v')
