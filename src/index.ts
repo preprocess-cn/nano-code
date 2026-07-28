@@ -72,6 +72,7 @@ async function initializePlugins(
     skipPermission: skipPermission ?? false,
     defaultTimeout: config.core.defaultTimeout,
   });
+  registry.setSkipPermissionScope(skipPermission ?? false);
 
   // 1. Inject runtime deps for token-budget and mcp-loader
   const tbSettings = config.plugins['token-budget']?.settings;
